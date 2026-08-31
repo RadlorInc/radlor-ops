@@ -15,6 +15,8 @@ table in `radlor-site`**. That cost is accepted, costed and recorded in
 
 - **[SETUP.md](SETUP.md)** — everything to click, in order, and the three env vars.
 - **[PR_BODY.md](PR_BODY.md)** — what this does, and what the watermark is and isn't.
+- **[docs/security-findings.md](docs/security-findings.md)** — open findings, including one about
+  the marketing site. This repo is private; the site's is not.
 
 ## Routes
 

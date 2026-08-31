@@ -36,6 +36,15 @@ else with: what result is this incapable of distinguishing?**
 | `e2e/review-page-details.spec.ts` asserting the seven review questions appear verbatim | it `import`ed `QUESTIONS` from `src/lib/review.ts` and looped `toContainText`. Reworded question 7 to *"One thing to cut."* and it **stayed green** — it was asserting that the code equals itself. The seven strings are now written out in the spec and deep-equalled against the rendered `<li>`s. **The duplication is the mechanism**: changing a question takes two edits, and the failing test in between is the reminder that the wording is a decision, not a detail |
 | `e2e/phone.spec.ts` asserting the *Add note* button fits a 390×844 viewport | the right property, one click too early. An uncapped 9:16 video is ~622px tall so the BUTTON still fits; it is the note COMPOSER, which only exists after the click, that falls off the bottom. It passed with the phone media query deleted. Now asserts the video's height against the viewport **and** the Save button's bottom edge *after* opening the composer |
 
+## Repository visibility
+
+**This repo is PRIVATE. `RadlorInc/website` and `RadlorInc/learn` are PUBLIC.** Security findings —
+about this tool or about either of those — go in [docs/security-findings.md](docs/security-findings.md),
+here. One was written into the public site repo on 2026-08-31 and reverted the same day; the revert
+is mitigation, not erasure. ⚠️ **"Safe to break" and "safe to publish" are different questions.**
+Establish a remote's visibility BEFORE the first push, not after — a first push publishes the whole
+history at once.
+
 ## The rest of the standing rules for this repo
 
 - **A defect noticed in a neighbouring file gets written down before you return to the one you were in** — in that file, or in that repo's handoff. Two minutes, so it survives being busy. Both verification scripts here put a secret within one branch of their own output at some point; the second was *described* while the first was being fixed, and only got fixed because someone asked again. Noticing is not the deliverable; the note is.
