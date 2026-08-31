@@ -62,6 +62,14 @@ history at once.
   mitigation was the mechanism**, which is a shape worth recognising on sight. Use
   `node --env-file=.env.local <script>`, which parses. A value you did not generate can contain
   anything, and the ones you did generate get rotated into ones you didn't.
+- ⚠️ **A STORAGE WRITE RETURNING SUCCESS IS NOT EVIDENCE THE OBJECT CAN BE READ BACK.** On
+  2026-08-31 an upload named `_expiry-check.webm` returned a `Key`, wrote an 82 KB row into
+  `storage.objects`, and was then unreachable through `list`, GET, `sign` AND `DELETE` — while
+  identical bytes under a plain name behaved normally. The list and delete endpoints could not tell
+  "absent" from "unreachable", and only `select count(*) from storage.objects` settled it.
+  **Verify a write through a different path than the one that wrote it**, and keep object names to
+  `[a-z0-9-]` (which `slug` already enforces for the paths this app generates).
+  See [docs/security-findings.md](docs/security-findings.md) #4.
 - **Never log a reviewer token, in any environment.** `src/lib/db.ts` is the only place a token is
   ever put in a URL, and `rest()` takes a `label` precisely so a thrown error can never stringify
   the request path. A fetch error that echoes its own URL is how a token reaches a log drain in

@@ -140,8 +140,25 @@ back. If a video ever seems to upload but will not play, check the filename befo
 code — and prefer plain `[a-z0-9-]` object names, which is what `slug` already enforces for the
 paths this tool generates.
 
-Both test objects are gone; verified by SQL (`select count(*) from storage.objects` → **0**), not by
-the delete call, which lied in both directions.
+### The delete was no more trustworthy than the upload
+
+Cleanup, in order, with what each call claimed:
+
+| call | said | was true? |
+|---|---|---|
+| `DELETE plain.webm` | `{"message":"Successfully deleted"}` | yes |
+| `DELETE _expiry-check.webm` | `404 NoSuchKey` — "Object not found" | **a row for it existed minutes earlier** |
+| `POST object/list` | `[]` | **also `[]` while the row existed** — it cannot tell the two apart |
+| `select count(*) from storage.objects` | `0` | the only statement that settled it |
+
+⚠️ Note what is NOT claimed here: no successful call ever reported removing `_expiry-check.webm`,
+so **which action removed it is unknown.** The row existed, then it did not. That is exactly why the
+count is the evidence and the API responses are not — a `404` from this endpoint means "I cannot
+reach it", which is a statement about the API's view, not about whether the thing exists.
+
+**The rule both halves point at: verify a write through a different path than the one that wrote
+it.** The upload's `Key`, the list's `[]` and the delete's `404` are all the storage API describing
+its own reachability. `storage.objects` is the database, and it disagreed with all three.
 
 ---
 
