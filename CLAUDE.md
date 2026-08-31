@@ -38,6 +38,7 @@ else with: what result is this incapable of distinguishing?**
 
 ## The rest of the standing rules for this repo
 
+- **A defect noticed in a neighbouring file gets written down before you return to the one you were in** — in that file, or in that repo's handoff. Two minutes, so it survives being busy. Both verification scripts here put a secret within one branch of their own output at some point; the second was *described* while the first was being fixed, and only got fixed because someone asked again. Noticing is not the deliverable; the note is.
 - **Never log a reviewer token, in any environment.** `src/lib/db.ts` is the only place a token is
   ever put in a URL, and `rest()` takes a `label` precisely so a thrown error can never stringify
   the request path. A fetch error that echoes its own URL is how a token reaches a log drain in
