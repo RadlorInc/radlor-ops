@@ -12,16 +12,24 @@ test('the review page works at a phone width', async ({ page }) => {
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)
   expect(overflow).toBeLessThanOrEqual(0)
 
-  // The point of the phone rule: the video and the "Add note" button share the first screen, so
-  // the reviewer is not scrolling away from the frame to write about it.
+  /**
+   * The point of the phone rule: the video and the composer share the first screen, so the
+   * reviewer is not scrolling away from the frame to write about it.
+   *
+   * ⚠️ THE FIRST VERSION OF THIS TEST ONLY ASSERTED THAT "Add note" LANDED ABOVE 844px, AND IT
+   * PASSED WITH THE PHONE RULE DELETED — an uncapped 9:16 video is ~622px tall, which still leaves
+   * the button on screen at this viewport height. It is the COMPOSER, one click later, that falls
+   * off the bottom. Both assertions below fail without the rule.
+   */
   const video = (await page.getByTestId('player').boundingBox())!
-  const add = (await page.getByTestId('add-note').boundingBox())!
-  expect(video.y).toBeGreaterThanOrEqual(0)
-  expect(add.y + add.height).toBeLessThanOrEqual(844)
   expect(video.width).toBeLessThanOrEqual(390)
+  expect(video.height).toBeLessThanOrEqual(844 * 0.6)
+
+  await page.getByTestId('add-note').click()
+  const save = (await page.getByTestId('save-note').boundingBox())!
+  expect(save.y + save.height).toBeLessThanOrEqual(844)
 
   // And a note can still be written and read back at this width.
-  await page.getByTestId('add-note').click()
   await page.getByTestId('note-body').fill('text is too small on a phone')
   await page.getByTestId('save-note').click()
   await expect(page.getByTestId('note-list')).toContainText('text is too small on a phone')

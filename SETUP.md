@@ -76,6 +76,15 @@ node -e "console.log(require('crypto').randomBytes(24).toString('base64url'))"
 > `ADMIN_TOKEN` unset means `/admin` is **closed**, not open — a missing variable can never be a
 > way in. If you deploy without it, `/admin` 404s until you set it and redeploy.
 
+You open `/admin?k=<ADMIN_TOKEN>` **once**. The app immediately swaps it for an httpOnly cookie and
+redirects to `/admin` with the parameter stripped, so the token lands in your browser history, any
+referrer header and Vercel's request log exactly once rather than on every request. After that,
+bookmark the bare `/admin` — the cookie lasts a week, and rotating `ADMIN_TOKEN` kills every
+outstanding one.
+
+(If you want to hit it from `curl` rather than a browser, you need to hold the cookie and follow
+the redirect: `curl -sL -c jar -b jar 'https://<domain>/admin/export?k=<ADMIN_TOKEN>'`.)
+
 ## 5. Create the reviewer
 
 Generate a token:
@@ -181,8 +190,13 @@ written against.
 update videos set status = 'reviewed' where slug = 'equals-reel-final';
 ```
 
-**Get the notes out:** `https://<your-domain>/admin/export?k=<ADMIN_TOKEN>` — markdown, grouped by
-video and version, sorted by timestamp, ready to paste.
+**Get the notes out:** `https://<your-domain>/admin/export` — markdown, grouped by video and
+version, sorted by timestamp, ready to paste.
+
+It shows **open notes only** by default, with a footer line saying how many resolved ones it left
+out, so a short export never quietly reads as a complete one. `?all=1` includes the resolved ones
+too, struck through. That is what makes the `resolved_at` update above worth doing: after a bump to
+v2 the reviewer's panel clears, so an unresolved v1 note exists only in this export.
 
 ---
 
@@ -209,3 +223,5 @@ npm run test:e2e
 - **No reply threads, no shared visibility between reviewers, no side-by-side v1/v2 player.** The
   version is stored; the comparison UI is not built.
 - **No hashed tokens.** Plain text, so the link can be re-sent. See the PR body.
+- **No admin login form.** The token-in-a-link is swapped for a cookie on first use; there is
+  nothing to log into and no password to store.

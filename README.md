@@ -18,8 +18,8 @@ text, and it must not sit next to children's data.
 | `/r/<token>/<slug>` | reviewer | Player + notes panel + the seven questions. |
 | `POST /api/notes` | reviewer | One note. Token resolved server-side, rate limited per token. |
 | `GET /api/video-url` | reviewer | A five-minute signed URL for a private-bucket object. |
-| `/admin?k=<ADMIN_TOKEN>` | you | Videos, status, version, unread-note count. |
-| `/admin/export?k=<ADMIN_TOKEN>` | you | Every note as markdown, by video and version. |
+| `/admin` | you | Videos, status, version, unread-note count. Open `/admin?k=<ADMIN_TOKEN>` once; it becomes an httpOnly cookie and the parameter is stripped. |
+| `/admin/export` | you | Open notes as markdown, by video and version. `?all=1` adds the resolved ones, struck through. |
 
 Everything else, including `/`, is a 404.
 

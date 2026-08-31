@@ -20,9 +20,12 @@ be the first thread tying the two projects back together.
 - `POST /api/notes` — token resolved server-side, rate limited.
 - `GET /api/video-url` — a signed URL with a five-minute life against a private bucket. There is no
   permanent link anywhere.
-- `/admin?k=<ADMIN_TOKEN>` — every video, its status and version, and an unread-note count.
-- `/admin/export?k=<ADMIN_TOKEN>` — every note as markdown, grouped by video and version, sorted by
-  timestamp. This is the actual output of the tool.
+- `/admin` — every video, its status and version, and an unread-note count. Opened once as
+  `/admin?k=<ADMIN_TOKEN>`; the app swaps that for an httpOnly cookie and redirects to the bare
+  path, so the token is in the URL for exactly one request instead of every one. No login form.
+- `/admin/export` — open notes as markdown, grouped by video and version, sorted by timestamp,
+  with a footer saying how many resolved ones were left out. `?all=1` includes them, struck
+  through. This is the actual output of the tool.
 
 ## On the watermark and `controlsList="nodownload"`
 
@@ -60,8 +63,9 @@ it was put there for.
   with that: never logged (`src/lib/db.ts` never puts a request path into an error), never used as
   a client-side query filter, unreadable by `anon`, revocable in one statement, and
   `Referrer-Policy: no-referrer` so a token in the path can't leak into someone else's access log.
-- **`/admin` is gated by a query parameter**, not a session. That parameter does land in Vercel's
-  request logs. Accepted trade for having no login form to build; rotate the env var to change it.
+- **`/admin` is gated by an httpOnly cookie**, obtained by opening `?k=<ADMIN_TOKEN>` once. The
+  token reaches a log, a history entry or a referrer exactly once. Rotating the env var
+  invalidates every outstanding cookie.
 - **Unknown, revoked and malformed tokens all get the same 404**, page and API alike. A distinct
   answer for "revoked" confirms to whoever is holding it that the token was once real.
 - **The rate limit is in-memory and per serverless instance.** Same ceiling as the Milo copy, and
