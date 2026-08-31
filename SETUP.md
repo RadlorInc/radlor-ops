@@ -5,6 +5,11 @@ bucket — the code assumes they exist and fails loudly if they don't.
 
 Time: about fifteen minutes, once.
 
+> **Steps 1, 2 and 4 are already done** on `ghuvnqbthbcmqfxcrjrh` (2026-08-31): the `review` schema,
+> its three tables and grants, and the private `review-videos` bucket all exist and were verified by
+> reading the database back. **What is left for you is step 3 (Exposed schemas) and step 5 (env
+> vars).** The rest is kept because this is the reproducible record of how it was set up.
+
 **Read [Blast radius](#blast-radius) before you start.** This tool shares a database with the
 marketing site, and that has a cost you are agreeing to by following these steps.
 
@@ -34,15 +39,22 @@ not boilerplate.
 
 ## 2. Apply the migration
 
-**SQL Editor → New query**, paste the whole of
-[`supabase/migrations/20260831120000_init_video_reviewer.sql`](supabase/migrations/20260831120000_init_video_reviewer.sql),
-run it. It creates a **`review` schema** and puts all three tables in it; `public` belongs to the
-marketing site.
+**SQL Editor → New query**, paste each of the three files in `supabase/migrations/` in filename
+order and run them. They create a **`review` schema** and put all three tables in it; `public`
+belongs to the marketing site.
 
-> ⚠️ **Do NOT `supabase db push` against this project.** Its migration history is empty — checked
-> on 2026-08-31, `list_migrations` returns nothing — because `public.waitlist` was applied by hand
-> in the SQL editor. A push from this repo would be operating on a history that does not match the
-> database. Paste it.
+⚠️ The third one, `..._grant_review_tables_to_service_role.sql`, is not optional and is not
+tidying. Supabase's default privileges cover `public` and `storage` but **not a new custom
+schema**, so the tables are created owner-only and `service_role` has no privilege on them —
+`BYPASSRLS` does not substitute for a `GRANT`. Without it every route answers
+`42501 permission denied for table videos`. It was found by reading the live database after
+applying, because no offline test can see a grant.
+
+> ⚠️ **Do NOT `supabase db push` against this project.** Its history now holds this repo's three
+> migrations (applied 2026-08-31 through the MCP connector, which records them) but **not**
+> `public.waitlist`, which predates it and was applied by hand. So the history is partial: a push
+> from the *radlor-site* repo would try to apply its waitlist migration on top of the existing
+> table. Apply anything new the same way — SQL editor, or the connector.
 
 Check afterwards, in **Table Editor** (schema selector → `review`), that `reviewers`, `videos` and
 `notes` all show the **RLS enabled** badge with **zero policies**. That is correct here and not an

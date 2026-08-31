@@ -85,7 +85,38 @@ test fixture. That is the step that has to come before the irreversible one, eve
 
 ---
 
-## 3. Audit of `RadlorInc/website`'s public docs — 2026-08-31
+## 3. `review` schema applied 2026-08-31 — and what it exposed about the harness
+
+**Closed.** Applied to `ghuvnqbthbcmqfxcrjrh` and verified by reading the database back rather than
+by trusting that the statements returned success.
+
+⚠️ **The schema shipped dead and no offline test could have said so.** Supabase's default
+privileges grant `anon`/`authenticated`/`service_role` on tables created in `public` and `storage`;
+they do **not** extend to a new custom schema. So `review`'s tables were created owner-only, and
+`has_table_privilege('service_role','review.videos','SELECT')` was **false**. `service_role` has
+`BYPASSRLS`, but bypassing RLS is not holding the GRANT — Postgres checks the grant first — so every
+route would have returned `42501 permission denied for table videos`.
+
+`test/fake-supabase.mjs` runs PGlite as a single superuser with no role switching, so **grants are
+invisible to it by construction**. 19 green E2E tests said nothing about this and could not have.
+That is the same boundary as the RLS check: the harness proves this app's logic, the live project
+proves the platform's behaviour, and the second one is not optional.
+
+Fixed by `20260831165900_grant_review_tables_to_service_role.sql` — `select, insert` only, so the
+web tier cannot `update` or `delete` a note even holding the service_role key. That does **not**
+shrink the blast radius (finding #1 stands); it stops this tool destroying its own record.
+
+Also recorded: `revoke all ... from anon, authenticated` in the first migration is **inert** —
+`pg_default_acl` stored no row for it, because in a custom schema there was never a default grant
+to revoke. Kept as intent, but the protection is the Postgres default, not that line.
+
+Side effect to know about: applying through the MCP connector **wrote the project's first migration
+history rows**. The history is now partial — this repo's three migrations, not `public.waitlist`.
+The repo's filenames were renamed to match the recorded versions so the two agree. See SETUP.md.
+
+---
+
+## 4. Audit of `RadlorInc/website`'s public docs — 2026-08-31
 
 Read once, deliberately, after learning the repo was public. **Reported, not acted on.**
 

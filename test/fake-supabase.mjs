@@ -19,7 +19,7 @@
  */
 import { createServer } from 'node:http'
 import { createHmac } from 'node:crypto'
-import { readFile } from 'node:fs/promises'
+import { readdir, readFile } from 'node:fs/promises'
 import { fileURLToPath } from 'node:url'
 import { dirname, join } from 'node:path'
 import { PGlite } from '@electric-sql/pglite'
@@ -40,7 +40,20 @@ const db = new PGlite()
 // Supabase ships these two roles; PGlite does not. The migration's REVOKEs name them, so they have
 // to exist for the file to run unmodified — which is the point of running the real file.
 await db.exec('create role anon; create role authenticated; create role service_role;')
-await db.exec(await readFile(join(ROOT, 'supabase/migrations/20260831120000_init_video_reviewer.sql'), 'utf8'))
+// Every migration, in filename order — not one hardcoded path. The first version named the file
+// directly and would have silently stopped covering anything added beside it; it broke loudly the
+// day the file was renamed to match the applied version, which was the good outcome.
+for (const f of (await readdir(join(ROOT, 'supabase/migrations'))).filter((f) => f.endsWith('.sql')).sort()) {
+  const sql = await readFile(join(ROOT, 'supabase/migrations', f), 'utf8')
+  // ⚠️ PGlite has no `storage` schema — it is plain Postgres, not a Supabase project. A migration
+  // that touches storage is SKIPPED, and skipping it is announced: a stand-in that quietly drops
+  // statements is how "the tests pass" stops meaning anything.
+  if (/\bstorage\./.test(sql)) {
+    console.log(`  skipped ${f} — touches the storage schema, which PGlite does not have`)
+    continue
+  }
+  await db.exec(sql)
+}
 await db.exec(await readFile(join(HERE, 'seed.sql'), 'utf8'))
 
 const fixture = await readFile(join(HERE, 'fixture.webm')).catch(() => null)

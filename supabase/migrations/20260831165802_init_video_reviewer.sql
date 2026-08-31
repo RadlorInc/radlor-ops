@@ -21,9 +21,14 @@
 -- policies, which in Postgres means "deny everything except the roles that bypass RLS" — the
 -- intended state here, not an unfinished one.
 --
--- Apply by PASTING THIS INTO THE SQL EDITOR. ⚠️ Do NOT `supabase db push` against this project:
--- its migration history is empty (the waitlist table was applied by hand), so a push from this repo
--- would be operating on a history that does not match the database.
+-- ⚠️ ALREADY APPLIED to ghuvnqbthbcmqfxcrjrh on 2026-08-31 as migration `20260831165802`. The
+-- filename is deliberately that version so the repo and the recorded history agree.
+--
+-- ⚠️ STILL DO NOT `supabase db push` AGAINST THIS PROJECT. The history now contains this repo's
+-- three migrations but NOT `public.waitlist`, which predates it and was applied by hand — so a
+-- push from the radlor-site repo would try to apply its waitlist migration on top of an existing
+-- table. (That file is written `if not exists`, so it would probably survive; "probably" is not a
+-- reason to run it.) Apply anything new here the same way: SQL editor, or the MCP connector.
 
 create schema if not exists review;
 
@@ -92,10 +97,19 @@ alter table review.notes     enable row level security;
 -- are what decide whether anything can be read once you are in it.
 grant usage on schema review to anon, authenticated, service_role;
 
--- Belt as well as braces. RLS with no policies already denies `anon`, but a future `create policy`
--- written in a hurry cannot grant what the role has no privilege to touch in the first place.
+-- ⚠️ THESE TWO LINES ARE INERT, AND THAT IS WORTH KNOWING RATHER THAN ASSUMING.
+-- Supabase's default privileges grant anon/authenticated on tables created in `public` and
+-- `storage`; they do NOT extend to a new custom schema. So tables here are created with the plain
+-- Postgres default — owner only — and there was never anything for these to revoke. Verified after
+-- applying: `pg_default_acl` stored no row for them. Kept as a statement of intent and as cover if
+-- someone later adds a default grant, but the protection is the Postgres default, not this.
 revoke all on all tables in schema review from anon, authenticated;
 alter default privileges in schema review revoke all on tables from anon, authenticated;
+
+-- ⚠️ AND THE COROLLARY IS WHAT ACTUALLY MATTERS: the same absence of default privileges means
+-- `service_role` had NOTHING either, and BYPASSRLS does not substitute for a GRANT — Postgres
+-- checks the grant first. Without the next line every route answers
+-- `42501 permission denied for table videos`. See 20260831165900_grant_review_tables_to_service_role.sql.
 
 -- Deliberately NO policies. Every reviewer-facing operation goes through a server route that
 -- resolves the token with the service role, which bypasses RLS. If you ever add a policy here,
