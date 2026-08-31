@@ -11,6 +11,19 @@
  *
  *   node scripts/break-verdict.mjs <playwright-json-report> <spec expected to go red>
  *
+ * ⚠️ AFTER ANY PLAYWRIGHT UPGRADE, RE-RUN THE FOUR LIVE BREAKS BEFORE TRUSTING THIS FILE AGAIN.
+ * `isAssertion` below reads Playwright's ERROR MESSAGE FORMAT, and the exit-4 cases in
+ * `test/break-verdict.test.mjs` are driven from CRAFTED JSON — so those fixtures encode the format
+ * as it was on 2026-08-31 and cannot tell you it has changed. They will keep passing against the
+ * shape they assume while real runs quietly misclassify. Exits 0/1/3/5 are exercised against live
+ * runs by `scripts/break-check.sh`, so the exposure is small, but it is not zero and only a live
+ * run closes it:
+ *
+ *   scripts/break-check.sh e2e/rate-limit.spec.ts "perl -pi -e 's/const TOKEN_LIMIT = 10\$/const TOKEN_LIMIT = 10000/' src/app/api/notes/route.ts"   # want 0
+ *   scripts/break-check.sh e2e/rate-limit.spec.ts "perl -pi -e 's/Radlor — videos to review/Videos/' 'src/app/r/[token]/page.tsx'"                     # want 1
+ *   scripts/break-check.sh e2e/rate-limit.spec.ts "perl -pi -e 's/PATTERN_THAT_MOVED/x/' src/app/api/notes/route.ts"                                   # want 3
+ *   scripts/break-check.sh e2e/rate-limit.spec.ts "printf 'this is not typescript(((\n' >> src/lib/review.ts"                                          # want 5
+ *
  * exit 0  the named spec failed on an assertion            → the check binds
  * exit 1  the named spec passed                            → the check does not bind
  * exit 4  the named spec failed, but not on an assertion   → red for the wrong reason
