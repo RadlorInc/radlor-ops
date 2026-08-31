@@ -11,13 +11,14 @@
  *
  *   node scripts/break-verdict.mjs <playwright-json-report> <spec expected to go red>
  *
- * ⚠️ AFTER ANY PLAYWRIGHT UPGRADE, RE-RUN THE FOUR LIVE BREAKS BEFORE TRUSTING THIS FILE AGAIN.
+ * ⚠️ AFTER ANY PLAYWRIGHT UPGRADE, RE-RUN THE FIVE LIVE BREAKS BEFORE TRUSTING THIS FILE AGAIN.
  * `isAssertion` below reads Playwright's ERROR MESSAGE FORMAT, and the exit-4 cases in
  * `test/break-verdict.test.mjs` are driven from CRAFTED JSON — so those fixtures encode the format
  * as it was on 2026-08-31 and cannot tell you it has changed. They will keep passing against the
- * shape they assume while real runs quietly misclassify. Exits 0/1/3/5 are exercised against live
- * runs by `scripts/break-check.sh`, so the exposure is small, but it is not zero and only a live
- * run closes it:
+ * shape they assume while real runs quietly misclassify. ⚠️ That is not hypothetical: exit 4 had
+ * NO live break for a day, and that is exactly where the code-frame bug above lived — the crafted
+ * fixture passed while a real timeout was being certified as proof. There is now a live break for
+ * it too. All five:
  *
  *   scripts/break-check.sh e2e/rate-limit.spec.ts "perl -pi -e 's/const TOKEN_LIMIT = 10\$/const TOKEN_LIMIT = 10000/' src/app/api/notes/route.ts"   # want 0
  *   scripts/break-check.sh e2e/rate-limit.spec.ts "perl -pi -e 's/Radlor — videos to review/Videos/' 'src/app/r/[token]/page.tsx'"                     # want 1
@@ -61,10 +62,21 @@ const strip = (s) => String(s ?? '').replace(/\[[0-9;]*m/g, '')
 
 /**
  * Every matcher failure Playwright prints — including a `toBeVisible` timeout and an `expect.poll`
- * — carries the `expect(` call in its message. A thrown TypeError, a module-resolution error and a
- * bare test timeout do not, which is the whole distinction this file exists to draw.
+ * — names the `expect(` call on the FIRST LINE of its message. A thrown TypeError, a
+ * module-resolution error and a bare test timeout do not.
+ *
+ * ⚠️ ONLY THE FIRST LINE, AND THAT IS THE WHOLE MECHANISM. This matched anywhere in the message
+ * until 2026-08-31, and it was WRONG in the direction that produces confidence: Playwright appends
+ * a CODE FRAME of the failing spec, and a spec full of assertions carries `expect(` in that frame
+ * no matter why it died. A break that only made the page hang produced
+ * `Error: locator.click: Test timeout of 60000ms exceeded` — a bare timeout — and this file
+ * certified it as proof, because six lines lower the frame quoted the test's own `await expect(…)`.
+ * The instrument for telling a real red from a decorative one was reading the source rather than
+ * the failure. Caught by a LIVE break; the crafted fixtures in `test/break-verdict.test.mjs` never
+ * could have, because a hand-written message has no code frame in it.
  */
-const isAssertion = (msg) => /\bexpect\s*\(|\bexpect\.\w+\(/.test(strip(msg))
+const headline = (msg) => strip(msg).split('\n').find((l) => l.trim()) ?? ''
+const isAssertion = (msg) => /\bexpect\s*\(|\bexpect\.\w+\(/.test(headline(msg))
 
 const specs = collect(report.suites)
 const wanted = specs.filter((s) => basename(s.file) === basename(expectedSpec))

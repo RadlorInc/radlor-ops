@@ -52,6 +52,21 @@ test('red from a bare test timeout is NOT proof either', () => {
   assert.equal(verdict(spec([{ status: 'timedOut', error: { message: 'Test timeout of 60000ms exceeded.' } }])), 4)
 })
 
+test('a code frame quoting expect() is NOT an assertion failure — read the headline, not the source', () => {
+  // The real shape of a hung click, verbatim in structure: a bare timeout on line one, and the
+  // spec's own assertions echoed in the frame underneath. This is the case that got through.
+  const message = [
+    'Error: locator.click: Test timeout of 60000ms exceeded.',
+    'Call log:',
+    "  - waiting for getByText('Equals sign reel (final cut)')",
+    '',
+    '   9 |   const player = page.getByTestId(\'player\')',
+    '> 10 |   await expect(player).toBeVisible()',
+    '      |                        ^',
+  ].join('\n')
+  assert.equal(verdict(spec([{ status: 'timedOut', error: { message } }])), 4)
+})
+
 test('a compile or config error means nothing was tested', () => {
   assert.equal(verdict({ suites: [], errors: [{ message: 'Error: Cannot find module ./gone' }] }), 5)
 })
