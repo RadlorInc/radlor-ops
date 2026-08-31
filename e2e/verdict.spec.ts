@@ -80,7 +80,22 @@ test('the export puts the verdict in the heading', async ({ page }) => {
   await page.goto(`/admin?k=${ADMIN_TOKEN}`)
   const md = await (await page.goto('/admin/export'))!.text()
   expect(md).toContain('## cta-cut — v1 — APPROVED')
-  // hook-test-b is at v2 and approved; its v1 heading must NOT borrow that verdict.
   expect(md).toContain('## hook-test-b — v2 — APPROVED')
+})
+
+/**
+ * ⚠️ ASSERTED AGAINST `?all=1`, AND THAT IS THE WHOLE POINT OF THIS TEST.
+ * The first version checked the DEFAULT export — where hook-test-b's v1 note is resolved and
+ * therefore hidden, so no v1 heading is emitted at all and there is nothing for the assertion to
+ * bind to. It passed with the version guard deleted. `?all=1` is the only state in which the older
+ * heading exists, so it is the only state in which "did it borrow the current verdict?" is a
+ * question that can be answered.
+ */
+test('an older version does not borrow the current verdict', async ({ page }) => {
+  await page.goto(`/admin?k=${ADMIN_TOKEN}`)
+  const md = await (await page.goto('/admin/export?all=1'))!.text()
+  // The v1 heading must exist, or the next assertion proves nothing.
+  expect(md).toContain('## hook-test-b — v1')
   expect(md).not.toContain('## hook-test-b — v1 — APPROVED')
+  expect(md).toContain('## hook-test-b — v2 — APPROVED')
 })
