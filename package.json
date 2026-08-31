@@ -9,6 +9,7 @@
     "lint": "eslint",
     "typecheck": "tsc --noEmit",
     "test:e2e": "playwright test",
+    "test:verdict": "node --test test/break-verdict.test.mjs",
     "fakedb": "node test/fake-supabase.mjs"
   },
   "dependencies": {
