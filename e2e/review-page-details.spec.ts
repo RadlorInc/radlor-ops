@@ -13,6 +13,33 @@ test('the player carries the download and PiP deterrents', async ({ page }) => {
   await expect(player).toHaveAttribute('disablepictureinpicture', '')
 })
 
+/**
+ * ⚠️ ASSERTED BEFORE THE MEDIA LOADS, WHICH IS THE ONLY MOMENT THE DEFECT EXISTS.
+ * A <video> with no metadata yet gets the browser's default 2:1 box, so without an explicit
+ * `aspect-ratio` the player paints 360x150 and then jumps to 360x640 when the signed URL's
+ * metadata arrives — a shove of the whole notes panel on every load. It survived every earlier run
+ * because the offline fixture is 180x320 and the jump is invisible at that size; it showed up the
+ * first time a real 1080x1920 cut was opened in production.
+ *
+ * The harness is NOT blind here — this is a property of the CSS, not of the file's dimensions, so
+ * a 180x320 fixture proves it exactly as well as a 1080x1920 one. The assertion was on the wrong
+ * thing, not in the wrong place. The media request is aborted so `readyState` stays 0 and the
+ * measurement happens in the state that matters.
+ */
+test('the player holds its shape before the video has loaded', async ({ page }) => {
+  await page.route('**/object/sign/**', (r) => r.abort())
+  await page.goto(PAGE)
+  const player = page.getByTestId('player')
+  await expect(player).toBeVisible()
+
+  // Prove we are measuring the right moment: no metadata has arrived.
+  expect(await player.evaluate((v: HTMLVideoElement) => v.readyState)).toBe(0)
+
+  const box = (await player.boundingBox())!
+  // 9:16 to within a pixel of rounding. Without the rule this is 2:1 and the ratio is ~0.5.
+  expect(box.height / box.width).toBeCloseTo(16 / 9, 1)
+})
+
 test('the watermark shows who is watching, and does not eat clicks', async ({ page }) => {
   await page.goto(PAGE)
   const mark = page.getByTestId('watermark')

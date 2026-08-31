@@ -30,7 +30,16 @@ a.card:hover { border-color: var(--accent); }
 /* The watermark is absolute against .frame, not .player, so it stays over the picture when the
    video is narrower than its column (which is what the phone rule below does). */
 .frame { position: relative; width: 100%; }
-.frame video { width: 100%; border-radius: 10px; background: #000; display: block; }
+/* ⚠️ `aspect-ratio` IS LOAD-BEARING, NOT COSMETIC. Without it the browser gives a <video> with no
+   metadata yet its default 2:1, so the player renders 360x150 on first paint and jumps to 360x640
+   when the signed URL's metadata arrives — shoving the notes panel down on every single load. It
+   was invisible locally because the test fixture is 180x320 and tiny; it showed up the first time
+   a real 1080x1920 cut was opened. `object-fit: contain` so a cut that is not 9:16 letterboxes
+   rather than stretches. */
+.frame video {
+  width: 100%; aspect-ratio: 9 / 16; object-fit: contain;
+  border-radius: 10px; background: #000; display: block;
+}
 .side { flex: 1 1 320px; min-width: 300px; }
 button {
   font: inherit; background: var(--accent); color: #10131f; border: 0;
