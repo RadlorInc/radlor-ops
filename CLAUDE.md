@@ -47,6 +47,7 @@ history at once.
 
 ## The rest of the standing rules for this repo
 
+- ⚠️ **State the property the assertion actually checks, not the stronger one you believe is true.** A report that overstates a PASSING test is harder to catch than a failing one — nothing goes red and everything downstream reads as verified. `e2e/token-404.spec.ts` compares two 404 pages' `innerText`; it reached the reader as *"byte-identical bodies"*, which was never true (Next serialises the route param, so each 404 carries its own token). The test was right; the sentence about it was not. It surfaced only because a later run compared the raw bodies and disagreed with the passing test — when a claim and a test disagree, the claim is the likelier liar.
 - **A defect noticed in a neighbouring file gets written down before you return to the one you were in** — in that file, or in that repo's handoff. Two minutes, so it survives being busy. Both verification scripts here put a secret within one branch of their own output at some point; the second was *described* while the first was being fixed, and only got fixed because someone asked again. Noticing is not the deliverable; the note is.
 - ⚠️ **NEVER `source` AN ENV FILE — PARSE IT.** `set -a; . ./.env.local` runs the file as a shell
   script, so a value you did not choose is executed. On 2026-08-31 an `ADMIN_TOKEN` containing

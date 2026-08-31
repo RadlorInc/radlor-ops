@@ -14,6 +14,13 @@ test('a token that never existed gets a 404', async ({ page }) => {
   expect(res?.status()).toBe(404)
 })
 
+/**
+ * ⚠️ THIS COMPARES WHAT A HUMAN SEES — `innerText` — AND THAT IS THE CLAIM. Do not describe it as
+ * "identical responses": the raw HTML is NOT identical, because Next serialises the `[token]` route
+ * param into the RSC payload, so each 404 carries its own token. Nothing in either body says
+ * "revoked", which is the property that matters — but the stronger sentence was written into a
+ * report once, and a passing test wearing an overstated claim is harder to catch than a failure.
+ */
 test('revoked and never-existed are indistinguishable', async ({ page }) => {
   await page.goto(`/r/${TOKENS.revoked}`)
   const revoked = await page.locator('body').innerText()
