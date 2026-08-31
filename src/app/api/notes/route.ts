@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { callerKey, overLimit } from '../_rateLimit'
-import { insertNote, reviewerByToken, reviewerVideoBySlug, setVideoStatus } from '@/lib/db'
+import { insertNote, reviewerByToken, reviewerVideoBySlug, setOutcome } from '@/lib/db'
 
 /**
  * Create one timestamped note.
@@ -58,12 +58,13 @@ export async function POST(req: Request) {
     video_version: video.version,
   })
 
-  // ⚠️ A NOTE AFTER "DONE" REOPENS THE REVIEW. Otherwise the founder is told a review is complete
-  // while the reviewer is still adding to it — a status that says finished when it is not is worse
-  // than no status at all. The client is told, so it can say so on the page rather than silently
-  // changing state underneath them.
-  const reopened = video.status === 'reviewed'
-  if (reopened) await setVideoStatus(video.id, 'awaiting_review')
+  // ⚠️ A NOTE AFTER "DONE" REOPENS THE REVIEW AND CLEARS THE VERDICT. Otherwise Rafi is told a
+  // review is complete — or worse, APPROVED — while the reviewer is still adding to it. A verdict
+  // that survives new feedback is a lie about what the reviewer currently thinks, and "approved"
+  // sitting above a note that contradicts it is the shape that gets something posted. The client
+  // is told, so the page can say what happened rather than changing underneath them.
+  const reopened = video.status === 'reviewed' || video.verdict !== null
+  if (reopened) await setOutcome(video.id, 'awaiting_review', null)
 
   return NextResponse.json(
     { note: { id: note.id, t_seconds: note.t_seconds, body: note.body }, reopened },

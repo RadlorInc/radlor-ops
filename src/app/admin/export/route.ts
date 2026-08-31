@@ -39,7 +39,19 @@ export async function GET(req: Request) {
     const versions = grouped.get(v.id)
     if (!versions) continue
     for (const version of [...versions.keys()].sort((a, b) => a - b)) {
-      out.push(`## ${v.slug} — v${version}`)
+      /**
+       * ⚠️ THE VERDICT IS ONLY STAMPED ON THE CURRENT VERSION'S HEADING, AND THIS IS THE SAME TRAP
+       * `notes.video_version` exists for, one level up. `verdict` lives on the video row, so it is
+       * the verdict NOW — printing it against a v1 heading for a video that is now at v2 would
+       * label an old round with a judgement that was never passed on it. We do not store verdict
+       * history, so older versions get no verdict rather than a borrowed one. If per-version
+       * verdicts are ever wanted, that is a `video_version` column on a verdicts table, not a
+       * change here.
+       */
+      const stamp = version === v.version && v.verdict
+        ? ` — ${v.verdict === 'approved' ? 'APPROVED' : 'CHANGES NEEDED'}`
+        : ''
+      out.push(`## ${v.slug} — v${version}${stamp}`)
       const list = versions.get(version)!
       for (const n of [...list].sort((a, b) => a.t_seconds - b.t_seconds || a.created_at.localeCompare(b.created_at))) {
         // A note body with a newline in it would break the list item into loose prose, so the

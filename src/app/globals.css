@@ -84,3 +84,10 @@ code { background: #0f1017; padding: 1px 5px; border-radius: 4px; }
   margin: 14px 0 0; padding: 10px 12px; font-size: 14px;
   background: #16241c; border: 1px solid #2c4636; border-radius: 8px; color: #cfe8d8;
 }
+.done.changes { background: #2a2115; border-color: #4a3a1e; color: #ecdcc0; }
+
+/* Something Rafi should see before uploading, without being blocked by it. */
+.warn {
+  margin: 16px 0 0; padding: 10px 12px; font-size: 14px; border-radius: 8px;
+  background: #2a2115; border: 1px solid #4a3a1e; color: #ecdcc0;
+}

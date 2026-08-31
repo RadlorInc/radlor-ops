@@ -20,6 +20,8 @@ export default async function Admin() {
     unread.set(n.video_id, (unread.get(n.video_id) ?? 0) + 1)
   }
 
+  const approvedWithOpenNotes = videos.filter((v) => v.verdict === 'approved' && (unread.get(v.id) ?? 0) > 0)
+
   return (
     <main className="wrap">
       <h1>Videos</h1>
@@ -34,6 +36,7 @@ export default async function Admin() {
             <th>Title</th>
             <th>Status</th>
             <th>Version</th>
+            <th>Verdict</th>
             <th>Unread notes</th>
           </tr>
         </thead>
@@ -46,11 +49,24 @@ export default async function Admin() {
               <td>{v.title}</td>
               <td>{v.status}</td>
               <td>v{v.version}</td>
+              <td data-testid="verdict-cell">
+                {v.verdict === 'approved' ? 'approved' : v.verdict === 'changes_needed' ? 'changes needed' : '—'}
+              </td>
               <td>{unread.get(v.id) ?? 0}</td>
             </tr>
           ))}
         </tbody>
       </table>
+      {/* ⚠️ APPROVED WITH OPEN NOTES IS A REAL STATE, NOT A CONTRADICTION. The reviewer liked it
+          and still left things worth reading. Not blocked — that is Rafi's call — but never
+          silent, because the failure it guards against is uploading past feedback nobody read. */}
+      {approvedWithOpenNotes.length > 0 && (
+        <div className="warn" data-testid="approved-with-notes">
+          <strong>Approved, and still has open notes.</strong> Worth reading before you post:{' '}
+          {approvedWithOpenNotes.map((v) => `${v.slug} · ${unread.get(v.id)} open note${unread.get(v.id) === 1 ? '' : 's'}`).join(', ')}.
+        </div>
+      )}
+
       {videos.length === 0 && <p className="muted">No videos yet.</p>}
     </main>
   )

@@ -13,18 +13,24 @@ insert into review.reviewers (id, name, email, token) values
 
 update review.reviewers set revoked_at = now() where id = '22222222-2222-4222-8222-222222222222';
 
-insert into review.videos (id, slug, title, storage_path, version, status, sort_order) values
+insert into review.videos (id, slug, title, storage_path, version, status, verdict, sort_order) values
   ('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', 'equals-reel-final', 'Equals sign reel (final cut)',
-   'equals-reel-final-v1.webm', 1, 'awaiting_review', 0),
+   'equals-reel-final-v1.webm', 1, 'awaiting_review', null, 0),
   ('bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb', 'hook-test-b', 'Hook test B', 'hook-test-b-v2.webm',
-   2, 'awaiting_review', 1),
+   2, 'awaiting_review', null, 1),
   -- Not awaiting review: must 404 for the reviewer, must still show on /admin.
   ('cccccccc-cccc-4ccc-8ccc-cccccccccccc', 'quiet-draft', 'Quiet draft', 'quiet-draft-v1.webm',
-   1, 'draft', 2);
+   1, 'draft', null, 2),
+  -- Already judged, and STILL has an open note. "Approved · N open notes" is a real state and
+  -- /admin must surface it rather than let it pass silently.
+  ('dddddddd-dddd-4ddd-8ddd-dddddddddddd', 'cta-cut', 'CTA cut', 'cta-cut-v1.webm',
+   1, 'reviewed', 'approved', 3);
 
 -- A v1 note on a video that is now at v2. This is the case the `video_version` column exists for:
 -- without it this line would export under the v2 heading.
 insert into review.notes (video_id, reviewer_id, t_seconds, body, video_version, resolved_at) values
+  ('dddddddd-dddd-4ddd-8ddd-dddddddddddd', '11111111-1111-4111-8111-111111111111',
+   7, 'good to go, but the caption needs the hashtag trimmed', 1, null),
   ('bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb', '11111111-1111-4111-8111-111111111111',
    11, 'v1: the logo lands too late', 1, now()),
   ('bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb', '11111111-1111-4111-8111-111111111111',

@@ -34,8 +34,12 @@ export type Video = {
   storage_path: string
   version: number
   status: 'draft' | 'awaiting_review' | 'reviewed' | 'revising'
+  /** The reviewer's judgement, separate from `status`. Null until they say. */
+  verdict: Verdict
   sort_order: number
 }
+
+export type Verdict = 'approved' | 'changes_needed' | null
 export type Note = {
   id: string
   video_id: string
@@ -108,7 +112,7 @@ const REVIEWER_VISIBLE = 'status=in.(awaiting_review,reviewed)'
 export async function videosForReviewer(): Promise<Video[]> {
   return rest<Video[]>(
     'reviewer video list',
-    `videos?select=id,slug,title,storage_path,version,status,sort_order&${REVIEWER_VISIBLE}&order=sort_order.asc,created_at.asc`,
+    `videos?select=id,slug,title,storage_path,version,status,verdict,sort_order&${REVIEWER_VISIBLE}&order=sort_order.asc,created_at.asc`,
   )
 }
 
@@ -116,21 +120,30 @@ export async function videosForReviewer(): Promise<Video[]> {
 export async function reviewerVideoBySlug(slug: string): Promise<Video | null> {
   const rows = await rest<Video[]>(
     'video lookup',
-    `videos?select=id,slug,title,storage_path,version,status,sort_order&slug=eq.${encodeURIComponent(slug)}&${REVIEWER_VISIBLE}&limit=1`,
+    `videos?select=id,slug,title,storage_path,version,status,verdict,sort_order&slug=eq.${encodeURIComponent(slug)}&${REVIEWER_VISIBLE}&limit=1`,
   )
   return rows[0] ?? null
 }
 
 /**
- * The only write the reviewer can cause besides a note, and the only column the web tier may
- * change at all — see 20260831183000_allow_reviewer_to_finish.sql. The two legal transitions are
- * "I am finished" and "…except I just thought of something else".
+ * The only write the reviewer can cause besides a note, and the only columns the web tier may
+ * change at all. Two legal moves:
+ *   • "I'm finished, and here's what I think"  → reviewed + a verdict
+ *   • "…except I just thought of something"    → awaiting_review + verdict CLEARED
+ *
+ * ⚠️ THE VERDICT IS ALWAYS WRITTEN, INCLUDING AS NULL. A verdict that survives new feedback is a
+ * lie about what the reviewer currently thinks, so reopening must clear it rather than leave the
+ * old one standing next to a note that contradicts it.
  */
-export async function setVideoStatus(videoId: string, status: 'reviewed' | 'awaiting_review'): Promise<void> {
-  await rest<unknown>('video status update', `videos?id=eq.${videoId}`, {
+export async function setOutcome(
+  videoId: string,
+  status: 'reviewed' | 'awaiting_review',
+  verdict: Verdict,
+): Promise<void> {
+  await rest<unknown>('video outcome update', `videos?id=eq.${videoId}`, {
     method: 'PATCH',
     headers: { Prefer: 'return=minimal' },
-    body: JSON.stringify({ status }),
+    body: JSON.stringify({ status, verdict }),
   })
 }
 
@@ -160,7 +173,7 @@ export async function insertNote(n: {
 export async function allVideos(): Promise<Video[]> {
   return rest<Video[]>(
     'admin video list',
-    'videos?select=id,slug,title,storage_path,version,status,sort_order&order=sort_order.asc,created_at.asc',
+    'videos?select=id,slug,title,storage_path,version,status,verdict,sort_order&order=sort_order.asc,created_at.asc',
   )
 }
 

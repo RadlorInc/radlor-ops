@@ -19,7 +19,7 @@ export default function Review(props: {
   slug: string
   title: string
   version: number
-  status: 'draft' | 'awaiting_review' | 'reviewed' | 'revising'
+  verdict: 'approved' | 'changes_needed' | null
   reviewerName: string
   reviewerEmail: string
   initialNotes: NoteView[]
@@ -36,8 +36,13 @@ export default function Review(props: {
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [anchor, setAnchor] = useState(0)
-  /** `reviewed` once they press Done; back to `awaiting_review` if they then add another note. */
-  const [status, setStatus] = useState(props.status)
+  /**
+   * What the reviewer concluded — and the only thing the panel keys on. `status` is deliberately
+   * NOT mirrored here: the two always move together from these buttons, and a second copy of the
+   * same fact in component state is a second thing that can drift. A video Rafi has set to
+   * `reviewed` by hand without a verdict correctly shows the buttons — nobody has judged it yet.
+   */
+  const [verdict, setVerdict] = useState(props.verdict)
   /** True only for the note that reopened it, so the page can say what just happened. */
   const [reopened, setReopened] = useState(false)
   const [finishing, setFinishing] = useState(false)
@@ -100,7 +105,7 @@ export default function Review(props: {
       const { note, reopened: didReopen } = (await res.json()) as { note: NoteView; reopened: boolean }
       setNotes((ns) => [...ns, note].sort((a, b) => a.t_seconds - b.t_seconds))
       if (didReopen) {
-        setStatus('awaiting_review')
+        setVerdict(null)
         setReopened(true)
       }
       setBody('')
@@ -112,7 +117,7 @@ export default function Review(props: {
     }
   }
 
-  async function finish() {
+  async function finish(choice: 'approved' | 'changes_needed') {
     if (finishing) return
     setFinishing(true)
     setError(null)
@@ -120,13 +125,13 @@ export default function Review(props: {
       const res = await fetch('/api/review-done', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ token, slug }),
+        body: JSON.stringify({ token, slug, verdict: choice }),
       })
       if (!res.ok) throw new Error('could not save that')
-      setStatus('reviewed')
+      setVerdict(choice)
       setReopened(false)
     } catch {
-      setError('Could not mark this finished. Try again.')
+      setError('Could not save that. Try again.')
     } finally {
       setFinishing(false)
     }
@@ -231,16 +236,19 @@ export default function Review(props: {
             </div>
           )}
 
-          {status === 'reviewed' ? (
-            <p className="done" data-testid="done-confirmation">
-              Thanks — you’ve marked this one finished. Your notes are below, and you can still add
-              another if you think of something; that puts it back as still being reviewed.
+          {verdict ? (
+            <p className={verdict === 'approved' ? 'done' : 'done changes'} data-testid="done-confirmation">
+              <strong data-testid="verdict-label">
+                {verdict === 'approved' ? 'Approved — good to post.' : 'Changes needed.'}
+              </strong>{' '}
+              Thanks — that’s recorded. Your notes are below, and you can still add another if you
+              think of something; that clears this verdict and puts it back as still being reviewed.
             </p>
           ) : (
             reopened && (
-              <p className="done" data-testid="reopened-notice">
-                You added a note after finishing, so this is back on Rafi’s list as still being
-                reviewed. Press <strong>Done reviewing</strong> again when you’re ready.
+              <p className="done changes" data-testid="reopened-notice">
+                You added a note after finishing, so your verdict has been cleared and this is back
+                on Rafi’s list as still being reviewed. Choose again when you’re ready.
               </p>
             )
           )}
@@ -261,13 +269,19 @@ export default function Review(props: {
             </p>
           )}
 
-          {status !== 'reviewed' && (
+          {!verdict && (
             <div style={{ marginTop: 20, paddingTop: 14, borderTop: '1px solid var(--line)' }}>
-              <button className="ghost" onClick={finish} disabled={finishing} data-testid="done-reviewing">
-                {finishing ? 'Saving…' : 'Done reviewing'}
-              </button>
-              <p className="muted small" style={{ margin: '6px 0 0' }}>
-                Tells Rafi you’ve finished with this cut. You can still add notes afterwards.
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                <button onClick={() => finish('approved')} disabled={finishing} data-testid="verdict-approved">
+                  Approved — good to post
+                </button>
+                <button className="ghost" onClick={() => finish('changes_needed')} disabled={finishing} data-testid="verdict-changes">
+                  Needs changes
+                </button>
+              </div>
+              <p className="muted small" style={{ margin: '8px 0 0' }}>
+                Tells Rafi what you concluded. You can still add notes afterwards — that clears the
+                verdict and puts this back as still being reviewed.
               </p>
             </div>
           )}

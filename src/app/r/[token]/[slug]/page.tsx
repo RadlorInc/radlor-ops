@@ -27,7 +27,7 @@ export default async function ReviewPage({
       slug={video.slug}
       title={video.title}
       version={video.version}
-      status={video.status}
+      verdict={video.verdict}
       reviewerName={reviewer.name}
       reviewerEmail={reviewer.email}
       initialNotes={notes.map((n) => ({ id: n.id, t_seconds: n.t_seconds, body: n.body }))}

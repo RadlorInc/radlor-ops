@@ -18,10 +18,13 @@ test('/admin with the token lists every video, status, version and unread count'
   expect(res?.status()).toBe(200)
 
   const rows = page.getByTestId('admin-row')
-  await expect(rows).toHaveCount(3)
+  await expect(rows).toHaveCount(4)
   // Including the draft, which the reviewer cannot see at all.
   await expect(rows.filter({ hasText: 'quiet-draft' })).toContainText('draft')
   await expect(rows.filter({ hasText: 'hook-test-b' })).toContainText('v2')
+  // Verdict is its own column, separate from status.
+  await expect(rows.filter({ hasText: 'cta-cut' })).toContainText('approved')
+  await expect(rows.filter({ hasText: 'equals-reel-final' })).toContainText('—')
 })
 
 test('the token leaves the URL after one request and the cookie carries it after that', async ({ page }) => {
@@ -38,5 +41,5 @@ test('the token leaves the URL after one request and the cookie carries it after
 
   // A bare /admin now works, with no secret anywhere in the request line.
   expect((await page.goto('/admin'))?.status()).toBe(200)
-  await expect(page.getByTestId('admin-row')).toHaveCount(3)
+  await expect(page.getByTestId('admin-row')).toHaveCount(4)
 })
