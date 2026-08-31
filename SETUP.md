@@ -169,9 +169,15 @@ behaviour and not this app's. Run each once, against the real project:
 one that matters — until it passes, the security posture is **unverified, not verified-by-stand-in**:
 
 ```bash
-SUPABASE_URL=https://ghuvnqbthbcmqfxcrjrh.supabase.co SUPABASE_ANON_KEY=<anon key> \
+SUPABASE_URL=https://ghuvnqbthbcmqfxcrjrh.supabase.co \
+SUPABASE_ANON_KEY=<anon key> SUPABASE_SERVICE_ROLE_KEY=<service key> \
   node scripts/check-anon-locked-out.mjs
 ```
+
+It needs the service key too, as a **positive control**: it makes the identical request with the
+identical profile header as `service_role` first, and refuses to report on `anon` at all unless
+that succeeds. It then requires a specific `42501 permission denied` — not merely "no rows came
+back", which is also what an unexposed schema, a missing table and a restored grant look like.
 
 **A signed URL dies when it expires** — signs a 2-second URL, fetches it, waits, fetches it again:
 
