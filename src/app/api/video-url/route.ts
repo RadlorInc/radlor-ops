@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { callerKey, overLimit } from '../_rateLimit'
-import { awaitingVideoBySlug, reviewerByToken } from '@/lib/db'
+import { reviewerByToken, reviewerVideoBySlug } from '@/lib/db'
 import { SIGNED_URL_TTL_SECONDS, signedVideoUrl } from '@/lib/storage'
 
 /**
@@ -29,7 +29,7 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: 'rate_limited' }, { status: 429 })
   }
 
-  const video = await awaitingVideoBySlug(q.get('slug') ?? '')
+  const video = await reviewerVideoBySlug(q.get('slug') ?? '')
   if (!video) return NextResponse.json({ error: 'not_found' }, { status: 404 })
 
   const url = await signedVideoUrl(video.storage_path)

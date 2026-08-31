@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { callerKey, overLimit } from '../_rateLimit'
-import { awaitingVideoBySlug, insertNote, reviewerByToken } from '@/lib/db'
+import { insertNote, reviewerByToken, reviewerVideoBySlug, setVideoStatus } from '@/lib/db'
 
 /**
  * Create one timestamped note.
@@ -45,7 +45,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'bad_timestamp' }, { status: 400 })
   }
 
-  const video = await awaitingVideoBySlug(slug)
+  const video = await reviewerVideoBySlug(slug)
   if (!video) return NextResponse.json({ error: 'not_found' }, { status: 404 })
 
   // The version is stamped from the video row HERE, not sent by the client: it is what tells v1
@@ -58,5 +58,15 @@ export async function POST(req: Request) {
     video_version: video.version,
   })
 
-  return NextResponse.json({ note: { id: note.id, t_seconds: note.t_seconds, body: note.body } }, { status: 201 })
+  // ⚠️ A NOTE AFTER "DONE" REOPENS THE REVIEW. Otherwise the founder is told a review is complete
+  // while the reviewer is still adding to it — a status that says finished when it is not is worse
+  // than no status at all. The client is told, so it can say so on the page rather than silently
+  // changing state underneath them.
+  const reopened = video.status === 'reviewed'
+  if (reopened) await setVideoStatus(video.id, 'awaiting_review')
+
+  return NextResponse.json(
+    { note: { id: note.id, t_seconds: note.t_seconds, body: note.body }, reopened },
+    { status: 201 },
+  )
 }

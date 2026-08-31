@@ -1,5 +1,5 @@
 import { notFound } from 'next/navigation'
-import { awaitingVideoBySlug, notesFor, reviewerByToken } from '@/lib/db'
+import { notesFor, reviewerByToken, reviewerVideoBySlug } from '@/lib/db'
 import Review from './Review'
 
 export const dynamic = 'force-dynamic'
@@ -13,9 +13,10 @@ export default async function ReviewPage({
   const reviewer = await reviewerByToken(token)
   if (!reviewer) notFound()
 
-  // `awaitingVideoBySlug` filters on status itself, so a draft or an already-reviewed cut is a 404
-  // for the reviewer even if they kept the URL from last week.
-  const video = await awaitingVideoBySlug(slug)
+  // Filters on status itself, so a draft or a cut being revised is a 404 for the reviewer even if
+  // they kept the URL from last week. A video they have MARKED FINISHED still resolves — see
+  // REVIEWER_VISIBLE in db.ts.
+  const video = await reviewerVideoBySlug(slug)
   if (!video) notFound()
 
   const notes = await notesFor(video.id, reviewer.id, video.version)
@@ -26,6 +27,7 @@ export default async function ReviewPage({
       slug={video.slug}
       title={video.title}
       version={video.version}
+      status={video.status}
       reviewerName={reviewer.name}
       reviewerEmail={reviewer.email}
       initialNotes={notes.map((n) => ({ id: n.id, t_seconds: n.t_seconds, body: n.body }))}

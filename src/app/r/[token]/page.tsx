@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
-import { reviewerByToken, videosAwaitingReview } from '@/lib/db'
+import { reviewerByToken, videosForReviewer } from '@/lib/db'
 
 /** Never cached and never statically generated: the list is per-token and changes as videos move
  *  in and out of `awaiting_review`. */
@@ -13,7 +13,7 @@ export default async function ReviewerList({ params }: { params: Promise<{ token
   // confirm to whoever is holding it that the token was once real.
   if (!reviewer) notFound()
 
-  const videos = await videosAwaitingReview()
+  const videos = await videosForReviewer()
 
   return (
     <main className="wrap">
@@ -33,6 +33,7 @@ export default async function ReviewerList({ params }: { params: Promise<{ token
               <strong>{v.title}</strong>
               <div className="muted small">
                 {v.slug} · v{v.version}
+                {v.status === 'reviewed' && ' · you marked this finished'}
               </div>
             </Link>
           ))}

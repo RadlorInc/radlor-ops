@@ -108,6 +108,11 @@ function buildSelect(table, params) {
     else if (v.startsWith('eq.')) {
       args.push(v.slice(3))
       where.push(`${k}::text = $${args.length}`)
+    } else if (v.startsWith('in.(') && v.endsWith(')')) {
+      // `status=in.(awaiting_review,reviewed)` — the reviewer-visible filter.
+      const vals = v.slice(4, -1).split(',').map((x) => x.trim()).filter(Boolean)
+      if (!vals.length) throw new Error('empty in()')
+      where.push(`${k}::text in (${vals.map((x) => { args.push(x); return `$${args.length}` }).join(', ')})`)
     } else throw new Error(`unsupported operator ${v}`)
   }
 
@@ -191,6 +196,20 @@ const server = createServer(async (req, res) => {
         const { sql, args } = buildSelect(table, url.searchParams)
         const r = await db.query(sql, args)
         return json(res, 200, r.rows)
+      }
+      if (req.method === 'PATCH') {
+        // Only what the app sends: a filtered UPDATE with `Prefer: return=minimal`. Real PostgREST
+        // answers 204 with no body, and the app's `rest()` depends on that, so reproduce it.
+        const row = await readBody(req)
+        const keys = Object.keys(row)
+        for (const k of keys) if (!IDENT.test(k)) throw new Error(`bad column ${k}`)
+        const { sql, args } = buildSelect(table, url.searchParams)
+        const whereSql = sql.includes(' where ') ? sql.slice(sql.indexOf(' where ')) : ''
+        if (!whereSql) throw new Error('refusing an unfiltered PATCH')
+        const sets = keys.map((k, i) => `${k} = $${args.length + i + 1}`).join(', ')
+        await db.query(`update ${SCHEMA}.${table} set ${sets}${whereSql}`, [...args, ...keys.map((k) => row[k])])
+        res.writeHead(204)
+        return res.end()
       }
       if (req.method === 'POST') {
         const row = await readBody(req)

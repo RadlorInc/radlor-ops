@@ -19,6 +19,7 @@ export default function Review(props: {
   slug: string
   title: string
   version: number
+  status: 'draft' | 'awaiting_review' | 'reviewed' | 'revising'
   reviewerName: string
   reviewerEmail: string
   initialNotes: NoteView[]
@@ -35,6 +36,11 @@ export default function Review(props: {
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [anchor, setAnchor] = useState(0)
+  /** `reviewed` once they press Done; back to `awaiting_review` if they then add another note. */
+  const [status, setStatus] = useState(props.status)
+  /** True only for the note that reopened it, so the page can say what just happened. */
+  const [reopened, setReopened] = useState(false)
+  const [finishing, setFinishing] = useState(false)
 
   // The bucket is private and the URL expires in minutes, so it is fetched per page load rather
   // than rendered into the HTML — there is no permanent link to leak.
@@ -91,14 +97,38 @@ export default function Review(props: {
             : 'Could not save that note. Try again.',
         )
       }
-      const { note } = (await res.json()) as { note: NoteView }
+      const { note, reopened: didReopen } = (await res.json()) as { note: NoteView; reopened: boolean }
       setNotes((ns) => [...ns, note].sort((a, b) => a.t_seconds - b.t_seconds))
+      if (didReopen) {
+        setStatus('awaiting_review')
+        setReopened(true)
+      }
       setBody('')
       setDraftAt(null)
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not save that note.')
     } finally {
       setSaving(false)
+    }
+  }
+
+  async function finish() {
+    if (finishing) return
+    setFinishing(true)
+    setError(null)
+    try {
+      const res = await fetch('/api/review-done', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token, slug }),
+      })
+      if (!res.ok) throw new Error('could not save that')
+      setStatus('reviewed')
+      setReopened(false)
+    } catch {
+      setError('Could not mark this finished. Try again.')
+    } finally {
+      setFinishing(false)
     }
   }
 
@@ -201,6 +231,20 @@ export default function Review(props: {
             </div>
           )}
 
+          {status === 'reviewed' ? (
+            <p className="done" data-testid="done-confirmation">
+              Thanks — you’ve marked this one finished. Your notes are below, and you can still add
+              another if you think of something; that puts it back as still being reviewed.
+            </p>
+          ) : (
+            reopened && (
+              <p className="done" data-testid="reopened-notice">
+                You added a note after finishing, so this is back on Rafi’s list as still being
+                reviewed. Press <strong>Done reviewing</strong> again when you’re ready.
+              </p>
+            )
+          )}
+
           <ol className="notes" data-testid="note-list">
             {notes.map((n) => (
               <li key={n.id}>
@@ -215,6 +259,17 @@ export default function Review(props: {
             <p className="muted small" style={{ marginTop: 12 }}>
               No notes yet.
             </p>
+          )}
+
+          {status !== 'reviewed' && (
+            <div style={{ marginTop: 20, paddingTop: 14, borderTop: '1px solid var(--line)' }}>
+              <button className="ghost" onClick={finish} disabled={finishing} data-testid="done-reviewing">
+                {finishing ? 'Saving…' : 'Done reviewing'}
+              </button>
+              <p className="muted small" style={{ margin: '6px 0 0' }}>
+                Tells Rafi you’ve finished with this cut. You can still add notes afterwards.
+              </p>
+            </div>
           )}
         </div>
       </div>

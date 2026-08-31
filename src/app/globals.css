@@ -78,3 +78,9 @@ code { background: #0f1017; padding: 1px 5px; border-radius: 4px; }
   .side { flex: 1 1 100%; min-width: 0; }
   h1 { font-size: 18px; }
 }
+
+/* The reviewer's own completion state — a plain confirmation, not a banner. */
+.done {
+  margin: 14px 0 0; padding: 10px 12px; font-size: 14px;
+  background: #16241c; border: 1px solid #2c4636; border-radius: 8px; color: #cfe8d8;
+}

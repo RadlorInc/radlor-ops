@@ -75,6 +75,8 @@ async function rest<T>(label: string, path: string, init?: RequestInit): Promise
     const detail = (await res.text().catch(() => '')).slice(0, 300)
     throw new Error(`${label} failed ${res.status}: ${detail}`)
   }
+  // `Prefer: return=minimal` answers 204 with no body, and `res.json()` throws on empty input.
+  if (res.status === 204) return null as T
   return (await res.json()) as T
 }
 
@@ -91,20 +93,45 @@ export async function reviewerByToken(token: string): Promise<Reviewer | null> {
   return r
 }
 
-export async function videosAwaitingReview(): Promise<Video[]> {
+/**
+ * What a reviewer is allowed to see: a video waiting on them, or one they have already marked
+ * finished. `draft` and `revising` do not exist as far as they are concerned.
+ *
+ * ⚠️ `reviewed` IS INCLUDED ON PURPOSE, and it is a deliberate widening of the original
+ * "shows only `awaiting_review`" rule. Once a reviewer can finish a review, excluding `reviewed`
+ * would make the video vanish from their list the moment they pressed the button — so anyone who
+ * thought of one more thing would be locked out by the act of saying they were done. They stay
+ * visible, marked finished.
+ */
+const REVIEWER_VISIBLE = 'status=in.(awaiting_review,reviewed)'
+
+export async function videosForReviewer(): Promise<Video[]> {
   return rest<Video[]>(
-    'awaiting-review list',
-    'videos?select=id,slug,title,storage_path,version,status,sort_order&status=eq.awaiting_review&order=sort_order.asc,created_at.asc',
+    'reviewer video list',
+    `videos?select=id,slug,title,storage_path,version,status,sort_order&${REVIEWER_VISIBLE}&order=sort_order.asc,created_at.asc`,
   )
 }
 
-/** Reviewer-facing lookup: a video that is NOT awaiting review does not exist as far as they know. */
-export async function awaitingVideoBySlug(slug: string): Promise<Video | null> {
+/** Reviewer-facing lookup: a draft, or a cut being revised, does not exist as far as they know. */
+export async function reviewerVideoBySlug(slug: string): Promise<Video | null> {
   const rows = await rest<Video[]>(
     'video lookup',
-    `videos?select=id,slug,title,storage_path,version,status,sort_order&slug=eq.${encodeURIComponent(slug)}&status=eq.awaiting_review&limit=1`,
+    `videos?select=id,slug,title,storage_path,version,status,sort_order&slug=eq.${encodeURIComponent(slug)}&${REVIEWER_VISIBLE}&limit=1`,
   )
   return rows[0] ?? null
+}
+
+/**
+ * The only write the reviewer can cause besides a note, and the only column the web tier may
+ * change at all — see 20260831183000_allow_reviewer_to_finish.sql. The two legal transitions are
+ * "I am finished" and "…except I just thought of something else".
+ */
+export async function setVideoStatus(videoId: string, status: 'reviewed' | 'awaiting_review'): Promise<void> {
+  await rest<unknown>('video status update', `videos?id=eq.${videoId}`, {
+    method: 'PATCH',
+    headers: { Prefer: 'return=minimal' },
+    body: JSON.stringify({ status }),
+  })
 }
 
 /** Only this reviewer's notes, and only for the version they are looking at. */
