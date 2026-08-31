@@ -32,34 +32,49 @@ if (!base || !key) {
 
 const headers = { apikey: key, Authorization: `Bearer ${key}` }
 
-/** Reads with an explicit profile, the way `src/lib/db.ts` does. */
-async function read(schema, table) {
-  const res = await fetch(`${base}/rest/v1/${table}?select=*&limit=1`, {
-    headers: { ...headers, 'Accept-Profile': schema },
+/**
+ * Probes reachability with an explicit profile, the way `src/lib/db.ts` does.
+ *
+ * ⚠️ `select=id`, NEVER `select=*`, AND THE BODY IS NEVER RETAINED ON SUCCESS.
+ * The table this script is pointed at holds email addresses and children's age-bands, and the
+ * script's whole reason to exist is to keep running as the project changes — its trigger condition
+ * is literally that the table STOPS being empty. The first draft asked for `select=*`. It did not
+ * print the row (the success branch prints no body), but it pulled a parent's address into memory
+ * and parked it in a variable that the FAILURE branch prints verbatim — one edit away from a leak,
+ * with a timer on it.
+ *
+ * Not fetching is stronger than redacting: you cannot leak what you never asked for. `count=exact`
+ * gives the number of rows at stake without a single value crossing the wire, and the reachability
+ * verdict is the HTTP status, which needs no data at all.
+ */
+async function probe(schema, table) {
+  const res = await fetch(`${base}/rest/v1/${table}?select=id&limit=1`, {
+    headers: { ...headers, 'Accept-Profile': schema, Prefer: 'count=exact' },
   })
-  return { status: res.status, ok: res.ok, body: (await res.text()).slice(0, 160) }
+  // Errors only. A PostgREST error body carries a reason, never a row; a success body is discarded
+  // unread rather than trusted to be harmless.
+  const error = res.ok ? null : (await res.text()).slice(0, 160)
+  const rows = Number((res.headers.get('content-range') ?? '/?').split('/')[1])
+  return { status: res.status, ok: res.ok, error, rows: Number.isFinite(rows) ? rows : null }
 }
 
 console.log('This tool holds a PROJECT-WIDE key. Confirming the radius SETUP.md records:\n')
 
 // 1. Our own schema — must be reachable, or the tool is broken rather than safe.
-const ours = await read('review', 'videos')
-console.log(`review.videos      → HTTP ${ours.status} ${ours.ok ? 'readable ✔ (expected — this is our schema)' : `UNREACHABLE ${ours.body}`}`)
+const ours = await probe('review', 'videos')
+console.log(`review.videos      → HTTP ${ours.status} ${ours.ok ? 'readable ✔ (expected — this is our schema)' : `UNREACHABLE ${ours.error}`}`)
 
 // 2. The marketing site's table — must ALSO be reachable. That is the cost of sharing.
-const theirs = await read('public', 'waitlist')
-console.log(`public.waitlist    → HTTP ${theirs.status} ${theirs.ok ? 'readable ⚠️ (expected — THIS IS THE BLAST RADIUS)' : `refused ${theirs.body}`}`)
+//    Shape only: the verdict is the status, and the stake is the row COUNT. No values, ever.
+const theirs = await probe('public', 'waitlist')
+console.log(`public.waitlist    → HTTP ${theirs.status} ${theirs.ok ? 'readable ⚠️ (expected — THIS IS THE BLAST RADIUS)' : `refused ${theirs.error}`}`)
 
 // 3. How much is actually at stake right now. The decision to share was made about an EMPTY
-//    table; SETUP.md says the question reopens when it fills up. This prints the number so that
-//    reopening is triggered by a fact rather than by someone remembering.
-let rows = null
+//    table; SETUP.md says the question reopens when it fills up. Printing the number makes that
+//    reopening a fact rather than something someone has to remember.
+const rows = theirs.ok ? theirs.rows : null
 if (theirs.ok) {
-  const res = await fetch(`${base}/rest/v1/waitlist?select=id`, {
-    headers: { ...headers, 'Accept-Profile': 'public', Prefer: 'count=exact', Range: '0-0' },
-  })
-  rows = Number((res.headers.get('content-range') ?? '/0').split('/')[1])
-  console.log(`public.waitlist    → ${rows} row(s) of real emails and child age-bands reachable from this tool`)
+  console.log(`public.waitlist    → ${rows ?? '?'} row(s) reachable from this tool — each an email address and a child's age-band (values deliberately not fetched)`)
 }
 
 console.log()
