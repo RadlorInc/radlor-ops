@@ -1,0 +1,55 @@
+:root {
+  --bg: #12131a;
+  --panel: #1b1d27;
+  --line: #2d3040;
+  --text: #e7e8ee;
+  --muted: #9599ad;
+  --accent: #7c9cff;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; }
+body {
+  background: var(--bg);
+  color: var(--text);
+  font: 15px/1.55 ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+a { color: var(--accent); }
+h1 { font-size: 20px; margin: 0 0 4px; }
+h2 { font-size: 15px; margin: 0 0 8px; }
+.wrap { max-width: 1100px; margin: 0 auto; padding: 24px 20px 64px; }
+.muted { color: var(--muted); }
+.small { font-size: 13px; }
+.card {
+  display: block; background: var(--panel); border: 1px solid var(--line);
+  border-radius: 10px; padding: 14px 16px; margin-bottom: 10px; text-decoration: none; color: inherit;
+}
+a.card:hover { border-color: var(--accent); }
+.row { display: flex; gap: 24px; align-items: flex-start; flex-wrap: wrap; }
+.player { position: relative; flex: 0 0 auto; width: min(360px, 100%); }
+.player video { width: 100%; border-radius: 10px; background: #000; display: block; }
+.side { flex: 1 1 320px; min-width: 300px; }
+button {
+  font: inherit; background: var(--accent); color: #10131f; border: 0;
+  border-radius: 8px; padding: 8px 14px; cursor: pointer;
+}
+button.ghost { background: transparent; color: var(--text); border: 1px solid var(--line); }
+button:disabled { opacity: .5; cursor: default; }
+textarea {
+  width: 100%; font: inherit; color: var(--text); background: #0f1017;
+  border: 1px solid var(--line); border-radius: 8px; padding: 8px; resize: vertical;
+}
+ol.notes { list-style: none; margin: 12px 0 0; padding: 0; }
+ol.notes li { border-top: 1px solid var(--line); padding: 8px 0; }
+ol.notes .t {
+  background: none; color: var(--accent); border: 0; padding: 0 8px 0 0;
+  font-variant-numeric: tabular-nums; cursor: pointer;
+}
+details.questions { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 12px 16px; }
+details.questions ol { margin: 10px 0 0; padding-left: 20px; }
+details.questions li { margin-bottom: 6px; }
+summary { cursor: pointer; }
+table { border-collapse: collapse; width: 100%; }
+th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--line); }
+th { color: var(--muted); font-weight: 500; font-size: 13px; }
+code { background: #0f1017; padding: 1px 5px; border-radius: 4px; }
