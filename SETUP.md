@@ -275,6 +275,12 @@ written against.
 update review.videos set status = 'reviewed' where slug = 'equals-reel-final';
 ```
 
+You usually won't need that one: the reviewer has a **Done reviewing** button that sets `reviewed`
+itself. If they add another note afterwards it flips back to `awaiting_review` automatically and
+tells them on the page, so `/admin` never says a review is finished while it isn't. A `reviewed`
+video stays visible on their list, marked finished, so thinking of one more thing does not lock
+them out.
+
 **Get the notes out:** `https://<your-domain>/admin/export` — markdown, grouped by video and
 version, sorted by timestamp, ready to paste.
 
