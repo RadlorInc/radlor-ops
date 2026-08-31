@@ -117,8 +117,25 @@ if (!theirs.ok) {
   process.exit(1)
 }
 console.log('PASS — the exposure matches what SETUP.md records. This is documentation, not protection.')
+
+// ── Trigger 1: the marketing site's table stops being empty ─────────────────────────────────
 if (rows && rows > 0) {
   console.log(`\n⚠️  ${rows} waitlist row(s). The decision to share this project was made about an EMPTY table.`)
   console.log('   Per SETUP.md, the separation question reopens now that it holds real people.')
+}
+
+// ── Trigger 2: THIS schema starts holding money ─────────────────────────────────────────────
+// The original trigger was about the OTHER schema filling up. This one is about ours: the admin
+// dashboard holds subscription costs, renewal dates and spend. A forwarded link exposing a draft
+// reel is embarrassing; one exposing what Radlor spends and when its subscriptions lapse is
+// different in kind — and it now sits in a project whose own public /api/waitlist route holds the
+// same service_role key.
+const fin = await probe('review', 'subscriptions')
+if (fin.ok) {
+  console.log(`\n⚠️  review.subscriptions exists and holds ${fin.rows ?? '?'} row(s) — FINANCIAL DATA.`)
+  console.log('   Second reopening trigger, per SETUP.md: this schema is no longer only about video')
+  console.log('   notes. The same key that reads it is held by radlor-site\'s public waitlist route.')
+} else if (fin.code === 'PGRST205') {
+  console.log('\n   (review.subscriptions does not exist yet — the financial trigger has not fired.)')
 }
 process.exit(0)

@@ -1,0 +1,97 @@
+import 'server-only'
+import { cookies } from 'next/headers'
+import { notFound, redirect } from 'next/navigation'
+import { SCHEMA } from './db'
+
+/**
+ * Account sessions for admin and tester. Reviewers have none and never will — they are a token in
+ * a URL, which is the whole reason an outside contractor needs no onboarding.
+ *
+ * ⚠️ THE BROWSER STILL NEVER TALKS TO SUPABASE. The usual Supabase Auth setup runs a client in the
+ * page with `NEXT_PUBLIC_SUPABASE_URL` and the anon key, which would put both into the bundle and
+ * break a property this repo actively tests for (the canary grep over `.next/static`). Instead the
+ * sign-in form posts to our own route, that route calls Supabase's token endpoint server-side, and
+ * the tokens live in httpOnly cookies the page script cannot read. There are still zero
+ * `NEXT_PUBLIC_` variables in this app.
+ *
+ * ⚠️ AND VALIDATION IS DONE BY SUPABASE, NOT BY US. `currentUser()` spends a round trip on
+ * `/auth/v1/user` rather than verifying the JWT locally. Verifying locally would mean holding the
+ * project's JWT secret — and that secret also signs `service_role` tokens, so an app holding it has
+ * service_role in all but name. One HTTP call on a founder-only dashboard is a cheap way not to
+ * hold that. It also means a revoked or expired session stops working immediately rather than
+ * whenever our own clock says so.
+ */
+
+const URL_ = process.env.SUPABASE_URL
+const ANON = process.env.SUPABASE_ANON_KEY
+
+export const AT_COOKIE = 'rvr_at'
+export const RT_COOKIE = 'rvr_rt'
+
+export type Role = 'admin' | 'tester'
+export type Profile = { user_id: string; role: Role; name: string }
+
+function config(): { url: string; anon: string } {
+  if (!URL_ || !ANON) throw new Error('auth env missing: set SUPABASE_URL and SUPABASE_ANON_KEY')
+  return { url: URL_, anon: ANON }
+}
+
+/** The signed-in user, or null. Authoritative: Supabase decides, not us. */
+export async function currentUser(): Promise<{ id: string; email: string; accessToken: string } | null> {
+  const token = (await cookies()).get(AT_COOKIE)?.value
+  if (!token) return null
+  const { url, anon } = config()
+  const res = await fetch(`${url}/auth/v1/user`, {
+    headers: { apikey: anon, Authorization: `Bearer ${token}` },
+    cache: 'no-store',
+  })
+  if (!res.ok) return null
+  const u = (await res.json()) as { id?: string; email?: string }
+  if (!u.id) return null
+  return { id: u.id, email: u.email ?? '', accessToken: token }
+}
+
+/**
+ * The signed-in user's profile row.
+ *
+ * ⚠️ READ AS THE USER, NOT AS `service_role`. This deliberately does NOT use the service key: it
+ * sends the user's own access token, so the row comes back because the `profiles_read_own` policy
+ * allowed it. Reading it with service_role would work identically whether the policies were
+ * correct or absent — the app would be doing the authorising and RLS would be decoration.
+ */
+export async function currentProfile(): Promise<Profile | null> {
+  const user = await currentUser()
+  if (!user) return null
+  const { url, anon } = config()
+  const res = await fetch(
+    `${url}/rest/v1/profiles?select=user_id,role,name&user_id=eq.${user.id}&limit=1`,
+    {
+      headers: {
+        apikey: anon,
+        Authorization: `Bearer ${user.accessToken}`,
+        'Accept-Profile': SCHEMA,
+      },
+      cache: 'no-store',
+    },
+  )
+  if (!res.ok) return null
+  const rows = (await res.json()) as Profile[]
+  return rows[0] ?? null
+}
+
+/**
+ * Gate a page.
+ *
+ * ⚠️ TWO DIFFERENT ANSWERS ON PURPOSE, and the difference is who is asking:
+ *   • signed OUT           → the login page. Admins and testers are EXPECTED here; hiding the door
+ *                            from someone who is supposed to walk through it is not security, it
+ *                            is a support ticket.
+ *   • signed in, wrong role → 404, exactly as if the route did not exist. A tester does not need to
+ *                            learn that `/admin` is a real page they are not allowed into.
+ */
+export async function requireRole(...allowed: Role[]): Promise<Profile> {
+  const profile = await currentProfile()
+  if (!profile) redirect('/login')
+  if (!allowed.includes(profile.role)) notFound()
+  return profile
+}

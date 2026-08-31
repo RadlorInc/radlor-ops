@@ -91,3 +91,9 @@ code { background: #0f1017; padding: 1px 5px; border-radius: 4px; }
   margin: 16px 0 0; padding: 10px 12px; font-size: 14px; border-radius: 8px;
   background: #2a2115; border: 1px solid #4a3a1e; color: #ecdcc0;
 }
+
+input[type='email'], input[type='password'] {
+  width: 100%; font: inherit; color: var(--text); background: #0f1017;
+  border: 1px solid var(--line); border-radius: 8px; padding: 8px; margin-top: 4px;
+}
+button.linky { background: none; border: 0; color: var(--accent); padding: 0; font: inherit; cursor: pointer; text-decoration: underline; }

@@ -1,15 +1,10 @@
-import { cookies } from 'next/headers'
-import { notFound } from 'next/navigation'
 import { allNotes, allVideos } from '@/lib/db'
-import { ADMIN_COOKIE, tokenValid } from '@/lib/admin'
+import { requireAdminDuringHandover } from '@/lib/adminGate'
 
 export const dynamic = 'force-dynamic'
 
 export default async function Admin() {
-  // The token arrives once as `?k=…`; `src/proxy.ts` has already turned it into this cookie and
-  // stripped the parameter. Wrong cookie and no cookie are the same 404 as a route that does not
-  // exist — nothing here says "there is an admin page and you got the password wrong".
-  if (!tokenValid((await cookies()).get(ADMIN_COOKIE)?.value)) notFound()
+  const legacy = await requireAdminDuringHandover()
 
   const [videos, notes] = await Promise.all([allVideos(), allNotes()])
 
@@ -24,7 +19,23 @@ export default async function Admin() {
 
   return (
     <main className="wrap">
+      {legacy && (
+        <p className="warn small" data-testid="legacy-gate-notice">
+          You are signed in with the old <code>?k=</code> link, not an account. That path is being
+          removed — create your admin account and sign in at <a href="/login">/login</a>.
+        </p>
+      )}
       <h1>Videos</h1>
+      <p className="muted small">
+        <a href="/tester">Chapter testing</a> ·{' '}
+        <span data-testid="signout-inline">
+          <form method="post" action="/api/auth/logout" style={{ display: 'inline' }}>
+            <button className="linky" type="submit" data-testid="sign-out">
+              Sign out
+            </button>
+          </form>
+        </span>
+      </p>
       <p className="muted small">
         <a href="/admin/export">Open notes as markdown →</a> ·{' '}
         <a href="/admin/export?all=1">including resolved</a>

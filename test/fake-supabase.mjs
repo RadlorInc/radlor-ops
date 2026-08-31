@@ -81,8 +81,13 @@ for (const f of (await readdir(join(ROOT, 'supabase/migrations'))).filter((f) =>
   // ⚠️ PGlite has no `storage` schema — it is plain Postgres, not a Supabase project. A migration
   // that touches storage is SKIPPED, and skipping it is announced: a stand-in that quietly drops
   // statements is how "the tests pass" stops meaning anything.
-  if (/\bstorage\./.test(sql)) {
-    console.log(`  skipped ${f} — touches the storage schema, which PGlite does not have`)
+  // ⚠️ SKIPPED AND ANNOUNCED, NEVER SILENTLY DROPPED. PGlite is plain Postgres, not a Supabase
+  // project: it has no `storage` schema and no `auth` schema, so a migration referencing either
+  // cannot run. Anything in a skipped file is verified LIVE or not at all — see the declared blind
+  // spot above, of which this is the same class one level over.
+  const missing = /\bstorage\./.test(sql) ? 'storage' : /\bauth\.|auth\.uid\(\)/.test(sql) ? 'auth' : null
+  if (missing) {
+    console.log(`  skipped ${f} — touches the ${missing} schema, which PGlite does not have`)
     continue
   }
   await db.exec(sql)

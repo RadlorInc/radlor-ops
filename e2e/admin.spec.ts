@@ -4,13 +4,29 @@ import { ADMIN_TOKEN } from './tokens'
 /** Done-means #5: /admin without ADMIN_TOKEN is a 404; with it, it lists the videos. Plus the
  *  cookie exchange — the token is in the URL for exactly one request. */
 
-test('/admin without the token is a 404', async ({ page }) => {
-  expect((await page.goto('/admin'))?.status()).toBe(404)
+/**
+ * ⚠️ THE CONTRACT CHANGED WHEN ACCOUNTS ARRIVED, AND THIS IS THE NEW ONE.
+ * A signed-out visitor to /admin now gets the LOGIN PAGE, not a 404. That is deliberate: admins and
+ * testers are expected users, and hiding the door from someone who is supposed to walk through it
+ * is a support ticket, not security. The 404 is reserved for someone who IS signed in and is not
+ * an admin — see `auth.spec.ts`, which can only run against the live project.
+ *
+ * What did NOT change is that a wrong key is indistinguishable from no key.
+ */
+test('/admin signed out goes to the login page', async ({ page }) => {
+  const res = await page.goto('/admin')
+  expect(res?.status()).toBe(200)
+  expect(new URL(page.url()).pathname).toBe('/login')
+  await expect(page.getByTestId('sign-in')).toBeVisible()
 })
 
-test('/admin with the wrong token is the same 404, and sets no cookie', async ({ page }) => {
-  expect((await page.goto('/admin?k=not-the-token'))?.status()).toBe(404)
+test('a wrong admin key is indistinguishable from no key, and sets no cookie', async ({ page }) => {
+  await page.goto('/admin?k=not-the-token')
+  const wrong = { path: new URL(page.url()).pathname, body: await page.locator('body').innerText() }
   expect(await page.context().cookies()).toEqual([])
+
+  await page.goto('/admin')
+  expect({ path: new URL(page.url()).pathname, body: await page.locator('body').innerText() }).toEqual(wrong)
 })
 
 test('/admin with the token lists every video, status, version and unread count', async ({ page }) => {

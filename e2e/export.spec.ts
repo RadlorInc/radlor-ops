@@ -4,7 +4,9 @@ import { ADMIN_TOKEN } from './tokens'
 /** Done-means #6, plus the thing that makes `resolved_at` a column something reads. The seed has
  *  one RESOLVED v1 note and one open v2 note on `hook-test-b`. */
 
-test('/admin/export without the cookie is a 404', async ({ page }) => {
+/** The export is a route handler, not a page, so it still answers 404 rather than redirecting —
+ *  there is no login form to render into a `text/plain` download. */
+test('/admin/export without a session or key is a 404', async ({ page }) => {
   expect((await page.goto('/admin/export'))?.status()).toBe(404)
 })
 
