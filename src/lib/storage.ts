@@ -6,9 +6,15 @@ import 'server-only'
  * URL this function minted seconds ago.
  */
 
-/** Must match the bucket created in SETUP.md. Not an env var: a typo'd bucket name should fail
- *  loudly on the first play, not silently point at a bucket that does not exist. */
-export const VIDEO_BUCKET = 'videos'
+/**
+ * Must match the bucket created in SETUP.md. Not an env var: a typo'd bucket name should fail
+ * loudly on the first play, not silently point at a bucket that does not exist.
+ *
+ * ⚠️ ITS OWN NAME, IN A SHARED PROJECT. Not `videos` — this project belongs to the marketing site
+ * too, and a generic name is how two tools end up writing into one bucket. Today it is the only
+ * bucket in the project; that is not a reason to take the generic name.
+ */
+export const VIDEO_BUCKET = 'review-videos'
 
 /** Five minutes. Long enough to watch a 60-second vertical cut twice and to scrub back; short
  *  enough that a URL pasted into a chat is dead by the time anyone opens it. The player asks for a

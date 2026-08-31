@@ -33,7 +33,7 @@ export default defineConfig({
   webServer: [
     {
       command: 'node test/fake-supabase.mjs',
-      url: `${SUPABASE_URL}/rest/v1/videos?select=id&limit=1`,
+      url: `${SUPABASE_URL}/health`,
       reuseExistingServer: false,
       stdout: 'pipe',
     },

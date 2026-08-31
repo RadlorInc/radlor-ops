@@ -47,6 +47,19 @@ else with: what result is this incapable of distinguishing?**
   build` with a canary value in the env and a `grep -r` over `.next/static` is the check.
 - **Unknown, revoked and malformed tokens get the same 404**, page and API alike. A different answer
   for "revoked" tells whoever is holding it that the token was once real.
+- **The `review` schema is a namespace, not a boundary.** This tool shares the `radlor-site`
+  Supabase project (free tier: two projects max). Its routes hold that project's `service_role`
+  key, which is per-PROJECT and bypasses RLS, so a compromise here reads and writes
+  `public.waitlist` — emails and children's age-bands. Accepted, costed at 5–7 hours to fix
+  properly, and declined because `radlor-site`'s own public `/api/waitlist` route already holds the
+  same key over the same table. ⚠️ **The decision was made about a table with ZERO rows. It reopens
+  when that table holds real people** — `scripts/check-blast-radius.mjs` prints the count and says
+  so. Sharing with the **Milo** project is still forbidden and does not become allowed if the tier
+  gets tighter.
+- **Every PostgREST call must carry `Accept-Profile` / `Content-Profile: review`.** Without it the
+  request resolves against the default profile, `public`, which is the marketing site's schema.
+  `test/fake-supabase.mjs` refuses a request without the header for exactly this reason: if the
+  harness were lenient, dropping the header would break nothing locally and ship.
 - **The offline harness proves this app's logic, not Supabase's.** `test/fake-supabase.mjs` runs the
   real migration in real Postgres, but only real PostgREST enforces RLS against `anon`. Until
   `scripts/check-anon-locked-out.mjs` has passed against the live project, the security posture is

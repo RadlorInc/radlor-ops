@@ -1,13 +1,40 @@
 -- Video reviewer: one outside marketing reviewer, timestamped notes on unreleased vertical videos.
 --
--- Threat model this schema is written against: the ONLY public surface is a token in a URL that a
--- stranger holds. So no table is readable by `anon` at all, and every reviewer-facing read is done
+-- ⚠️ THIS RUNS IN A SHARED PROJECT. It lives in the `radlor-site` Supabase project
+-- (ghuvnqbthbcmqfxcrjrh) because the free tier caps the account at two projects. That is allowed
+-- because radlor-site is the MARKETING SITE — it holds no children's data. Sharing with the Milo
+-- app is still forbidden and does not become allowed if the tier gets tighter.
+--
+-- ⚠️ EVERYTHING GOES IN THE `review` SCHEMA, NOT `public`. `public` belongs to the marketing site
+-- (`public.waitlist`). A name collision in someone else's database is a bad way to find out what is
+-- in it, and a schema is the cheapest way to make that impossible rather than unlikely.
+--
+-- ⚠️ AND THE SCHEMA IS NOT A SECURITY BOUNDARY. The server routes hold this project's
+-- `service_role` key, which is per-PROJECT and bypasses RLS, so anything that compromises this tool
+-- reads and writes every table in radlor-site including `public.waitlist`. That is the accepted
+-- cost of sharing, written down rather than hidden — see the "Blast radius" section of SETUP.md,
+-- and `scripts/check-blast-radius.mjs`, which asserts the exposure is exactly what the docs claim.
+--
+-- Threat model the SCHEMA is written against: the only public surface is a token in a URL that a
+-- stranger holds. No table is readable by `anon` at all, and every reviewer-facing read is done
 -- server-side by the service role after it has resolved that token itself. RLS is enabled with NO
--- policies, which in Postgres means "deny everything except the roles that bypass RLS" — that is
--- the intended state here, not an unfinished one.
+-- policies, which in Postgres means "deny everything except the roles that bypass RLS" — the
+-- intended state here, not an unfinished one.
+--
+-- Apply by PASTING THIS INTO THE SQL EDITOR. ⚠️ Do NOT `supabase db push` against this project:
+-- its migration history is empty (the waitlist table was applied by hand), so a push from this repo
+-- would be operating on a history that does not match the database.
 
-create table if not exists reviewers (
-  -- gen_random_uuid() is core Postgres from 13 on; no pgcrypto extension needed.
+create schema if not exists review;
+
+-- ⚠️ `review` MUST BE ADDED TO API SETTINGS → EXPOSED SCHEMAS, or PostgREST cannot see these
+-- tables and every route 404s with PGRST106. Put it LAST in that list — the FIRST entry is the
+-- default profile, and leaving `public` first means an unqualified request from the marketing site
+-- can never accidentally land in here. This app always sends the profile header explicitly.
+-- Exposing the schema does not grant anything: the revokes below and RLS still apply.
+
+create table if not exists review.reviewers (
+  -- gen_random_uuid() is core Postgres from 13 on (this project is 17.6); no pgcrypto needed.
   id          uuid primary key default gen_random_uuid(),
   name        text not null check (length(btrim(name)) between 1 and 120),
   email       text not null check (length(btrim(email)) between 3 and 254),
@@ -19,7 +46,7 @@ create table if not exists reviewers (
   created_at  timestamptz not null default now()
 );
 
-create table if not exists videos (
+create table if not exists review.videos (
   id           uuid primary key default gen_random_uuid(),
   slug         text not null unique check (slug ~ '^[a-z0-9][a-z0-9-]{0,78}[a-z0-9]$'),
   title        text not null check (length(btrim(title)) between 1 and 200),
@@ -32,10 +59,10 @@ create table if not exists videos (
   created_at   timestamptz not null default now()
 );
 
-create table if not exists notes (
+create table if not exists review.notes (
   id            uuid primary key default gen_random_uuid(),
-  video_id      uuid not null references videos (id) on delete cascade,
-  reviewer_id   uuid not null references reviewers (id) on delete cascade,
+  video_id      uuid not null references review.videos (id) on delete cascade,
+  reviewer_id   uuid not null references review.reviewers (id) on delete cascade,
   t_seconds     int  not null check (t_seconds >= 0 and t_seconds <= 86400),
   body          text not null check (length(btrim(body)) between 1 and 4000),
   -- ⚠️ NOT IN THE ORIGINAL SPEC, AND THE SPEC DOES NOT WORK WITHOUT IT. `version` lives on
@@ -46,25 +73,34 @@ create table if not exists notes (
   -- later is a migration over a populated table; added now it is a line.
   video_version int  not null check (video_version >= 1),
   -- Set when the founder has acted on the note. Kept per (note, version) so an acted-on v1 comment
-  -- does not resurface against v2.
+  -- does not resurface against v2. Read by `/admin/export`, which hides resolved notes by default.
   resolved_at   timestamptz,
   created_at    timestamptz not null default now()
 );
 
 -- The reviewer's panel reads (video, reviewer) ordered by timestamp; /admin counts unresolved
 -- notes per video. One index covers both.
-create index if not exists notes_video_reviewer_t_idx on notes (video_id, reviewer_id, t_seconds);
+create index if not exists notes_video_reviewer_t_idx
+  on review.notes (video_id, reviewer_id, t_seconds);
 
-alter table reviewers enable row level security;
-alter table videos    enable row level security;
-alter table notes     enable row level security;
+alter table review.reviewers enable row level security;
+alter table review.videos    enable row level security;
+alter table review.notes     enable row level security;
+
+-- PostgREST reaches a schema through the `authenticator` role, which switches to `anon` or
+-- `service_role`. USAGE on the schema is what makes it addressable at all; the table grants below
+-- are what decide whether anything can be read once you are in it.
+grant usage on schema review to anon, authenticated, service_role;
 
 -- Belt as well as braces. RLS with no policies already denies `anon`, but a future `create policy`
 -- written in a hurry cannot grant what the role has no privilege to touch in the first place.
-revoke all on reviewers from anon, authenticated;
-revoke all on videos    from anon, authenticated;
-revoke all on notes     from anon, authenticated;
+revoke all on all tables in schema review from anon, authenticated;
+alter default privileges in schema review revoke all on tables from anon, authenticated;
 
 -- Deliberately NO policies. Every reviewer-facing operation goes through a server route that
 -- resolves the token with the service role, which bypasses RLS. If you ever add a policy here,
 -- the token must still never appear in a client-side filter.
+
+-- PostgREST caches the schema. Without this the tables can 404 with PGRST205 until the cache
+-- turns over, which reads exactly like a broken deploy.
+notify pgrst, 'reload schema';

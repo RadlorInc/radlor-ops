@@ -29,12 +29,17 @@ const ROOT = join(HERE, '..')
 const PORT = Number(process.env.FAKE_SUPABASE_PORT || 54329)
 const SECRET = 'fake-storage-secret'
 const TABLES = new Set(['reviewers', 'videos', 'notes'])
+/** These tables live in `review`, not `public` — the shared project's `public` belongs to the
+ *  marketing site. The shim ENFORCES the profile header for the same reason real PostgREST does:
+ *  without it the app would be asking for `public.reviewers`, which does not exist. If this were
+ *  lenient, dropping the header from `src/lib/db.ts` would break nothing here and pass. */
+const SCHEMA = 'review'
 const IDENT = /^[a-z_][a-z0-9_]*$/
 
 const db = new PGlite()
 // Supabase ships these two roles; PGlite does not. The migration's REVOKEs name them, so they have
 // to exist for the file to run unmodified — which is the point of running the real file.
-await db.exec('create role anon; create role authenticated;')
+await db.exec('create role anon; create role authenticated; create role service_role;')
 await db.exec(await readFile(join(ROOT, 'supabase/migrations/20260831120000_init_video_reviewer.sql'), 'utf8'))
 await db.exec(await readFile(join(HERE, 'seed.sql'), 'utf8'))
 
@@ -60,7 +65,7 @@ function buildSelect(table, params) {
     } else throw new Error(`unsupported operator ${v}`)
   }
 
-  let sql = `select ${cols.join(', ')} from ${table}`
+  let sql = `select ${cols.join(', ')} from ${SCHEMA}.${table}`
   if (where.length) sql += ` where ${where.join(' and ')}`
   const order = params.get('order')
   if (order) {
@@ -95,6 +100,11 @@ async function readBody(req) {
 const server = createServer(async (req, res) => {
   const url = new URL(req.url, 'http://127.0.0.1')
   try {
+    // Readiness only, for the Playwright webServer. Deliberately not a table request: those now
+    // require a profile header and answer 404 without one, which the harness would read as "not
+    // up yet" and wait out the full timeout.
+    if (url.pathname === '/health') return json(res, 200, { ok: true })
+
     // ---- Storage: mint a signed URL -------------------------------------------------
     let m = url.pathname.match(/^\/storage\/v1\/object\/sign\/([^/]+)\/(.+)$/)
     if (m && req.method === 'POST') {
@@ -119,6 +129,18 @@ const server = createServer(async (req, res) => {
     m = url.pathname.match(/^\/rest\/v1\/([a-z_]+)$/)
     if (m && TABLES.has(m[1])) {
       const table = m[1]
+      // Real PostgREST answers PGRST106 when the requested profile is not an exposed schema, and
+      // falls back to the DEFAULT profile (`public`) when no header is sent — where these tables
+      // do not exist. Both come back as "not found" to the app; reproduce that rather than being
+      // helpful, or the header stops being load-bearing.
+      const profile = req.headers[req.method === 'GET' ? 'accept-profile' : 'content-profile']
+      if (profile !== SCHEMA) {
+        return json(res, 404, {
+          code: 'PGRST106',
+          message: `The schema must be one of the following: ${SCHEMA}`,
+          got: profile ?? '(no profile header — PostgREST would use the default, `public`)',
+        })
+      }
       if (req.method === 'GET') {
         const { sql, args } = buildSelect(table, url.searchParams)
         const r = await db.query(sql, args)
@@ -129,7 +151,7 @@ const server = createServer(async (req, res) => {
         const keys = Object.keys(row)
         for (const k of keys) if (!IDENT.test(k)) throw new Error(`bad column ${k}`)
         const r = await db.query(
-          `insert into ${table} (${keys.join(', ')}) values (${keys.map((_, i) => `$${i + 1}`).join(', ')}) returning *`,
+          `insert into ${SCHEMA}.${table} (${keys.join(', ')}) values (${keys.map((_, i) => `$${i + 1}`).join(', ')}) returning *`,
           keys.map((k) => row[k]),
         )
         const wants = (req.headers.prefer || '').includes('return=representation')

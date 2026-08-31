@@ -1,11 +1,18 @@
 # Video reviewer — a separate tool, for one outside reviewer
 
 A standalone Next.js app for getting timestamped notes on unreleased Radlor vertical videos back
-out as markdown. **New repo, new Vercel project, new Supabase project** — it shares no
-infrastructure with the Milo app, deliberately: this is a public, token-authenticated surface that
-accepts free text from a stranger, and the main app has a COPPA/privacy review and an independent
-security pass still pending. If this tool is ever wrong, the worst case is "a reviewer saw the
-wrong video".
+out as markdown. **New repo, new Vercel project** — it shares no infrastructure with the Milo app,
+deliberately: this is a public, token-authenticated surface that accepts free text from a stranger,
+and the main app has a COPPA/privacy review and an independent security pass still pending. If this
+tool is ever wrong, the worst case is "a reviewer saw the wrong video".
+
+**The database is shared with `radlor-site`** — the free tier caps the account at two projects. Own
+`review` schema, own private `review-videos` bucket, `public` untouched. Allowed because the
+marketing site holds no children's data; the Milo app remains off-limits regardless of tier.
+⚠️ **The `service_role` key is per-project, so this tool can read and write every table in
+`radlor-site`, `public.waitlist` included.** That is not hidden by the schema and is not fixed by
+RLS. Full reasoning, the 5–7 hour alternative and why it was declined:
+[SETUP.md → Blast radius](SETUP.md#blast-radius).
 
 `src/app/api/_rateLimit.ts` is **copied** from the Milo repo, not imported. A shared module would
 be the first thread tying the two projects back together.

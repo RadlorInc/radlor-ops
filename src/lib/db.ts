@@ -8,6 +8,12 @@ import 'server-only'
  * ⚠️ THIS MODULE HOLDS THE SERVICE ROLE KEY, WHICH BYPASSES RLS. `import 'server-only'` above turns
  * "don't import this from a client component" from a review comment into a build error.
  *
+ * ⚠️ EVERY REQUEST CARRIES A PROFILE HEADER. These tables live in the `review` schema of a SHARED
+ * project — `public` belongs to the marketing site. PostgREST's default profile is the FIRST
+ * exposed schema, which is `public`, so a request without `Accept-Profile` / `Content-Profile`
+ * does not read our tables: it looks for `public.reviewers` and 404s. Sending it explicitly is
+ * also what stops an unqualified request ever landing in the site's schema by accident.
+ *
  * ⚠️ AND IT IS THE ONE PLACE A REVIEWER TOKEN IS EVER PUT IN A URL — `reviewers?token=eq.<token>`.
  * That is why `rest()` below takes a `label` and NEVER puts the request path into an error or a
  * log line. A thrown fetch error that stringifies its own URL is how a token ends up in Vercel's
@@ -16,6 +22,9 @@ import 'server-only'
 
 const URL_ = process.env.SUPABASE_URL
 const KEY = process.env.SUPABASE_SERVICE_ROLE_KEY
+
+/** The Postgres schema these three tables live in. Not `public` — see the header. */
+export const SCHEMA = 'review'
 
 export type Reviewer = { id: string; name: string; email: string; revoked_at: string | null }
 export type Video = {
@@ -53,6 +62,10 @@ async function rest<T>(label: string, path: string, init?: RequestInit): Promise
       Authorization: `Bearer ${key}`,
       'Content-Type': 'application/json',
       Accept: 'application/json',
+      // GET reads a profile from `Accept-Profile`; POST/PATCH/DELETE from `Content-Profile`.
+      // Sending both is harmless and means a caller cannot pick the wrong one.
+      'Accept-Profile': SCHEMA,
+      'Content-Profile': SCHEMA,
       ...init?.headers,
     },
   })

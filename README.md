@@ -3,9 +3,15 @@
 An internal tool for getting timestamped notes on unreleased marketing videos from one outside
 reviewer, and getting them back as markdown.
 
-**This is a separate project from the Milo app on purpose** — separate repo, separate Vercel
-project, separate Supabase project. It is a public, token-authenticated surface that accepts free
-text, and it must not sit next to children's data.
+**Separate from the Milo app on purpose** — separate repo, separate Vercel project. It is a public,
+token-authenticated surface that accepts free text, and it must not sit next to children's data.
+
+⚠️ **It does NOT have its own Supabase project.** The free tier caps the account at two, so it
+shares `radlor-site`'s database, in its own **`review` schema** with its own private
+**`review-videos`** bucket. That is allowed — the marketing site holds no children's data — but the
+`service_role` key is per-project, so **anything that compromises this tool reads and writes every
+table in `radlor-site`**. That cost is accepted, costed and recorded in
+[SETUP.md → Blast radius](SETUP.md#blast-radius). The schema is a namespace, not a boundary.
 
 - **[SETUP.md](SETUP.md)** — everything to click, in order, and the three env vars.
 - **[PR_BODY.md](PR_BODY.md)** — what this does, and what the watermark is and isn't.
@@ -43,6 +49,10 @@ real CSP and the real HTTP status of a 404 page.
 It proves this app's logic. It proves nothing about Supabase's own RLS enforcement or its
 signed-URL implementation — those are checked once, against the live project, by
 `scripts/check-anon-locked-out.mjs` and `scripts/check-signed-url-expiry.mjs`. See SETUP.md.
+
+`scripts/check-blast-radius.mjs` is a third kind of thing again: a **documentation test**. It
+asserts the sharing exposure is exactly what SETUP.md records, so the written radius cannot drift
+while nobody is looking. It is not protection and its own first comment says so.
 
 ## Watching a check fail
 
