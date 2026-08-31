@@ -47,13 +47,25 @@ signed-URL implementation — those are checked once, against the live project, 
 ## Watching a check fail
 
 A check that has not been seen red on the state it exists for is not a check — see
-[CLAUDE.md](CLAUDE.md). `scripts/break-check.sh` runs the suite against a deliberately broken tree
+[CLAUDE.md](CLAUDE.md). `scripts/break-check.sh` runs one spec against a deliberately broken tree
 and restores the tree unconditionally, including any uncommitted work:
 
 ```bash
-scripts/break-check.sh "perl -pi -e 's/const TOKEN_LIMIT = 10$/const TOKEN_LIMIT = 10000/' src/app/api/notes/route.ts" e2e/rate-limit.spec.ts
+scripts/break-check.sh e2e/rate-limit.spec.ts "perl -pi -e 's/const TOKEN_LIMIT = 10$/const TOKEN_LIMIT = 10000/' src/app/api/notes/route.ts"
 ```
 
-Its exit code is inverted on purpose: **0 when the suite goes red** (the check binds), 1 when the
-suite passes on the broken state (it does not), 3 when the break edited nothing — a break whose
-pattern has drifted produces a green run that looks exactly like a passing check.
+You name **the spec you claim your break should turn red**, because red on its own is not evidence:
+a break that stops the code compiling turns every spec red, and a script that accepts any red would
+certify a check that would also go red if you deleted a semicolon. The exit code is about *your
+check*, not about playwright:
+
+| exit | meaning |
+|---|---|
+| **0** | the named spec went red **on its own assertion** — the check binds |
+| 1 | the named spec passed on the broken state — the check is decorative |
+| 3 | the break edited nothing; its pattern has drifted — nothing was tested |
+| 4 | the named spec went red, but from a throw or a bare timeout — red for the wrong reason |
+| 5 | the run never reached the named spec (build died, config error) — nothing was tested |
+
+`scripts/break-verdict.mjs` draws that distinction; `npm run test:verdict` checks it against crafted
+reports, including the two outcomes this repo's specs are too well-ordered to produce naturally.

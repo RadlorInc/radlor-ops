@@ -18,8 +18,16 @@ And its second half:
 > goes after the click.
 
 Both were found the only way they can be found: **by watching the check fail on the broken state
-before trusting it**. Run `scripts/break-check.sh` — it stashes, applies a break, runs the suite and
-restores unconditionally, so the discipline lives in a file rather than in your attention.
+before trusting it**. Run `scripts/break-check.sh <spec> "<break>"` — it stashes, applies the break,
+runs the suite and restores unconditionally, so the discipline lives in a file rather than in your
+attention.
+
+⚠️ **And the rule turns on its own instruments.** The first version of that script exited 0 when the
+suite *passed* on the broken state — the tool built to catch decorative checks reported its own
+worst outcome as success. The second version accepted **any** red as proof, which would have
+certified a check that goes red because you deleted a semicolon. It now requires the red to come
+from the named spec's own `expect(...)`. **Check the checker with the question you check everything
+else with: what result is this incapable of distinguishing?**
 
 ## The two that got through, in this repo
 
