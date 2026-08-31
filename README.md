@@ -1,0 +1,45 @@
+# Radlor video reviewer
+
+An internal tool for getting timestamped notes on unreleased marketing videos from one outside
+reviewer, and getting them back as markdown.
+
+**This is a separate project from the Milo app on purpose** — separate repo, separate Vercel
+project, separate Supabase project. It is a public, token-authenticated surface that accepts free
+text, and it must not sit next to children's data.
+
+- **[SETUP.md](SETUP.md)** — everything to click, in order, and the three env vars.
+- **[PR_BODY.md](PR_BODY.md)** — what this does, and what the watermark is and isn't.
+
+## Routes
+
+| Route | Who | What |
+|---|---|---|
+| `/r/<token>` | reviewer | Videos with status `awaiting_review`. Unknown or revoked → 404. |
+| `/r/<token>/<slug>` | reviewer | Player + notes panel + the seven questions. |
+| `POST /api/notes` | reviewer | One note. Token resolved server-side, rate limited per token. |
+| `GET /api/video-url` | reviewer | A five-minute signed URL for a private-bucket object. |
+| `/admin?k=<ADMIN_TOKEN>` | you | Videos, status, version, unread-note count. |
+| `/admin/export?k=<ADMIN_TOKEN>` | you | Every note as markdown, by video and version. |
+
+Everything else, including `/`, is a 404.
+
+## Commands
+
+```bash
+npm run dev          # localhost:3019 — needs .env.local
+npm run build        # production build
+npm run typecheck    # tsc --noEmit
+npm run lint
+npm run test:e2e     # Playwright, fully offline (see below)
+```
+
+## The test harness
+
+`npm run test:e2e` runs against `test/fake-supabase.mjs`, not against Supabase: PGlite (Postgres
+compiled to WASM) running **this repo's real migration**, plus a storage endpoint that signs and
+expires URLs for real. Playwright builds and starts a **production** build, so the checks see the
+real CSP and the real HTTP status of a 404 page.
+
+It proves this app's logic. It proves nothing about Supabase's own RLS enforcement or its
+signed-URL implementation — those are checked once, against the live project, by
+`scripts/check-anon-locked-out.mjs` and `scripts/check-signed-url-expiry.mjs`. See SETUP.md.

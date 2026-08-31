@@ -6,6 +6,7 @@
 
 # env files — .env.local holds SUPABASE_SERVICE_ROLE_KEY and ADMIN_TOKEN and must never be committed
 .env*
+!.env.example
 
 .vercel
 *.tsbuildinfo
