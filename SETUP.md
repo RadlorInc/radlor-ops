@@ -275,11 +275,29 @@ written against.
 update review.videos set status = 'reviewed' where slug = 'equals-reel-final';
 ```
 
-You usually won't need that one: the reviewer has a **Done reviewing** button that sets `reviewed`
-itself. If they add another note afterwards it flips back to `awaiting_review` automatically and
-tells them on the page, so `/admin` never says a review is finished while it isn't. A `reviewed`
-video stays visible on their list, marked finished, so thinking of one more thing does not lock
-them out.
+You usually won't need that one. The reviewer has two buttons — **Approved — good to post** and
+**Needs changes** — and either sets `status = 'reviewed'` plus a **`verdict`**.
+
+`status` is where the video sits in the flow; `verdict` is what the reviewer concluded. They are
+separate columns on purpose: "reviewed" alone never told you whether it was cleared to post.
+
+If the reviewer adds another note after choosing, the verdict is **cleared to null** and the status
+flips back to `awaiting_review`, and the page says so. A verdict that survived new feedback would be
+a lie about what they currently think — and "approved" sitting above a note that contradicts it is
+how something gets posted it shouldn't be. A `reviewed` video stays visible on their list, marked,
+so thinking of one more thing does not lock them out.
+
+`/admin` shows the verdict per video and calls out **approved-with-open-notes** — a real state, not
+a contradiction: they liked it and still left things worth reading. It does not block you; it just
+does not let it be silent. The export puts the verdict in the heading:
+
+```
+## equals-reel — v1 — APPROVED
+```
+
+⚠️ Only the **current** version's heading carries it. `verdict` lives on the video row, so stamping
+it on a v1 heading for a video now at v2 would label an old round with a judgement never passed on
+it — the same trap `notes.video_version` exists for. Verdict history is not stored.
 
 **Get the notes out:** `https://<your-domain>/admin/export` — markdown, grouped by video and
 version, sorted by timestamp, ready to paste.
