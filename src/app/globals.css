@@ -26,8 +26,11 @@ h2 { font-size: 15px; margin: 0 0 8px; }
 }
 a.card:hover { border-color: var(--accent); }
 .row { display: flex; gap: 24px; align-items: flex-start; flex-wrap: wrap; }
-.player { position: relative; flex: 0 0 auto; width: min(360px, 100%); }
-.player video { width: 100%; border-radius: 10px; background: #000; display: block; }
+.player { flex: 0 0 auto; width: min(360px, 100%); }
+/* The watermark is absolute against .frame, not .player, so it stays over the picture when the
+   video is narrower than its column (which is what the phone rule below does). */
+.frame { position: relative; width: 100%; }
+.frame video { width: 100%; border-radius: 10px; background: #000; display: block; }
 .side { flex: 1 1 320px; min-width: 300px; }
 button {
   font: inherit; background: var(--accent); color: #10131f; border: 0;
@@ -53,3 +56,16 @@ table { border-collapse: collapse; width: 100%; }
 th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--line); }
 th { color: var(--muted); font-weight: 500; font-size: 13px; }
 code { background: #0f1017; padding: 1px 5px; border-radius: 4px; }
+
+/* Phone. A 9:16 video at full width is ~700px tall, which pushes "Add note" and every note the
+   reviewer is writing about off the screen — they would be scrolling away from the frame to type
+   about it. Cap the video so the player and the panel share the viewport. */
+@media (max-width: 720px) {
+  .wrap { padding: 16px 14px 48px; }
+  .row { gap: 16px; }
+  .player { width: 100%; display: flex; justify-content: center; }
+  .frame { width: auto; }
+  .frame video { width: auto; height: 52vh; max-width: 100%; }
+  .side { flex: 1 1 100%; min-width: 0; }
+  h1 { font-size: 18px; }
+}

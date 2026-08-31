@@ -111,46 +111,51 @@ export default function Review(props: {
 
       <div className="row" style={{ marginTop: 16 }}>
         <div className="player">
-          {src ? (
-            <video
-              ref={videoRef}
-              src={src}
-              controls
-              playsInline
-              preload="metadata"
-              controlsList="nodownload"
-              disablePictureInPicture
-              data-testid="player"
-            />
-          ) : (
-            <div
-              style={{ aspectRatio: '9 / 16', display: 'grid', placeItems: 'center', background: '#000', borderRadius: 10 }}
-              className="muted small"
-            >
-              {srcError ?? 'Loading video…'}
-            </div>
-          )}
+          <div className="frame">
+            {src ? (
+              <video
+                ref={videoRef}
+                src={src}
+                controls
+                playsInline
+                preload="metadata"
+                // Removes the one-click "Download" from the player's own menu. A deterrent against
+                // casual forwarding, not a control — see PR_BODY.md.
+                controlsList="nodownload"
+                disablePictureInPicture
+                data-testid="player"
+              />
+            ) : (
+              <div
+                style={{ aspectRatio: '9 / 16', display: 'grid', placeItems: 'center', background: '#000', borderRadius: 10 }}
+                className="muted small"
+              >
+                {srcError ?? 'Loading video…'}
+              </div>
+            )}
 
-          {/* Deterrent, not protection — see the PR body. It survives a screen recording and a
-              crop; it does not survive the network tab, and it is not meant to. */}
-          <div
-            aria-hidden
-            style={{
-              position: 'absolute',
-              ...ANCHORS[anchor],
-              pointerEvents: 'none',
-              opacity: 0.22,
-              fontSize: 12,
-              lineHeight: 1.3,
-              color: '#fff',
-              textShadow: '0 1px 2px rgba(0,0,0,.8)',
-              transition: 'all .6s ease',
-              userSelect: 'none',
-            }}
-          >
-            {reviewerName}
-            <br />
-            {reviewerEmail}
+            {/* Deterrent, not protection — see PR_BODY.md. It survives a screen recording and a
+                crop; it does not survive the network tab, and it is not meant to. */}
+            <div
+              aria-hidden
+              data-testid="watermark"
+              style={{
+                position: 'absolute',
+                ...ANCHORS[anchor],
+                pointerEvents: 'none',
+                opacity: 0.22,
+                fontSize: 12,
+                lineHeight: 1.3,
+                color: '#fff',
+                textShadow: '0 1px 2px rgba(0,0,0,.8)',
+                transition: 'all .6s ease',
+                userSelect: 'none',
+              }}
+            >
+              {reviewerName}
+              <br />
+              {reviewerEmail}
+            </div>
           </div>
         </div>
 

@@ -1,19 +1,15 @@
+import { cookies } from 'next/headers'
 import { notFound } from 'next/navigation'
 import { allNotes, allVideos } from '@/lib/db'
-import { ADMIN_PARAM, isAdmin } from '@/lib/admin'
+import { ADMIN_COOKIE, tokenValid } from '@/lib/admin'
 
 export const dynamic = 'force-dynamic'
 
-export default async function Admin({
-  searchParams,
-}: {
-  searchParams: Promise<Record<string, string | string[] | undefined>>
-}) {
-  const sp = await searchParams
-  const k = sp[ADMIN_PARAM]
-  // Wrong key and no key are the same 404 as a route that does not exist. Nothing here says
-  // "there is an admin page and you got the password wrong".
-  if (!isAdmin(typeof k === 'string' ? k : null)) notFound()
+export default async function Admin() {
+  // The token arrives once as `?k=…`; `src/proxy.ts` has already turned it into this cookie and
+  // stripped the parameter. Wrong cookie and no cookie are the same 404 as a route that does not
+  // exist — nothing here says "there is an admin page and you got the password wrong".
+  if (!tokenValid((await cookies()).get(ADMIN_COOKIE)?.value)) notFound()
 
   const [videos, notes] = await Promise.all([allVideos(), allNotes()])
 
@@ -24,13 +20,12 @@ export default async function Admin({
     unread.set(n.video_id, (unread.get(n.video_id) ?? 0) + 1)
   }
 
-  const key = typeof k === 'string' ? k : ''
-
   return (
     <main className="wrap">
       <h1>Videos</h1>
       <p className="muted small">
-        <a href={`/admin/export?${ADMIN_PARAM}=${encodeURIComponent(key)}`}>Export all notes as markdown →</a>
+        <a href="/admin/export">Open notes as markdown →</a> ·{' '}
+        <a href="/admin/export?all=1">including resolved</a>
       </p>
       <table style={{ marginTop: 16 }}>
         <thead>
