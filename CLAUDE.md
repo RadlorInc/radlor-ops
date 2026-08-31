@@ -1,1 +1,45 @@
 @AGENTS.md
+
+# A check must state the intent independently of the code
+
+House rule, carried here deliberately rather than referenced: this is a **separate repo** from
+milo-story-mode, so nobody working in it will ever read that repo's `CLAUDE.md`. The rule caught two
+defects in this repo on its first day, which is the whole argument for it travelling.
+
+> **A check must state the intent independently of the code. If it imports the value it asserts,
+> greps the file the value lives in, or otherwise derives its expectation from the thing under test,
+> it is tautological: it passes because the code equals itself, and it will pass through any change
+> you make.**
+
+And its second half:
+
+> **It is not just WHAT you assert, it is AT WHICH STATE OF THE UI.** Drive the interface to the
+> state the defect lives in before you measure. If a defect only exists after a click, the assertion
+> goes after the click.
+
+Both were found the only way they can be found: **by watching the check fail on the broken state
+before trusting it**. Run `scripts/break-check.sh` — it stashes, applies a break, runs the suite and
+restores unconditionally, so the discipline lives in a file rather than in your attention.
+
+## The two that got through, in this repo
+
+| what it looked like | what it was |
+|---|---|
+| `e2e/review-page-details.spec.ts` asserting the seven review questions appear verbatim | it `import`ed `QUESTIONS` from `src/lib/review.ts` and looped `toContainText`. Reworded question 7 to *"One thing to cut."* and it **stayed green** — it was asserting that the code equals itself. The seven strings are now written out in the spec and deep-equalled against the rendered `<li>`s. **The duplication is the mechanism**: changing a question takes two edits, and the failing test in between is the reminder that the wording is a decision, not a detail |
+| `e2e/phone.spec.ts` asserting the *Add note* button fits a 390×844 viewport | the right property, one click too early. An uncapped 9:16 video is ~622px tall so the BUTTON still fits; it is the note COMPOSER, which only exists after the click, that falls off the bottom. It passed with the phone media query deleted. Now asserts the video's height against the viewport **and** the Save button's bottom edge *after* opening the composer |
+
+## The rest of the standing rules for this repo
+
+- **Never log a reviewer token, in any environment.** `src/lib/db.ts` is the only place a token is
+  ever put in a URL, and `rest()` takes a `label` precisely so a thrown error can never stringify
+  the request path. A fetch error that echoes its own URL is how a token reaches a log drain in
+  plain text, and it looks like ordinary error handling in the diff.
+- **`SUPABASE_SERVICE_ROLE_KEY` is server-only and must never carry a `NEXT_PUBLIC_` prefix.** There
+  are no `NEXT_PUBLIC_` variables in this app at all — the browser never talks to Supabase. `npm run
+  build` with a canary value in the env and a `grep -r` over `.next/static` is the check.
+- **Unknown, revoked and malformed tokens get the same 404**, page and API alike. A different answer
+  for "revoked" tells whoever is holding it that the token was once real.
+- **The offline harness proves this app's logic, not Supabase's.** `test/fake-supabase.mjs` runs the
+  real migration in real Postgres, but only real PostgREST enforces RLS against `anon`. Until
+  `scripts/check-anon-locked-out.mjs` has passed against the live project, the security posture is
+  **unverified — not verified-by-stand-in**.

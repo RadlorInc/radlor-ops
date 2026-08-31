@@ -41,12 +41,23 @@ test('the watermark moves, so a crop cannot lose it', async ({ page }) => {
 })
 
 /**
- * ⚠️ THESE ARE WRITTEN OUT HERE ON PURPOSE, not imported from `src/lib/review.ts`.
- * The first version of this test imported the constant and asserted the page contained each
- * entry — which passes no matter what the constant says. Reworded question 7 to
- * 'One thing to cut.' and it stayed green. A check that survives the bug it exists for has the
- * mechanism wrong, so the source of truth for "verbatim" now lives in the test, where an edit to
- * the app cannot move it.
+ * ⚠️⚠️ THE SEVEN STRINGS BELOW ARE DUPLICATED FROM `src/lib/review.ts` ON PURPOSE.
+ * DO NOT "DRY" THIS BY IMPORTING `QUESTIONS`. Doing so silently deletes the check.
+ *
+ * The first version of this test did exactly that — imported the constant and looped
+ * `toContainText` over it — which asserts that the code equals itself and passes through any
+ * change you make. Reworded question 7 to 'One thing to cut.' (the founder's line is 'One thing to
+ * cut. Every draft has one.') and it STAYED GREEN.
+ *
+ * The house rule it broke: a check must state the intent independently of the code. If it imports
+ * the value it asserts, greps the file that value lives in, or otherwise derives its expectation
+ * from the thing under test, it is tautological.
+ *
+ * So the duplication IS the mechanism, not an oversight to tidy up: changing a question takes two
+ * edits, and the failing test in between is the reminder that the wording is a DECISION — the
+ * founder wrote these seven and asked for them verbatim — and not a detail. The deep-equal below
+ * also catches a dropped question, a re-ordered one and an eighth, none of which a loop of
+ * `toContainText` would notice.
  */
 const SEVEN = [
   'First two seconds — you\u2019re scrolling. Does this stop you? If not, what would?',
