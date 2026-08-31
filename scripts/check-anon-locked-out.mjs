@@ -24,6 +24,10 @@
  * Case 4 is not a leak and is reported as its own failure rather than a pass: RLS alone is holding,
  * the migration's `revoke` has been undone, and one accidental policy would open the table.
  *
+ * ⚠️ AND IT NEVER FETCHES A ROW VALUE. See `probe()` — if `anon` really can read `reviewers`, the
+ * rows are working credentials. The count header says whether any came back, which is all the
+ * verdict needs.
+ *
  *   SUPABASE_URL=https://ghuvnqbthbcmqfxcrjrh.supabase.co \
  *   SUPABASE_ANON_KEY=<the publishable/anon key> \
  *   SUPABASE_SERVICE_ROLE_KEY=<service key, for the control> \
@@ -47,19 +51,34 @@ const TABLES = ['reviewers', 'videos', 'notes']
  * `review` schema of a project shared with the marketing site — asking without it resolves against
  * the default profile, `public`, where they do not exist, and a 404 there means "wrong address",
  * not "denied".
+ *
+ * ⚠️ `select=id`, NEVER `select=*`. If `anon` really can read `reviewers`, the rows coming back are
+ * REVIEWER TOKENS — working credentials — and this script's job is to report that, not to hold
+ * them. An earlier version fetched every column and withheld the values when printing; that is a
+ * decision which has to keep being made correctly on every future branch, and one of them will get
+ * it wrong. Not fetching is a property instead of a habit: you cannot leak what you never asked
+ * for. The leak verdict needs to know rows CAME BACK, not what is in them, and `count=exact`
+ * answers that in a header.
+ *
+ * The error body IS read when the request fails — that is where PostgREST puts the SQLSTATE this
+ * whole script turns on, and an error body carries a reason, never a row.
  */
-async function read(table, key) {
-  const res = await fetch(`${base}/rest/v1/${table}?select=*&limit=1`, {
-    headers: { apikey: key, Authorization: `Bearer ${key}`, 'Accept-Profile': 'review' },
+async function probe(table, key) {
+  const res = await fetch(`${base}/rest/v1/${table}?select=id&limit=1`, {
+    headers: { apikey: key, Authorization: `Bearer ${key}`, 'Accept-Profile': 'review', Prefer: 'count=exact' },
   })
-  const text = await res.text()
-  let body = null
-  try {
-    body = JSON.parse(text)
-  } catch {
-    /* non-JSON body: leave null and fall through to the raw text in the report */
+  let code = null
+  let text = ''
+  if (!res.ok) {
+    text = (await res.text()).slice(0, 200)
+    try {
+      code = JSON.parse(text)?.code ?? null
+    } catch {
+      /* non-JSON error body: fall through to the raw text in the report */
+    }
   }
-  return { status: res.status, ok: res.ok, code: body?.code ?? null, body, text: text.slice(0, 200) }
+  const rows = Number((res.headers.get('content-range') ?? '/?').split('/')[1])
+  return { status: res.status, ok: res.ok, code, text, rows: Number.isFinite(rows) ? rows : null }
 }
 
 // ── The control ────────────────────────────────────────────────────────────────────────────────
@@ -68,9 +87,8 @@ async function read(table, key) {
 console.log('POSITIVE CONTROL — same request, same profile header, service key. Must succeed.\n')
 let controlFailed = false
 for (const t of TABLES) {
-  const r = await read(t, service)
-  const rows = Array.isArray(r.body) ? `${r.body.length} row(s)` : ''
-  console.log(`  review.${t.padEnd(10)} service_role → HTTP ${r.status} ${r.ok ? `reachable ✔ ${rows}` : `✗ ${r.code ?? ''} ${r.text}`}`)
+  const r = await probe(t, service)
+  console.log(`  review.${t.padEnd(10)} service_role → HTTP ${r.status} ${r.ok ? `reachable ✔ ${r.rows ?? '?'} row(s)` : `✗ ${r.code ?? ''} ${r.text}`}`)
   if (!r.ok) controlFailed = true
 }
 
@@ -88,23 +106,16 @@ if (controlFailed) {
 console.log('\nANON — identical request with the PUBLIC key. Must be refused with SQLSTATE 42501.\n')
 const verdicts = []
 for (const t of TABLES) {
-  const r = await read(t, anon)
+  const r = await probe(t, anon)
   let verdict
   if (r.code === '42501') verdict = { ok: true, note: 'permission denied ✔' }
   else if (r.code === 'PGRST106') verdict = { ok: false, note: '✗ schema not exposed — MISCONFIGURATION, not denial' }
   else if (r.code === 'PGRST205') verdict = { ok: false, note: '✗ table not found — WRONG ADDRESS, not denial' }
-  else if (r.ok && Array.isArray(r.body) && r.body.length === 0)
-    verdict = { ok: false, note: '✗ 200 + empty — the GRANT is back and only RLS is holding' }
-  else if (r.ok) {
-    // ⚠️ SHAPE ONLY, NEVER VALUES. The first draft printed the response body — and the body of a
-    // leaking `reviewers` table is a list of REVIEWER TOKENS, so the script that exists to prove
-    // tokens are unreachable would have printed one into a terminal, a scrollback and whatever
-    // report it was pasted into. The house rule is "never log a reviewer token, in any
-    // environment", and a leak report is still an environment.
-    const cols = Array.isArray(r.body) && r.body[0] ? Object.keys(r.body[0]).join(', ') : '?'
-    const n = Array.isArray(r.body) ? r.body.length : '?'
-    verdict = { ok: false, note: `✗✗ LEAKED — ${n} row(s), columns: ${cols} (values withheld deliberately)` }
-  }
+  else if (r.ok && r.rows) verdict = { ok: false, note: `✗✗ LEAKED — ${r.rows} row(s) readable by anon (values deliberately not fetched)` }
+  else if (r.ok)
+    // Reached, not refused. Whether nothing is visible because RLS is holding or because the table
+    // happens to be empty, the GRANT is back and the denial this script asserts is gone.
+    verdict = { ok: false, note: '✗ 200 — readable, no rows visible. The GRANT is back; only RLS or an empty table is in the way' }
   else verdict = { ok: false, note: `✗ refused, but not with 42501: ${r.code ?? r.text}` }
 
   console.log(`  review.${t.padEnd(10)} anon         → HTTP ${r.status} ${r.code ?? ''} ${verdict.note}`)
