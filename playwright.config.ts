@@ -9,9 +9,14 @@ import { ADMIN_TOKEN, PORT, SUPABASE_URL } from './e2e/tokens'
  *
  * ⚠️ WHAT THAT DOES AND DOES NOT PROVE. It exercises THIS APP's logic — token resolution, the 404
  * shape, the rate limit, the admin gate, the note round-trip — against real SQL and real check
- * constraints. It proves nothing about Supabase's own PostgREST, its RLS enforcement for `anon`,
- * or its signed-URL implementation. Those are verified against the live project by
- * `scripts/verify-live.mjs`, once, after setup.
+ * constraints.
+ *
+ * ⚠️⚠️ IT PROVES NOTHING ABOUT AUTHORIZATION, and cannot: PGlite runs as one superuser with no
+ * role switching, so grants, RLS and every other "who is asking" rule are invisible to it by
+ * construction. A 19/19 green run once coexisted with a schema `service_role` could not read at
+ * all. Read the declared blind spot at the top of `test/fake-supabase.mjs` before treating a green
+ * number here as coverage — the only authorization coverage this tool has is the three live
+ * scripts in `scripts/`, run by hand against the real project.
  */
 export default defineConfig({
   testDir: './e2e',

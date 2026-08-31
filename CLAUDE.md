@@ -70,6 +70,16 @@ history at once.
   request resolves against the default profile, `public`, which is the marketing site's schema.
   `test/fake-supabase.mjs` refuses a request without the header for exactly this reason: if the
   harness were lenient, dropping the header would break nothing locally and ship.
+- ⚠️⚠️ **THE OFFLINE HARNESS CANNOT SEE AUTHORIZATION, AND NEVER WILL.** PGlite runs as one
+  superuser with no role switching, so **anything whose behaviour depends on WHO IS ASKING is
+  invisible to it by construction** — grants, RLS, role membership, `BYPASSRLS`, default
+  privileges, storage policies. Not "uncovered": uncoverable. It has cost twice, both in the same
+  direction: RLS enforcement for `anon`, and then GRANTs on 2026-08-31, where the suite was 19/19
+  green while `service_role` could not read a single table and every route would have answered
+  `42501`. **A green `npm run test:e2e` covers behaviour, not permission.** The only authorization
+  coverage this tool has is the three scripts in `scripts/`, run by hand against the live project —
+  they are not finishing touches. Re-run them after any change to a grant, a policy, a role, the
+  exposed schemas, or a key. The declared blind spot is at the top of `test/fake-supabase.mjs`.
 - **The offline harness proves this app's logic, not Supabase's.** `test/fake-supabase.mjs` runs the
   real migration in real Postgres, but only real PostgREST enforces RLS against `anon`. Until
   `scripts/check-anon-locked-out.mjs` has passed against the live project, the security posture is

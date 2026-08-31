@@ -1,21 +1,54 @@
 /**
  * OFFLINE STAND-IN FOR SUPABASE, FOR THE E2E RUN ONLY. Never imported by `src/`.
  *
- * Why it exists: the founder is doing the Supabase click-through themselves (deliberately — see
- * SETUP.md), so there is no project to point at while the checks are being written. This serves
- * the two Supabase APIs the app actually speaks:
+ * Why it exists: so the suite runs offline, on any machine, with no project and no keys. (It was
+ * written before the schema existed; it stays because a suite that needs a live database and a
+ * secret is a suite nobody runs.) It serves the two Supabase APIs the app actually speaks:
  *
  *   1. PostgREST over a REAL Postgres — PGlite is Postgres compiled to WASM, and it runs
- *      `supabase/migrations/*.sql` verbatim. The CHECK constraints, the unique indexes and the
- *      `enable row level security` in that file are therefore executed, not assumed.
+ *      `supabase/migrations/*.sql` verbatim. The CHECK constraints and unique indexes are therefore
+ *      executed, not assumed. ⚠️ The `enable row level security` lines also execute — and do
+ *      NOTHING here. See the blind spot below.
  *   2. Storage `object/sign` + the signed GET, with a real HMAC and a real `exp`, so an expired
  *      URL fails the way an expired Supabase URL fails.
  *
  * ⚠️ IT IS A STAND-IN, NOT A SIMULATOR. It implements the handful of query shapes `src/lib/db.ts`
  * sends and nothing else. A check that passes here has exercised THIS APP'S logic against real
- * SQL; it has not proven anything about Supabase's own PostgREST or Storage. Anything that turns
- * on Supabase's behaviour (the RLS denial for `anon`, the real signed-URL expiry) has to be
- * verified against the real project — `scripts/verify-live.mjs` does that.
+ * SQL; it has not proven anything about Supabase's own PostgREST or Storage.
+ *
+ * ══════════════════════════════════════════════════════════════════════════════════════════════
+ * ⚠️⚠️ DECLARED BLIND SPOT: THIS HARNESS CANNOT SEE AUTHORIZATION. AT ALL. BY CONSTRUCTION.
+ * ══════════════════════════════════════════════════════════════════════════════════════════════
+ *
+ * PGlite runs every statement as ONE SUPERUSER with NO ROLE SWITCHING. There is no `anon`, no
+ * `service_role`, no `set role`, no grant checking, no RLS enforcement — the roles created at
+ * start-up exist only so the migration's GRANT/REVOKE statements parse.
+ *
+ * So the class is broader than any one gap: **anything whose behaviour depends on WHO IS ASKING is
+ * invisible here, and always will be.** Grants, RLS, role membership, `BYPASSRLS`, column
+ * privileges, default privileges, storage policies — all of it. Not "not covered yet". Not
+ * coverable.
+ *
+ * It has already cost twice, in the same direction both times:
+ *   1. RLS enforcement for `anon` — the migration's `enable row level security` RUNS here, and
+ *      means nothing here.
+ *   2. GRANTs (2026-08-31) — `review`'s tables were created owner-only, `service_role` could not
+ *      SELECT them, and EVERY ROUTE WOULD HAVE RETURNED 42501. The suite was 19/19 green while the
+ *      tool was completely dead. It was found by querying the live database, never by a test.
+ *
+ * ⚠️ SO DO NOT READ A GREEN SUITE AS COVERING PERMISSION. It covers BEHAVIOUR — token resolution,
+ * the 404 shape, the rate limit, the admin gate, the note round-trip, the export format. Every one
+ * of those is worth having and none of them is an authorization check.
+ *
+ * ⚠️ THE ONLY AUTHORIZATION COVERAGE THIS TOOL HAS IS THREE SCRIPTS RUN BY HAND AGAINST THE LIVE
+ * PROJECT. They are not finishing touches; they are the entire coverage of this axis:
+ *
+ *     scripts/check-anon-locked-out.mjs     — anon is denied, with a service_role positive control
+ *     scripts/check-signed-url-expiry.mjs   — a signed URL really dies when it expires
+ *     scripts/check-blast-radius.mjs        — the documented exposure is still what the docs say
+ *
+ * Run them after any change to a grant, a policy, a role, the exposed schemas, or a key. A green
+ * `npm run test:e2e` is not a substitute and cannot become one.
  */
 import { createServer } from 'node:http'
 import { createHmac } from 'node:crypto'
