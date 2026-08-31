@@ -116,7 +116,36 @@ The repo's filenames were renamed to match the recorded versions so the two agre
 
 ---
 
-## 4. Audit of `RadlorInc/website`'s public docs — 2026-08-31
+## 4. Supabase Storage accepted an upload that no read path could reach — 2026-08-31
+
+**Closed (worked around). Worth knowing; not a defect in this tool.**
+
+Uploading the expiry-check fixture as **`_expiry-check.webm`** — leading underscore — returned
+success and created a row:
+
+```
+POST /storage/v1/object/review-videos/_expiry-check.webm
+  → {"Key":"review-videos/_expiry-check.webm","Id":"8f32bc61-…"}
+storage.objects → review-videos | _expiry-check.webm | 82371 | video/webm
+```
+
+…and then **every read path denied it existed**: `object/list` → `[]`, authenticated GET → 400,
+`object/sign` → `404 NoSuchKey`, and `DELETE` → `404 NoSuchKey`. The same bytes uploaded as
+`plain.webm` listed, signed, downloaded and deleted normally. The leading underscore is the only
+difference.
+
+⚠️ **The shape to remember: an upload can report success, create a database row, and be
+unreachable through every API.** A write that returns a Key is not evidence the object can be read
+back. If a video ever seems to upload but will not play, check the filename before checking the
+code — and prefer plain `[a-z0-9-]` object names, which is what `slug` already enforces for the
+paths this tool generates.
+
+Both test objects are gone; verified by SQL (`select count(*) from storage.objects` → **0**), not by
+the delete call, which lied in both directions.
+
+---
+
+## 5. Audit of `RadlorInc/website`'s public docs — 2026-08-31
 
 Read once, deliberately, after learning the repo was public. **Reported, not acted on.**
 
