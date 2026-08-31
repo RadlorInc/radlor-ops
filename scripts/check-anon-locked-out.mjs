@@ -7,7 +7,7 @@
  * ⚠️ IT ASSERTS THE DENIAL, NOT THE ABSENCE OF DATA — because four different things produce the
  * same "no rows came back", and only one of them is security:
  *
- *   1. anon is genuinely denied            → 403 + Postgres SQLSTATE `42501`   ← the only pass
+ *   1. anon is genuinely denied            → Postgres SQLSTATE `42501`          ← the only pass
  *   2. `review` is not in Exposed schemas  → 404 + `PGRST106`
  *   3. the table does not exist            → 404 + `PGRST205`
  *   4. the grant was restored, RLS holding → 200 + `[]`
@@ -15,6 +15,14 @@
  * The first version of this script accepted "not ok, or ok-and-empty" as a pass, which is 1, 2, 3
  * AND 4 — so it would have reported a clean bill of health against a project where the migration
  * had never been applied at all. An unconfigured database is the most comfortable pass there is.
+ *
+ * ⚠️ THE SQLSTATE IS THE CONTRACT; THE HTTP STATUS IS INCIDENTAL. DO NOT "CORRECT" THE ASSERTION
+ * BELOW TO MATCH A STATUS CODE. The docblock originally said a denial arrives as 403. Measured
+ * against the live project on 2026-08-31, this PostgREST answers `42501` with **HTTP 401**. The
+ * check passed anyway — because it asserts the SQLSTATE and treats the status as informational.
+ * Had it keyed on 403 it would have gone red against a correctly configured database, and the next
+ * hour would have gone into hunting a misconfiguration that did not exist. PostgREST has moved
+ * this status before and may again; `42501` is Postgres's and does not move.
  *
  * ⚠️ AND IT RUNS A POSITIVE CONTROL FIRST. The identical request, same profile header, with the
  * SERVICE key, which must SUCCEED. Without it, a passing anon check still cannot tell denial from
@@ -103,7 +111,8 @@ if (controlFailed) {
 }
 
 // ── The check ──────────────────────────────────────────────────────────────────────────────────
-console.log('\nANON — identical request with the PUBLIC key. Must be refused with SQLSTATE 42501.\n')
+console.log('\nANON — identical request with the PUBLIC key. Must be refused with SQLSTATE 42501.')
+console.log('       (the HTTP status is informational — this PostgREST answers 42501 with 401)\n')
 const verdicts = []
 for (const t of TABLES) {
   const r = await probe(t, anon)

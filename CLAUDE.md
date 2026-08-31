@@ -48,6 +48,13 @@ history at once.
 ## The rest of the standing rules for this repo
 
 - **A defect noticed in a neighbouring file gets written down before you return to the one you were in** — in that file, or in that repo's handoff. Two minutes, so it survives being busy. Both verification scripts here put a secret within one branch of their own output at some point; the second was *described* while the first was being fixed, and only got fixed because someone asked again. Noticing is not the deliverable; the note is.
+- ⚠️ **NEVER `source` AN ENV FILE — PARSE IT.** `set -a; . ./.env.local` runs the file as a shell
+  script, so a value you did not choose is executed. On 2026-08-31 an `ADMIN_TOKEN` containing
+  shell-special characters was partly evaluated and a fragment of it printed into a terminal — by
+  the loading method that had been chosen specifically to keep secrets out of the transcript. **The
+  mitigation was the mechanism**, which is a shape worth recognising on sight. Use
+  `node --env-file=.env.local <script>`, which parses. A value you did not generate can contain
+  anything, and the ones you did generate get rotated into ones you didn't.
 - **Never log a reviewer token, in any environment.** `src/lib/db.ts` is the only place a token is
   ever put in a URL, and `rest()` takes a `label` precisely so a thrown error can never stringify
   the request path. A fetch error that echoes its own URL is how a token reaches a log drain in

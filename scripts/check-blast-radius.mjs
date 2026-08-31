@@ -53,9 +53,35 @@ async function probe(schema, table) {
   })
   // Errors only. A PostgREST error body carries a reason, never a row; a success body is discarded
   // unread rather than trusted to be harmless.
-  const error = res.ok ? null : (await res.text()).slice(0, 160)
+  let error = null
+  let code = null
+  if (!res.ok) {
+    error = (await res.text()).slice(0, 160)
+    try {
+      code = JSON.parse(error)?.code ?? null
+    } catch {
+      /* non-JSON error body: fall through to the raw text */
+    }
+  }
   const rows = Number((res.headers.get('content-range') ?? '/?').split('/')[1])
-  return { status: res.status, ok: res.ok, error, rows: Number.isFinite(rows) ? rows : null }
+  return { status: res.status, ok: res.ok, error, code, rows: Number.isFinite(rows) ? rows : null }
+}
+
+/**
+ * ⚠️ WRONG ADDRESS AND REFUSED ARE NOT THE SAME FAILURE, AND THIS SCRIPT USED TO CONFLATE THEM.
+ * Its failure branch said "someone has changed the key or the grants" for ANY non-ok response — so
+ * a renamed or dropped `waitlist` (PGRST205) would have been reported as a permissions finding,
+ * and a schema missing from Exposed schemas (PGRST106) as the same. That is the identical
+ * ambiguity `check-anon-locked-out.mjs` was rewritten to remove and `check-signed-url-expiry.mjs`
+ * had in its `NoSuchKey` handling: an address problem wearing a permission problem's clothes.
+ * Swept into all three at once on 2026-08-31, rather than fixing the one that happened to bite.
+ */
+function explain(r) {
+  if (r.code === 'PGRST106') return 'the schema is not in Exposed schemas — WRONG ADDRESS, not a permission change'
+  if (r.code === 'PGRST205') return 'no such table — WRONG ADDRESS (renamed, dropped, or never created), not a permission change'
+  if (r.code === '42501') return 'permission denied — an ACTUAL privilege change'
+  if (r.status === 401 || r.status === 403) return 'rejected credential — check the key, not the grants'
+  return `unclassified: ${r.error}`
 }
 
 console.log('This tool holds a PROJECT-WIDE key. Confirming the radius SETUP.md records:\n')
@@ -79,12 +105,15 @@ if (theirs.ok) {
 
 console.log()
 if (!ours.ok) {
-  console.log('FAIL — our own schema is unreachable. Check API Settings → Exposed schemas includes `review`.')
+  console.log(`FAIL — our own schema is unreachable: ${explain(ours)}`)
+  console.log('       This says nothing about the blast radius; fix the address and run again.')
   process.exit(1)
 }
 if (!theirs.ok) {
-  console.log('FAIL — `public.waitlist` was NOT readable. Good news, but SETUP.md says it is: the docs')
-  console.log('       are now wrong, and someone has changed the key or the grants. Update the radius.')
+  console.log(`FAIL — \`public.waitlist\` was NOT readable: ${explain(theirs)}`)
+  console.log('       ⚠️ Read that reason before celebrating. Only "permission denied" would mean the')
+  console.log('       exposure has actually closed and SETUP.md needs updating. A wrong address means')
+  console.log('       this script is pointed at the wrong thing and has measured nothing.')
   process.exit(1)
 }
 console.log('PASS — the exposure matches what SETUP.md records. This is documentation, not protection.')
