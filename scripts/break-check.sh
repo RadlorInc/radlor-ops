@@ -63,9 +63,13 @@ echo "· running: npx playwright test $*"
 npx playwright test "$@"
 RC=$?
 echo
+# ⚠️ THE EXIT CODE IS INVERTED, DELIBERATELY. This script succeeds when the suite goes RED — that
+# is the outcome it exists to produce. Exiting 0 because playwright exited 0 would make the one
+# result that means "your check is decorative" indistinguishable from success to anything reading
+# the status, which is the very confusion the script is here to prevent.
 if [ $RC -eq 0 ]; then
   echo "✗ THE SUITE PASSED ON THE BROKEN STATE. The check does not bind — you have the mechanism wrong."
-else
-  echo "✓ red on the broken state, which is what makes the green meaningful."
+  exit 1
 fi
-exit $RC
+echo "✓ red on the broken state, which is what makes the green meaningful."
+exit 0

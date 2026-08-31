@@ -43,3 +43,17 @@ real CSP and the real HTTP status of a 404 page.
 It proves this app's logic. It proves nothing about Supabase's own RLS enforcement or its
 signed-URL implementation — those are checked once, against the live project, by
 `scripts/check-anon-locked-out.mjs` and `scripts/check-signed-url-expiry.mjs`. See SETUP.md.
+
+## Watching a check fail
+
+A check that has not been seen red on the state it exists for is not a check — see
+[CLAUDE.md](CLAUDE.md). `scripts/break-check.sh` runs the suite against a deliberately broken tree
+and restores the tree unconditionally, including any uncommitted work:
+
+```bash
+scripts/break-check.sh "perl -pi -e 's/const TOKEN_LIMIT = 10$/const TOKEN_LIMIT = 10000/' src/app/api/notes/route.ts" e2e/rate-limit.spec.ts
+```
+
+Its exit code is inverted on purpose: **0 when the suite goes red** (the check binds), 1 when the
+suite passes on the broken state (it does not), 3 when the break edited nothing — a break whose
+pattern has drifted produces a green run that looks exactly like a passing check.
