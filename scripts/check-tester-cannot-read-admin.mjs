@@ -24,6 +24,12 @@
  *   SUPABASE_URL=… SUPABASE_ANON_KEY=… \
  *   ADMIN_EMAIL=… ADMIN_PASSWORD=… TESTER_EMAIL=… TESTER_PASSWORD=… \
  *     node --env-file=.env.local scripts/check-tester-cannot-read-admin.mjs
+ *
+ * ⚠️ IT NEEDS TWO ACCOUNTS AND SHOULD NOT USE ANYONE'S REAL PASSWORD. On 2026-09-01 it was run
+ * against two throwaway accounts created through the Auth admin API with random passwords, and
+ * both were deleted immediately afterwards — verified by re-reading `auth.users` (1 user) and
+ * `review.profiles` (1 row), not by trusting the DELETE responses. Do the same next time rather
+ * than putting a real password in an env file.
  */
 const base = process.env.SUPABASE_URL
 const anon = process.env.SUPABASE_ANON_KEY
