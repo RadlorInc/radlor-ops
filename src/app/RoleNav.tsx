@@ -55,10 +55,19 @@ export default function RoleNav({
           {tabs.map((t) => {
             const badge = t.key === 'admin' ? undefined : badges[t.key]
             return (
+          /* ⚠️ NO PREFETCH. Next prefetches every <Link> that enters the viewport, and each
+             prefetch is a real request through the proxy — which refreshes an expiring session and
+             ROTATES the refresh token. Four tab links therefore fired four concurrent refreshes
+             off one token, three of them spending a value that had just been rotated away, and the
+             session died. It surfaced as an intermittent failure in the token-refresh spec: 200,
+             no rows, because requireRole had quietly redirected to /login.
+             These are server-rendered sections behind a query string; prefetching them buys a few
+             milliseconds and costs the session. */
               <Link
                 key={t.href}
                 href={t.href}
                 className="tab"
+                prefetch={false}
                 /* ⚠️ `aria-current`, not just a class. The blue underline is what a sighted user
                    reads as "you are here"; without this a screen reader gets three identical
                    links. */

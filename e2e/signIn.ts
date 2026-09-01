@@ -40,6 +40,20 @@ export async function signIn(page: Page, who: keyof typeof ACCOUNTS, opts: { fre
    * The retry is only ever reached with CORRECT credentials — the wrong-password specs drive the
    * form themselves and never come through here — so a second failure is a real one.
    */
+  await freshLogin(page, who)
+  sessions.set(who, await page.context().cookies())
+}
+
+/**
+ * Drives the form once, retrying the whole thing after the rate-limit window if it does not land.
+ *
+ * ⚠️ EXPORTED, BECAUSE THE COPY IS WHAT BROKE. `session-refresh.spec.ts` had its own `loginFresh`
+ * — it needs a session whose refresh token has never been spent, which the cache cannot give it —
+ * and when the retry was added here it did not get one. The full run then failed inside a spec
+ * about token refresh, for a reason with nothing to do with token refresh, twice. One
+ * implementation, two callers.
+ */
+export async function freshLogin(page: Page, who: keyof typeof ACCOUNTS) {
   const { email, password } = ACCOUNTS[who]
   for (let attempt = 0; attempt < 2; attempt++) {
     await page.goto('/login')
@@ -48,7 +62,6 @@ export async function signIn(page: Page, who: keyof typeof ACCOUNTS, opts: { fre
     await page.getByTestId('sign-in').click()
     try {
       await page.waitForURL((u) => !u.pathname.startsWith('/login'), { timeout: 10_000 })
-      sessions.set(who, await page.context().cookies())
       return
     } catch {
       if (attempt === 1) throw new Error(`sign-in as ${who} failed twice, a minute apart — not the rate limit`)

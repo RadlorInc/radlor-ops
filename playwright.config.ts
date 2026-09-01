@@ -20,7 +20,17 @@ import { PORT, SUPABASE_URL } from './e2e/tokens'
  */
 export default defineConfig({
   testDir: './e2e',
-  timeout: 60_000,
+  /**
+   * ⚠️ 120s, AND THE REASON IS THE LOGIN RATE LIMIT, NOT SLOW TESTS. `signIn`/`freshLogin` wait the
+   * 60-second window out and retry once when the suite trips its own ten-attempts-a-minute limit.
+   * At a 60s test timeout that retry could never finish — the test died mid-wait — so the run
+   * failed intermittently inside whichever spec happened to be holding the tenth attempt, most
+   * often the token-refresh one, with a symptom that looked nothing like a rate limit.
+   *
+   * Raising THIS is the right knob. Raising the limit would have made the suite pass against a
+   * build that is not the one that ships.
+   */
+  timeout: 120_000,
   expect: { timeout: 15_000 },
   // The fake database is one shared in-memory Postgres and the rate limiter is one shared Map.
   // Parallel workers would race both.

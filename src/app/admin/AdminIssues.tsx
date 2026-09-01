@@ -39,12 +39,10 @@ export default function AdminIssues({
 
   return (
     <section style={{ marginTop: 36 }}>
-      <h2>
-        Tester issues{' '}
-        <span className="muted small" data-testid="issues-count">
-          ({open} needing something of {items.length})
-        </span>
-      </h2>
+      <h2 className="sr-only">Tester issues</h2>
+      <p className="muted small" data-testid="issues-count">
+        {open} needing something of {items.length}
+      </p>
 
       {/* Resolved out of filed. The same meter as the to-do areas and the clearance column —
           three ratios in one dashboard should not be three different pictures. */}

@@ -1,5 +1,6 @@
 import Link from 'next/link'
 import RoleNav from '../RoleNav'
+import Summary from './Summary'
 import { allAssignments, allNotes, allReviewers, allVideos } from '@/lib/db'
 import { clearance, progressLabel } from '@/lib/clearance'
 import { renewalState } from '@/lib/renewal'
@@ -13,6 +14,7 @@ import Todos from './Todos'
 export const dynamic = 'force-dynamic'
 
 const TABS = [
+  { key: 'summary', label: 'Dashboard' },
   { key: 'costs', label: 'Costs' },
   { key: 'todo', label: 'To-do' },
   { key: 'issues', label: 'Issues' },
@@ -70,7 +72,7 @@ export default async function Admin({
    * string should not produce a blank dashboard.
    */
   const raw = (await searchParams).tab
-  const tab: TabKey = TABS.some((t) => t.key === raw) ? (raw as TabKey) : 'costs'
+  const tab: TabKey = TABS.some((t) => t.key === raw) ? (raw as TabKey) : 'summary'
 
   /**
    * What each tab is holding, so a closed tab still says whether it is worth opening.
@@ -82,6 +84,9 @@ export default async function Admin({
   const openIssues = issues.filter((i) => i.status !== 'resolved').length
   const myUnfinished = assignments.filter((a) => a.reviewer_id === me.user_id && a.verdict === null).length
   const COUNTS: Record<TabKey, number> = {
+    // ⚠️ The Dashboard tab gets no badge. It is a summary OF the badges beside it; a number here
+    // would either double-count them or invent a fifth meaning for the same data.
+    summary: 0,
     costs: subscriptions.filter((sub) => renewalState(sub.renewal_date, new Date()) === 'soon'
       || renewalState(sub.renewal_date, new Date()) === 'lapsed').length,
     todo: todos.filter((t) => t.status !== 'done').length,
@@ -97,7 +102,11 @@ export default async function Admin({
         name={me.name}
         badges={{ tester: openIssues, review: myUnfinished }}
       />
-      <h1>Dashboard</h1>
+      {/* ⚠️ The role tab above already says "Dashboard" and so does the section tab below it.
+          Printing it a third time as the only visible h1 is the repetition this page was asked to
+          lose — but a page with no h1 has no name in a screen reader's landmark list, so it moves
+          rather than goes. Same reasoning as the section headings. */}
+      <h1 className="sr-only">Dashboard</h1>
 
       {/* ⚠️ THE WARNINGS LIVE ABOVE THE TABS AND SHOW ON EVERY ONE OF THEM. Putting sections
           behind tabs is fine for detail and wrong for signal: "reviewers disagree" is the whole
@@ -137,6 +146,8 @@ export default async function Admin({
             key={t.key}
             href={`/admin?tab=${t.key}`}
             className="tab"
+            // See RoleNav: a prefetched tab link rotates the session's refresh token.
+            prefetch={false}
             aria-current={t.key === tab ? 'page' : undefined}
             data-testid={`tab-${t.key}`}
           >
@@ -153,12 +164,25 @@ export default async function Admin({
         ))}
       </nav>
 
+      {tab === 'summary' && (
+        <Summary
+          subscriptions={subscriptions}
+          todos={todos}
+          issues={issues}
+          rows={rows}
+          unread={unread}
+          today={new Date()}
+        />
+      )}
       {tab === 'costs' && <Costs initial={subscriptions} today={new Date().toISOString()} />}
       {tab === 'todo' && <Todos initial={todos} />}
       {tab === 'issues' && <AdminIssues initial={issues} names={names} />}
       {tab === 'videos' && (
         <section>
-      <h2>Videos</h2>
+      {/* ⚠️ VISUALLY HIDDEN, NOT DELETED. The tab above already says "Videos", so printing it
+          again is noise — but a section with no heading at all is a section a screen reader cannot
+          find or skip to, and the document loses its outline. The label moves, it does not go. */}
+      <h2 className="sr-only">Videos</h2>
       <p className="muted small">
         <a href="/admin/export">Open notes as markdown →</a> ·{' '}
         <a href="/admin/export?all=1">including resolved</a>

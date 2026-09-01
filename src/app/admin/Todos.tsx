@@ -102,9 +102,10 @@ export default function Todos({ initial }: { initial: Todo[] }) {
 
   return (
     <section style={{ marginTop: 36 }}>
-      <h2>
-        To-do <span className="muted small" data-testid="todo-open-count">({open} open of {items.length})</span>
-      </h2>
+      <h2 className="sr-only">To-do</h2>
+      <p className="muted small" data-testid="todo-open-count">
+        {open} open of {items.length}
+      </p>
 
       {/**
         * ⚠️ SMALL MULTIPLES OF ONE METER, NOT A PIE AND NOT A STACKED BAR. Each area is its own

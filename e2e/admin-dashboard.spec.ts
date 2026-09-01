@@ -14,6 +14,7 @@ test.describe.configure({ mode: 'serial' })
 
 test('a renewal three days out does not look like one two months out', async ({ page }) => {
   await signIn(page, 'admin')
+  await page.goto('/admin?tab=costs')
   const soon = page.getByTestId('cost-row').filter({ hasText: 'Higgsfield' })
   const later = page.getByTestId('cost-row').filter({ hasText: 'Vercel' })
 
@@ -25,6 +26,7 @@ test('a renewal three days out does not look like one two months out', async ({ 
 
 test('a typed number is labelled as typed, never as refreshed', async ({ page }) => {
   await signIn(page, 'admin')
+  await page.goto('/admin?tab=costs')
   const fresh = page.getByTestId('credits-freshness').first()
   await expect(fresh).toContainText('you typed this')
   await expect(fresh).not.toContainText('refreshed')
@@ -32,12 +34,14 @@ test('a typed number is labelled as typed, never as refreshed', async ({ page })
 
 test('the monthly total adds up the rows it shows', async ({ page }) => {
   await signIn(page, 'admin')
+  await page.goto('/admin?tab=costs')
   await expect(page.getByTestId('monthly-total')).toContainText('49.00') // 29 + 20 + 0
   await expect(page.getByTestId('monthly-total')).toContainText('across 3')
 })
 
 test('adding a subscription writes a row and marks it typed, not fetched', async ({ page, request }) => {
   await signIn(page, 'admin')
+  await page.goto('/admin?tab=costs')
   await page.getByTestId('cost-add').click()
   await page.getByTestId('cost-tool').fill('ElevenLabs')
   await page.getByTestId('cost-monthly_cost').fill('11')
@@ -114,6 +118,7 @@ test('and a signed-OUT caller gets 404 from the API, not a redirect that reads a
 
 test('a duplicate tool says so instead of failing blankly, and edit exists so nobody has to retry', async ({ page }) => {
   await signIn(page, 'admin')
+  await page.goto('/admin?tab=costs')
   await page.getByTestId('cost-add').click()
   await page.getByTestId('cost-tool').fill('Higgsfield')   // already in the seed
   await page.getByTestId('cost-credits_remaining').fill('19973')
@@ -129,6 +134,7 @@ test('a duplicate tool says so instead of failing blankly, and edit exists so no
 
 test('a thousands separator is a number, not an error', async ({ page, request }) => {
   await signIn(page, 'admin')
+  await page.goto('/admin?tab=costs')
   await page.getByTestId('cost-add').click()
   await page.getByTestId('cost-tool').fill('Runway')
   await page.getByTestId('cost-credits_remaining').fill('19,973')
@@ -141,6 +147,7 @@ test('a thousands separator is a number, not an error', async ({ page, request }
 
 test('a bad number names its own field', async ({ page }) => {
   await signIn(page, 'admin')
+  await page.goto('/admin?tab=costs')
   await page.getByTestId('cost-add').click()
   await page.getByTestId('cost-tool').fill('Whatever')
   await page.getByTestId('cost-monthly_cost').fill('twelve pounds')
@@ -150,6 +157,7 @@ test('a bad number names its own field', async ({ page }) => {
 
 test('editing a subscription updates the row rather than adding a second one', async ({ page, request }) => {
   await signIn(page, 'admin')
+  await page.goto('/admin?tab=costs')
   const before = (await rows(request, 'subscriptions')).length
   const target = page.getByTestId('cost-row').filter({ hasText: 'Higgsfield' })
   await target.getByTestId('cost-edit').click()
@@ -228,4 +236,37 @@ test('the pictures account for every row they summarise', async ({ page }) => {
   const pcts = [...legend.matchAll(/(\d+)%/g)].map((m) => Number(m[1]))
   expect(pcts.reduce((a, b) => a + b, 0)).toBeGreaterThanOrEqual(99)
   expect(pcts.reduce((a, b) => a + b, 0)).toBeLessThanOrEqual(101)
+})
+
+/**
+ * ⚠️ A SUMMARY THAT DISAGREES WITH THE THING IT SUMMARISES IS WORSE THAN NO SUMMARY, and this one
+ * is newly able to: the per-section figures are computed inside the client components that own
+ * those lists, and the Dashboard card recomputes the same numbers on the server from the same
+ * data. Two computations of one number is exactly the shape that drifts — one gets a filter, the
+ * other does not, and the card quietly reports a different tool.
+ *
+ * So the assertion is that the two AGREE, read from the two places a person would read them.
+ * Nothing else here would fail if they stopped: each page is internally consistent and separately
+ * plausible.
+ */
+test('the Dashboard cards agree with the tabs they summarise', async ({ page }) => {
+  await signIn(page, 'admin')
+  await page.goto('/admin?tab=summary')
+  const todoCard = await page.getByTestId('summary-todo').innerText()
+  const issuesCard = await page.getByTestId('summary-issues').innerText()
+  const costsCard = await page.getByTestId('summary-next-renewal').innerText()
+
+  await page.goto('/admin?tab=todo')
+  // "3 open of 4" on the card, "3 open of 4" on the tab — same two numbers, either order of words.
+  const todoTab = await page.getByTestId('todo-open-count').innerText()
+  expect(todoCard.match(/\d+/g)).toEqual(todoTab.match(/\d+/g))
+
+  await page.goto('/admin?tab=issues')
+  const issuesTab = await page.getByTestId('issues-count').innerText()
+  expect(issuesCard.match(/\d+/g)).toEqual(issuesTab.match(/\d+/g))
+
+  // The card names the NEXT renewal; the tab's row for that tool must carry the same urgency.
+  await page.goto('/admin?tab=costs')
+  const tool = costsCard.split(/\s+/)[1]
+  await expect(page.getByTestId('cost-row').filter({ hasText: tool })).toHaveAttribute('data-renewal', 'soon')
 })

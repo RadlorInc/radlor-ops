@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test'
 import { ACCOUNTS } from './tokens'
-import { signIn } from './signIn'
+import { freshLogin, signIn } from './signIn'
 
 /**
  * The proxy's token refresh — what decides whether a tester mid-write-up is thrown back to a login
@@ -17,14 +17,10 @@ import { signIn } from './signIn'
  * decide whether a refresh is worth attempting, and the REAL check happens afterwards in
  * `currentUser()`, against the auth server.
  */
-async function loginFresh(page: import('@playwright/test').Page) {
-  const { email, password } = ACCOUNTS.admin
-  await page.goto('/login')
-  await page.getByTestId('email').fill(email)
-  await page.getByTestId('password').fill(password)
-  await page.getByTestId('sign-in').click()
-  await page.waitForURL((u) => !u.pathname.startsWith('/login'))
-}
+/** ⚠️ `freshLogin`, not a copy of it. This file had its own three-line version; when signIn.ts
+ *  learned to wait out the login rate limit, this one did not, and the full run started failing
+ *  here — in a spec about token refresh, for a reason that had nothing to do with it. */
+const loginFresh = (page: import('@playwright/test').Page) => freshLogin(page, 'admin')
 
 const forged = (value: string) => ({ name: 'rvr_at', value, domain: '127.0.0.1', path: '/' })
 

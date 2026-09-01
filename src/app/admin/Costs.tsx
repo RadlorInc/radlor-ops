@@ -131,7 +131,8 @@ export default function Costs({ initial, today }: { initial: Subscription[]; tod
 
   return (
     <section>
-      <h2>Costs and renewals</h2>
+      {/* Named by the tab; kept for the document outline. See the note in page.tsx. */}
+      <h2 className="sr-only">Costs and renewals</h2>
 
       {/* The one number this dashboard leads with. */}
       {/* ⚠️ `monthly-total` stays on the WHOLE figure, not on the caption beside it. Its spec
