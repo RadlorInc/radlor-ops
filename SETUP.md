@@ -196,8 +196,13 @@ back", which is also what an unexposed schema, a missing table and a restored gr
 
 ```bash
 SUPABASE_URL=https://ghuvnqbthbcmqfxcrjrh.supabase.co SUPABASE_SERVICE_ROLE_KEY=<service key> \
-  node scripts/check-signed-url-expiry.mjs equals-reel-final-v1.mp4
+  node scripts/check-signed-url-expiry.mjs equals-reel-v1.mp4
 ```
+
+⚠️ The argument is an object that must **actually exist in the bucket** — it signs a real path. The
+name above was stale on 2026-09-01 and the check exited 1 with `NoSuchKey`, which is the script
+telling the truth, not a failure of the property. Get a live one from
+`select storage_path from review.videos`.
 
 **The blast radius is what the docs say it is** — a documentation test, not a boundary (see below):
 

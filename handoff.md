@@ -46,12 +46,15 @@ explicit allow-list, never "everything except the ones I remember".
 **Both sheets are ARCHIVE, not maintained. There is no sync back and there must not be** — two
 places to edit one list ends with neither being right. If sync is asked for, say this first.
 
-## ⚠️ Waiting on Rafi — two things, both proposed and neither started
+## ⚠️ Waiting on Rafi — one left
 
-1. **To-do categories.** A mapping for all 25 rows was posted for approval on 2026-09-01, with three
-   marked `?` rather than guessed (`Business Case Validation`, `Brush-up Adaptive Learning Portal`,
-   `My Cloud`). **Nothing has been written.** Guessing what someone's task meant and storing it as
-   fact is the same move as back-classifying tester issues, which was correctly refused.
+1. ~~**To-do categories.**~~ **Done 2026-09-01** — `scripts/set-todo-areas.mjs`, all 25 rows carry
+   an `area`. Seven: Website, Marketing, Social, Legal, Testing, Ops, Product.
+   ⚠️ **Three of them are the assistant's guess, not Rafi's answer**, and stay guesses until he
+   says otherwise: `My Cloud` → Ops, `Brush-up Adaptive Learning Portal` → Product,
+   `Business Case Validation` → Product. He asked for a call rather than a fourth question; the
+   label is in the script's docblock, in its output and here, because a guess whose provenance is
+   only in a chat log reads as fact by the next session. Correcting one is one word in `/admin`.
 2. **Reviewer accounts** (a third role, then deleting the token path entirely). Plan and the two
    answers he asked for are in the same message. Recommendation: **no force-change-on-first-login —
    send a single-use Supabase recovery link instead of a password over WhatsApp.** Trade named: a
@@ -67,8 +70,10 @@ places to edit one list ends with neither being right. If sync is asked for, say
 All in [docs/security-findings.md](docs/security-findings.md). The two that are scheduled rather
 than closed:
 
-- **Review tool's role separation** — revisit when **Milo starts taking real money**, or when
-  `review` holds more than the handful of rows it has today.
+- **Review tool's role separation** — ⚠️ **BOTH TRIGGERS HAVE NOW FIRED** (measured 2026-09-01 by
+  `check-blast-radius.mjs`): `public.waitlist` holds **1 real row** — the decision was made about an
+  empty table — and `review.subscriptions` holds **1 row of financial data**. This is no longer
+  "revisit when"; it is open. Nothing about the exposure changed, only the contents behind it.
 - **Higgsfield balance automation** — revisit at **four or more tools** in the costs table, or when
   a balance has gone stale enough to mislead. Numbers are typed monthly and labelled *"you typed
   this"*; typed and honestly labelled beats automated and quietly wrong.
@@ -103,6 +108,18 @@ Re-run them after any change to a grant, a policy, a role, the exposed schemas, 
 
 `scripts/break-check.sh <spec> "<break>"` runs one spec against a deliberately broken tree and
 restores unconditionally. Exit **0 means the check binds** — see README.
+
+## Ran 2026-09-01 against the live project
+
+`check-anon-locked-out` PASS · `check-blast-radius` PASS *(and both its reopening triggers fired —
+see above)* · `check-signed-url-expiry` PASS, after SETUP.md's example object name turned out stale
+(`equals-reel-final-v1.mp4` does not exist; the live one is `equals-reel-v1.mp4` — SETUP.md fixed).
+
+⚠️ **`check-tester-cannot-read-admin.mjs` has NOT been run** — it needs `ADMIN_EMAIL` /
+`ADMIN_PASSWORD` / `TESTER_EMAIL` / `TESTER_PASSWORD`, which are the two real accounts' passwords
+and are not in `.env.local`. Three of four passing is not the boundary verified: this is the only
+one of the four that tests **a tester against an admin's data**, which is the property the whole
+role split exists for. Rafi runs it himself.
 
 ## Verified nowhere, as of 2026-09-01
 
