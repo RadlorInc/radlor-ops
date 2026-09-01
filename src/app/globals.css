@@ -233,6 +233,47 @@ button.linky {
 button.linky:hover { background: none; color: #a3b9ff; }
 button.linky.small { font-size: 13px; }
 
+/* ── Navigation ─────────────────────────────────────────────────────────────────────────────
+ *
+ * Two levels, and they answer two different questions: the role tabs are WHICH SURFACE, the
+ * section tabs are WHICH PART OF THIS ONE.
+ *
+ * ⚠️ A TAB THAT HIDES SOMETHING URGENT IS A REGRESSION, SO NOTHING URGENT IS BEHIND ONE. The
+ * dashboard's warnings render above the section tabs on every tab, and each tab carries the count
+ * of what is waiting inside it. Tabs are for putting detail away, never signal.
+ */
+.rolenav { border-bottom: 1px solid var(--line); margin: 0 0 20px; }
+.rolenav .who {
+  display: flex; align-items: baseline; gap: 12px; justify-content: space-between;
+  font-size: 13px; color: var(--muted); padding-bottom: 8px;
+}
+.rolenav .who .name { color: var(--text); font-weight: 500; }
+.rolenav .tabs { display: flex; gap: 4px; flex-wrap: wrap; margin-bottom: -1px; }
+
+.tab {
+  display: inline-flex; align-items: center; gap: 7px;
+  padding: 8px 12px; border-radius: var(--radius-sm) var(--radius-sm) 0 0;
+  color: var(--muted); text-decoration: none; font-size: 14px; font-weight: 500;
+  border-bottom: 2px solid transparent;
+  transition: color var(--t) ease, background-color var(--t) ease, border-color var(--t) ease;
+}
+.tab:hover { color: var(--text); background: var(--panel); }
+/* ⚠️ Colour AND an underline. Colour alone as the "you are here" cue is the one state a
+   colour-blind reader most needs and least gets. */
+.tab[aria-current='page'] { color: var(--text); border-bottom-color: var(--accent); background: var(--panel); }
+
+.badge {
+  min-width: 20px; padding: 0 6px; height: 18px; border-radius: 999px;
+  display: inline-flex; align-items: center; justify-content: center;
+  font-size: 11px; font-weight: 600; font-variant-numeric: tabular-nums;
+  background: var(--warn-bg); border: 1px solid var(--warn-line); color: var(--warn-ink);
+}
+.tab[aria-current='page'] .badge { background: var(--panel-2); border-color: var(--line-strong); color: var(--text); }
+
+/* Section tabs inside the dashboard. Same component, one level quieter. */
+.sectiontabs { display: flex; gap: 4px; flex-wrap: wrap; border-bottom: 1px solid var(--line); margin: 0 0 20px; }
+.sectiontabs .tab { font-size: 13px; padding: 7px 11px; margin-bottom: -1px; }
+
 /* ── Figures and meters ─────────────────────────────────────────────────────────────────────
  *
  * ⚠️ NO SPARKLINES AND NO DELTAS ANYWHERE, AND THAT IS A DATA FACT, NOT A STYLE CHOICE. A stat

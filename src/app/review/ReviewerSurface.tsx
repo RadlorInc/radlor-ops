@@ -2,6 +2,8 @@ import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { myAssignment, notesFor, reviewerVideoBySlug, videosForReviewer } from '@/lib/db'
 import type { ReviewerIdentity } from '@/lib/reviewerIdentity'
+import type { Role } from '@/lib/session'
+import RoleNav from '../RoleNav'
 import Review from './Review'
 
 /**
@@ -11,21 +13,18 @@ import Review from './Review'
  * which is what sharing one implementation bought.
  */
 
-export async function ReviewerList({ identity }: { identity: ReviewerIdentity }) {
+export async function ReviewerList({ identity, role }: { identity: ReviewerIdentity; role: Role }) {
   const videos = await videosForReviewer(identity.id)
+  const unfinished = videos.filter((v) => v.myVerdict === null).length
 
   return (
     <main className="wrap">
-      <h1>Radlor — videos to review</h1>
-      <p className="muted small">
-        Signed in as {identity.name}.{' '}
-        <span data-testid="signout-inline">
-          <form method="post" action="/api/auth/logout" style={{ display: 'inline' }}>
-            <button className="linky" type="submit" data-testid="sign-out">
-              Sign out
-            </button>
-          </form>
-        </span>
+      <RoleNav role={role} current="/review" name={identity.name} badges={{ review: unfinished }} />
+      <h1>Videos to review</h1>
+      <p className="muted small" data-testid="signout-inline">
+        {videos.length === 0
+          ? 'Nothing assigned to you.'
+          : `${unfinished} of ${videos.length} still waiting on you.`}
       </p>
 
       {videos.length === 0 ? (

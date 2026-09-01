@@ -1,5 +1,6 @@
 import { listIssues, listSessions } from '@/lib/adminDb'
 import { requireRole } from '@/lib/session'
+import RoleNav from '../RoleNav'
 import Issues from './Issues'
 
 export const dynamic = 'force-dynamic'
@@ -18,16 +19,8 @@ export default async function Tester() {
 
   return (
     <main className="wrap">
-      <h1>Chapter testing</h1>
-      <p className="muted small" data-testid="tester-greeting">
-        {profile.name} ({profile.role}) ·{' '}
-        {profile.role === 'admin' ? <a href="/admin">Dashboard</a> : null}{' '}
-        <form method="post" action="/api/auth/logout" style={{ display: 'inline' }}>
-          <button className="linky" type="submit" data-testid="sign-out">
-            Sign out
-          </button>
-        </form>
-      </p>
+      <RoleNav role={profile.role} current="/tester" name={`${profile.name} (${profile.role})`} />
+      <h1 data-testid="tester-greeting">Chapter testing</h1>
 
       {sessions.length > 0 && (
         <p className="muted small" data-testid="working-record">

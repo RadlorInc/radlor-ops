@@ -1,6 +1,8 @@
 import Link from 'next/link'
+import RoleNav from '../RoleNav'
 import { allAssignments, allNotes, allReviewers, allVideos } from '@/lib/db'
 import { clearance, progressLabel } from '@/lib/clearance'
+import { renewalState } from '@/lib/renewal'
 import { listIssues, listSubscriptions, listTodos } from '@/lib/adminDb'
 import { listProfiles } from '@/lib/adminDb'
 import { requireRole } from '@/lib/session'
@@ -10,7 +12,19 @@ import Todos from './Todos'
 
 export const dynamic = 'force-dynamic'
 
-export default async function Admin() {
+const TABS = [
+  { key: 'costs', label: 'Costs' },
+  { key: 'todo', label: 'To-do' },
+  { key: 'issues', label: 'Issues' },
+  { key: 'videos', label: 'Videos' },
+] as const
+type TabKey = (typeof TABS)[number]['key']
+
+export default async function Admin({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>
+}) {
   const me = await requireRole('admin')
 
   // ⚠️ The two admin tables are read AS THE USER (RLS decides); videos and notes still go through
@@ -47,32 +61,104 @@ export default async function Admin() {
   const clearedWithOpenNotes = rows.filter((r) => r.c.cleared && (unread.get(r.video.id) ?? 0) > 0)
   const split = rows.filter((r) => r.c.disagreement)
 
+  /**
+   * ⚠️ THE TAB IS IN THE URL, NOT IN CLIENT STATE. `/admin?tab=issues` is a link Rafi can send
+   * himself, a bookmark, and a back button that works. It also means the server renders one
+   * section instead of four, so the page a tab shows is the page it built.
+   *
+   * An unknown value falls back to the first tab rather than rendering nothing — a typo'd query
+   * string should not produce a blank dashboard.
+   */
+  const raw = (await searchParams).tab
+  const tab: TabKey = TABS.some((t) => t.key === raw) ? (raw as TabKey) : 'costs'
+
+  /**
+   * What each tab is holding, so a closed tab still says whether it is worth opening.
+   *
+   * ⚠️ THESE ARE "NEEDS SOMETHING", NOT "HOW MANY ROWS". A badge showing the total would sit at 25
+   * for ever and stop meaning anything; the number that changes is the number that is waiting. A
+   * tab with nothing waiting gets no badge at all rather than a zero.
+   */
+  const openIssues = issues.filter((i) => i.status !== 'resolved').length
+  const myUnfinished = assignments.filter((a) => a.reviewer_id === me.user_id && a.verdict === null).length
+  const COUNTS: Record<TabKey, number> = {
+    costs: subscriptions.filter((sub) => renewalState(sub.renewal_date, new Date()) === 'soon'
+      || renewalState(sub.renewal_date, new Date()) === 'lapsed').length,
+    todo: todos.filter((t) => t.status !== 'done').length,
+    issues: openIssues,
+    videos: rows.filter((r) => !r.c.cleared && r.c.assigned > 0).length,
+  }
+
   return (
     <main className="wrap">
+      <RoleNav
+        role={me.role}
+        current="/admin"
+        name={me.name}
+        badges={{ tester: openIssues, review: myUnfinished }}
+      />
       <h1>Dashboard</h1>
-      <p className="muted small">
-        {me.name} · <a href="/tester">Chapter testing</a> ·{' '}
-        {/* Roles gate the surface; assignments decide what is on it. An admin with no assignments
-            gets an empty list here, which is correct. */}
-        <Link href="/review" data-testid="my-review-list">
-          Videos assigned to me
-        </Link>{' '}
-        ·{' '}
-        <span data-testid="signout-inline">
-          <form method="post" action="/api/auth/logout" style={{ display: 'inline' }}>
-            <button className="linky" type="submit" data-testid="sign-out">
-              Sign out
-            </button>
-          </form>
-        </span>
-      </p>
-      <Costs initial={subscriptions} today={new Date().toISOString()} />
 
-      <Todos initial={todos} />
+      {/* ⚠️ THE WARNINGS LIVE ABOVE THE TABS AND SHOW ON EVERY ONE OF THEM. Putting sections
+          behind tabs is fine for detail and wrong for signal: "reviewers disagree" is the whole
+          reason this page exists, and a version of it that only appears once you click Videos is a
+          version nobody reads. Tabs put detail away; they never put a warning away. */}
+      {/* ⚠️ APPROVED WITH OPEN NOTES IS A REAL STATE, NOT A CONTRADICTION. The reviewers liked it
+          and still left things worth reading. Not blocked — that is Rafi's call — but never
+          silent, because the failure it guards against is uploading past feedback nobody read. */}
+      {clearedWithOpenNotes.length > 0 && (
+        <div className="warn" data-testid="approved-with-notes">
+          <strong>Approved by everyone, and still has open notes.</strong> Worth reading before you
+          post:{' '}
+          {clearedWithOpenNotes
+            .map((r) => `${r.video.slug} · ${unread.get(r.video.id)} open note${unread.get(r.video.id) === 1 ? '' : 's'}`)
+            .join(', ')}
+          .
+        </div>
+      )}
+      {/* ⚠️ DISAGREEMENT IS SHOWN AS DISAGREEMENT. Not averaged, not "mostly approved", and not
+          resolved by whoever answered last: one reviewer asked for changes and that is the signal
+          the second reviewer was added to catch. */}
+      {split.length > 0 && (
+        <div className="warn" data-testid="reviewers-disagree">
+          <strong>Reviewers disagree.</strong> Not cleared — one approval does not cancel an
+          objection:{' '}
+          {split
+            .map((r) => `${r.video.slug} · ${r.c.approved} approved, ${r.c.changesNeeded} asked for changes`)
+            .join(', ')}
+          .
+        </div>
+      )}
 
-      <AdminIssues initial={issues} names={names} />
 
-      <h2 style={{ marginTop: 36 }}>Videos</h2>
+      <nav className="sectiontabs" aria-label="Dashboard sections">
+        {TABS.map((t) => (
+          <Link
+            key={t.key}
+            href={`/admin?tab=${t.key}`}
+            className="tab"
+            aria-current={t.key === tab ? 'page' : undefined}
+            data-testid={`tab-${t.key}`}
+          >
+            {t.label}
+            {/* ⚠️ EVERY TAB SAYS WHAT IS WAITING INSIDE IT. A tab with a hidden count is a tab you
+                have to open to find out whether it was worth opening — which is the cost tabs are
+                supposed to save. */}
+            {COUNTS[t.key] > 0 && (
+              <span className="badge" aria-label={`${COUNTS[t.key]} needing attention`}>
+                {COUNTS[t.key]}
+              </span>
+            )}
+          </Link>
+        ))}
+      </nav>
+
+      {tab === 'costs' && <Costs initial={subscriptions} today={new Date().toISOString()} />}
+      {tab === 'todo' && <Todos initial={todos} />}
+      {tab === 'issues' && <AdminIssues initial={issues} names={names} />}
+      {tab === 'videos' && (
+        <section>
+      <h2>Videos</h2>
       <p className="muted small">
         <a href="/admin/export">Open notes as markdown →</a> ·{' '}
         <a href="/admin/export?all=1">including resolved</a>
@@ -147,34 +233,10 @@ export default async function Admin() {
           </tbody>
         </table>
       </div>
-      {/* ⚠️ APPROVED WITH OPEN NOTES IS A REAL STATE, NOT A CONTRADICTION. The reviewers liked it
-          and still left things worth reading. Not blocked — that is Rafi's call — but never
-          silent, because the failure it guards against is uploading past feedback nobody read. */}
-      {clearedWithOpenNotes.length > 0 && (
-        <div className="warn" data-testid="approved-with-notes">
-          <strong>Approved by everyone, and still has open notes.</strong> Worth reading before you
-          post:{' '}
-          {clearedWithOpenNotes
-            .map((r) => `${r.video.slug} · ${unread.get(r.video.id)} open note${unread.get(r.video.id) === 1 ? '' : 's'}`)
-            .join(', ')}
-          .
-        </div>
-      )}
-      {/* ⚠️ DISAGREEMENT IS SHOWN AS DISAGREEMENT. Not averaged, not "mostly approved", and not
-          resolved by whoever answered last: one reviewer asked for changes and that is the signal
-          the second reviewer was added to catch. */}
-      {split.length > 0 && (
-        <div className="warn" data-testid="reviewers-disagree">
-          <strong>Reviewers disagree.</strong> Not cleared — one approval does not cancel an
-          objection:{' '}
-          {split
-            .map((r) => `${r.video.slug} · ${r.c.approved} approved, ${r.c.changesNeeded} asked for changes`)
-            .join(', ')}
-          .
-        </div>
+        </section>
       )}
 
-      {videos.length === 0 && <p className="muted">No videos yet.</p>}
+      {tab === 'videos' && videos.length === 0 && <p className="muted">No videos yet.</p>}
     </main>
   )
 }

@@ -37,7 +37,9 @@ test('a wrong password is refused, and says nothing about whether the account ex
 
 test('an admin signs in and sees the video list', async ({ page }) => {
   await signIn(page, 'admin', { fresh: true })   // this test is about the form itself
-  const res = await page.goto('/admin')
+  // ⚠️ The tab is in the URL, so a spec about the video table names it. Landing on /admin and
+  // asserting video rows would now be asserting against whichever tab happens to be the default.
+  const res = await page.goto('/admin?tab=videos')
   expect(res?.status()).toBe(200)
 
   const rows = page.getByTestId('admin-row')

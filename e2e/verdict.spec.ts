@@ -148,6 +148,7 @@ test('one reviewer cannot overwrite another reviewer, in either direction', asyn
 
 test('/admin shows each reviewer by name, the progress, and the disagreement as a disagreement', async ({ page }) => {
   await signIn(page, 'admin')
+  await page.goto('/admin?tab=videos')
   const row = page.getByTestId('admin-row').filter({ hasText: 'split-cut' })
 
   // Each answer separately, by name — not folded into one cell.

@@ -26,11 +26,33 @@ export async function signIn(page: Page, who: keyof typeof ACCOUNTS, opts: { fre
     await page.goto(who === 'tester' ? '/tester' : who === 'admin' ? '/admin' : '/review')
     return
   }
+  /**
+   * ⚠️ ONE RETRY, BECAUSE THE SUITE LEGITIMATELY TRIPS ITS OWN RATE LIMIT. The login route allows
+   * ten attempts a minute per IP. A full run now spends: four cached sign-ins (admin, tester,
+   * dana, flood), three deliberate fresh ones in admin.spec, two deliberate WRONG passwords, and
+   * one in session-refresh — right at the edge, which is why this arrived as an intermittent
+   * failure in a spec about token refresh rather than as anything resembling a rate limit.
+   *
+   * ⚠️ THE LIMIT IS NOT RAISED FOR THE TESTS, AND MUST NOT BE. Ten a minute is a real property of
+   * the product; a suite that needs it loosened is a suite quietly testing a different build. So
+   * the suite waits the window out instead. It costs a minute on the rare run that hits it.
+   *
+   * The retry is only ever reached with CORRECT credentials — the wrong-password specs drive the
+   * form themselves and never come through here — so a second failure is a real one.
+   */
   const { email, password } = ACCOUNTS[who]
-  await page.goto('/login')
-  await page.getByTestId('email').fill(email)
-  await page.getByTestId('password').fill(password)
-  await page.getByTestId('sign-in').click()
-  await page.waitForURL((u) => !u.pathname.startsWith('/login'))
-  sessions.set(who, await page.context().cookies())
+  for (let attempt = 0; attempt < 2; attempt++) {
+    await page.goto('/login')
+    await page.getByTestId('email').fill(email)
+    await page.getByTestId('password').fill(password)
+    await page.getByTestId('sign-in').click()
+    try {
+      await page.waitForURL((u) => !u.pathname.startsWith('/login'), { timeout: 10_000 })
+      sessions.set(who, await page.context().cookies())
+      return
+    } catch {
+      if (attempt === 1) throw new Error(`sign-in as ${who} failed twice, a minute apart — not the rate limit`)
+      await page.waitForTimeout(61_000)
+    }
+  }
 }

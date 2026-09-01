@@ -56,7 +56,7 @@ test('an expired access token is refreshed, and the page renders signed in', asy
   const dead = expiredAccessToken(sub)
   await replaceAccessToken(context, dead)
 
-  const res = await page.goto('/admin')
+  const res = await page.goto('/admin?tab=videos')
   expect(res?.status()).toBe(200)
   await expect(page.getByTestId('admin-row').first()).toBeVisible()
 

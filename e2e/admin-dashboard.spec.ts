@@ -53,6 +53,7 @@ test('adding a subscription writes a row and marks it typed, not fetched', async
 
 test('a to-do can be added, renamed, advanced and reordered — and the row moves', async ({ page, request }) => {
   await signIn(page, 'admin')
+  await page.goto('/admin?tab=todo')
   const list = page.getByTestId('todo-list')
 
   await page.getByTestId('todo-new').fill('Register the 1800 number')
@@ -78,6 +79,7 @@ test('a to-do can be added, renamed, advanced and reordered — and the row move
 
 test('a done item reads as done, and the open count excludes it', async ({ page }) => {
   await signIn(page, 'admin')
+  await page.goto('/admin?tab=todo')
   const done = page.getByTestId('todo-item').filter({ hasText: 'Pick a domain' })
   await expect(done).toHaveAttribute('data-status', 'done')
   await expect(done.getByTestId('todo-task')).toHaveClass(/strike/)
@@ -163,6 +165,7 @@ test('editing a subscription updates the row rather than adding a second one', a
 
 test('tester issues appear on the dashboard, action-needed first, with null reporters named as imported', async ({ page }) => {
   await signIn(page, 'admin')
+  await page.goto('/admin?tab=issues')
   await expect(page.getByTestId('issues-count')).toContainText('needing something')
 
   /**
@@ -183,6 +186,7 @@ test('tester issues appear on the dashboard, action-needed first, with null repo
 
 test('an admin can move an issue to resolved from the dashboard, and the row moves too', async ({ page, request }) => {
   await signIn(page, 'admin')
+  await page.goto('/admin?tab=issues')
   const [target] = await rows(request, 'issues', '&status=eq.open&limit=1')
   const row = page.getByTestId('admin-issue').filter({ has: page.locator(`text=${String(target.description).slice(0, 24)}`) })
   await row.getByTestId('admin-issue-status').selectOption('resolved')
@@ -204,6 +208,8 @@ test('an admin can move an issue to resolved from the dashboard, and the row mov
 test('the pictures account for every row they summarise', async ({ page }) => {
   await signIn(page, 'admin')
 
+  await page.goto('/admin?tab=todo')
+
   // Every to-do is in exactly one area meter: the denominators must sum to the list length.
   const items = await page.getByTestId('todo-task').count()
   const counts = await page.getByTestId('area-progress').locator('.count').allInnerTexts()
@@ -214,6 +220,7 @@ test('the pictures account for every row they summarise', async ({ page }) => {
   // And the spend legend names every tool that costs something — the £0 row has no share, so it
   // is the one that must NOT be there. Asserting "3 entries" would pass on a bar that dropped
   // Vercel and invented a segment.
+  await page.goto('/admin?tab=costs')
   const legend = await page.getByTestId('spend-legend').innerText()
   expect(legend).toContain('Higgsfield')
   expect(legend).toContain('Vercel')
