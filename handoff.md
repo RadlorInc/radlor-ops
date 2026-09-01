@@ -70,10 +70,15 @@ places to edit one list ends with neither being right. If sync is asked for, say
 All in [docs/security-findings.md](docs/security-findings.md). The two that are scheduled rather
 than closed:
 
-- **Review tool's role separation** — ⚠️ **BOTH TRIGGERS HAVE NOW FIRED** (measured 2026-09-01 by
-  `check-blast-radius.mjs`): `public.waitlist` holds **1 real row** — the decision was made about an
-  empty table — and `review.subscriptions` holds **1 row of financial data**. This is no longer
-  "revisit when"; it is open. Nothing about the exposure changed, only the contents behind it.
+- **Review tool's role separation** — ⚠️ **both triggers fired on 2026-09-01** (measured by
+  `check-blast-radius.mjs`): `public.waitlist` holds **1 real row**, and the trade was accepted about
+  an **empty** table; `review.subscriptions` holds **1 row of financial data**. Nothing about the
+  exposure changed, only the contents behind it.
+  **Re-decided the same day, unchanged: defer both.** Note that the old argument for deferring is
+  gone — `radlor-site`'s `/api/waitlist` no longer holds `service_role`, so "the public front door
+  already holds this key, sealing the side door is theatre" no longer applies. What holds it now is
+  only the price: the launch blockers are worth more than five hours of role plumbing.
+  **Next revisit: when Milo takes real money** — not on the next row.
 - **Higgsfield balance automation** — revisit at **four or more tools** in the costs table, or when
   a balance has gone stale enough to mislead. Numbers are typed monthly and labelled *"you typed
   this"*; typed and honestly labelled beats automated and quietly wrong.
@@ -109,23 +114,46 @@ Re-run them after any change to a grant, a policy, a role, the exposed schemas, 
 `scripts/break-check.sh <spec> "<break>"` runs one spec against a deliberately broken tree and
 restores unconditionally. Exit **0 means the check binds** — see README.
 
-## Ran 2026-09-01 against the live project
+## Ran 2026-09-01 against the live project — 4 of 4 PASS
 
-`check-anon-locked-out` PASS · `check-blast-radius` PASS *(and both its reopening triggers fired —
-see above)* · `check-signed-url-expiry` PASS, after SETUP.md's example object name turned out stale
-(`equals-reel-final-v1.mp4` does not exist; the live one is `equals-reel-v1.mp4` — SETUP.md fixed).
+All four, in one sitting. **The role split is demonstrated, not asserted** — which is a sentence
+that could only be written after the fourth one, and is the reason a three-of-four table was not
+left standing. Three of four green reads as "nearly verified" and is not: it was missing the only
+check that puts a tester against an admin's data, which is the property the whole split exists for.
+A partial run gets reported as a partial run.
 
-⚠️ **`check-tester-cannot-read-admin.mjs` has NOT been run** — it needs `ADMIN_EMAIL` /
-`ADMIN_PASSWORD` / `TESTER_EMAIL` / `TESTER_PASSWORD`, which are the two real accounts' passwords
-and are not in `.env.local`. Three of four passing is not the boundary verified: this is the only
-one of the four that tests **a tester against an admin's data**, which is the property the whole
-role split exists for. Rafi runs it himself.
+- `check-anon-locked-out` — a stranger with the public key gets `42501` on all three tables, with a
+  `service_role` control proving the address is reachable.
+- `check-signed-url-expiry` — the same signed URL, 200 before the expiry and `InvalidJWT` after.
+  SETUP.md's example object name was stale (`equals-reel-final-v1.mp4` does not exist; the live one
+  is `equals-reel-v1.mp4`) — the check exited 1 with `NoSuchKey`, which was it being right. Fixed.
+- `check-blast-radius` — the exposure still matches what SETUP.md records; **both reopening
+  triggers fired**, see above.
+- `check-tester-cannot-read-admin` — **what it proved**, not merely that it went green: the admin's
+  token reads 2 profile rows and the tester's reads 1, *its own*; the tester cannot see the admin's
+  row. On issues, admin 13 and tester 0, and the tester saw only rows it filed.
+
+```bash
+node --env-file=.env.local scripts/check-tester-cannot-read-admin.mjs
+```
+
+It needs `ADMIN_EMAIL` / `ADMIN_PASSWORD` / `TESTER_EMAIL` / `TESTER_PASSWORD` — the two real
+accounts' passwords. **Put them in `.env.local` and let `--env-file` parse them.** Not inline in
+front of the binary: that puts both passwords into shell history, and this repo does not `source`
+env files (CLAUDE.md). `.env.local` is gitignored — confirmed, `.gitignore:8`.
+
+⚠️ **The issues half of that check is the weak half, and a green result is where that gets lost.**
+The tester reads **0** of the admin's 13 — but `0` is also what a rejected token, an unexposed
+schema and a typo'd table name return. It means something only because CONTROL B, the same token
+against `profiles`, came back 200 with 1 row: the credential works, so the empty result is a denial
+and not a failure to ask. The **stronger form** — a tester seeing exactly their own N out of the
+admin's N+13 — needs a tester to have filed something. Rafi is filing one; **re-run this check
+after that**, and the assertion stops depending on a control to be meaningful.
 
 ## Verified nowhere, as of 2026-09-01
 
 - **Nobody has used `/tester` or `/admin` as themselves.** Both are proven to render real data live,
   driven by throwaway accounts; Rafi driving them by hand is outstanding.
-- **The stronger issues RLS comparison** — right now a tester sees 0 of the admin's 13, which only
-  means something because a control proved their token reads their own profile. It gets sharp once a
-  tester has filed something.
+- **The stronger issues RLS comparison** — pending a real tester issue, then a re-run of
+  `check-tester-cannot-read-admin`. Detail above; do not let the 4-of-4 line absorb it.
 - **Self-signup being off** in Supabase Auth — cannot be read from here.
