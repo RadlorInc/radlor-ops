@@ -55,11 +55,31 @@ places to edit one list ends with neither being right. If sync is asked for, say
    `Business Case Validation` → Product. He asked for a call rather than a fourth question; the
    label is in the script's docblock, in its output and here, because a guess whose provenance is
    only in a chat log reads as fact by the next session. Correcting one is one word in `/admin`.
-2. **Reviewer accounts** (a third role, then deleting the token path entirely). Plan and the two
-   answers he asked for are in the same message. Recommendation: **no force-change-on-first-login —
-   send a single-use Supabase recovery link instead of a password over WhatsApp.** Trade named: a
-   reviewer who loses their session needs a new link from Rafi, because there is no password reset
-   without SMTP.
+2. **Reviewer accounts** (a third role, then deleting the token path entirely). **Not started.**
+   Both answers Rafi asked for before any building are now here rather than only in a chat message:
+
+   **(a) Password delivery — no force-change-on-first-login. Send a single-use Supabase recovery
+   link**, not a password over WhatsApp. Trade named: without SMTP there is no self-serve reset, so
+   a reviewer who loses their session needs a new link from Rafi.
+
+   **(b) Scope — a reviewer should see their own video and nothing else. ⚠️ TODAY THEY SEE ALL OF
+   THEM.** Measured, not assumed: `/r/<token>` calls `videosForReviewer()`, which is
+   `status=in.(awaiting_review,reviewed)` with **no reviewer filter at all**
+   ([src/lib/db.ts:112](src/lib/db.ts:112)) — every reviewable video, each with its `verdict`. And
+   `/r/<token>/<slug>` looks the video up by slug alone, so any valid token opens any reviewable
+   slug. Nothing is exposed right now only because `review.videos` holds **one** row.
+   Nobody chose this; it fell out of there being one video. So:
+   - **There is no reviewer→video assignment in the schema to preserve.** Accounts do not inherit
+     the property "their own video" — that property has never existed. It has to be built, and it
+     is the part that actually needs a migration; swapping the token for a login without it just
+     makes the same wide view reachable by a durable credential instead of a link.
+   - Notes are already correctly scoped — `notes` keys on `(video_id, reviewer_id, version)`, so no
+     reviewer has ever seen another's notes.
+   - **`verdict` is a column on `videos`, not per reviewer.** One video, two reviewers, one verdict
+     field: the second overwrites the first. Fine today at 1:1 — named so it is a decision when a
+     video gets a second reviewer, not a surprise.
+   - Laziest shape that matches reality: `videos.reviewer_id`. A join table when a video genuinely
+     needs two reviewers, not before.
 
    ⚠️ **The migration has real data.** `review.reviewers` has rows and `notes.reviewer_id` points at
    them. Repoint first, read the notes back row-by-row (count, timestamps, bodies, author), and drop
