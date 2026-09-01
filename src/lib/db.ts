@@ -94,15 +94,23 @@ async function rest<T>(label: string, path: string, init?: RequestInit): Promise
 
 /** The token → reviewer resolution. Revoked and unknown are BOTH `null` — the caller must not be
  *  able to tell them apart, or a 404 vs a 403 confirms the token once existed. */
+/**
+ * ⚠️ THE `id` THIS RETURNS IS A `profiles.user_id`, NOT `reviewers.id`. Since the account swap,
+ * `notes.reviewer_id` and `video_reviewers.reviewer_id` hold user_ids; `reviewers.user_id` is the
+ * bridge that keeps the old token door leading to the same person as the new login door. A token
+ * whose row has no `user_id` resolves to NOBODY rather than to a reviewer with no history — the
+ * same 404 as unknown and revoked, because "your link works but your notes are gone" is worse than
+ * a link that does not work.
+ */
 export async function reviewerByToken(token: string): Promise<Reviewer | null> {
   if (!token || token.length < 8 || token.length > 200) return null
-  const rows = await rest<Reviewer[]>(
+  const rows = await rest<{ user_id: string | null; name: string; email: string; revoked_at: string | null }[]>(
     'reviewer lookup',
-    `reviewers?select=id,name,email,revoked_at&token=eq.${encodeURIComponent(token)}&limit=1`,
+    `reviewers?select=user_id,name,email,revoked_at&token=eq.${encodeURIComponent(token)}&limit=1`,
   )
   const r = rows[0]
-  if (!r || r.revoked_at) return null
-  return r
+  if (!r || r.revoked_at || !r.user_id) return null
+  return { id: r.user_id, name: r.name, email: r.email, revoked_at: r.revoked_at }
 }
 
 /**
@@ -183,8 +191,15 @@ export async function allAssignments(): Promise<Assignment[]> {
   return rest<Assignment[]>('admin assignment list', 'video_reviewers?select=video_id,reviewer_id,verdict')
 }
 
+/** ⚠️ Keyed by `user_id`, because that is what an assignment points at now. A reviewer row with no
+ *  account is dropped rather than listed: it cannot own an assignment, so it can never be the
+ *  answer to "who is this assignment's reviewer". */
 export async function allReviewers(): Promise<Reviewer[]> {
-  return rest<Reviewer[]>('admin reviewer list', 'reviewers?select=id,name,email,revoked_at&order=name.asc')
+  const rows = await rest<{ user_id: string | null; name: string; email: string; revoked_at: string | null }[]>(
+    'admin reviewer list',
+    'reviewers?select=user_id,name,email,revoked_at&order=name.asc',
+  )
+  return rows.flatMap((r) => (r.user_id ? [{ id: r.user_id, name: r.name, email: r.email, revoked_at: r.revoked_at }] : []))
 }
 
 /**

@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test'
-import { SUPABASE_URL, TOKENS } from './tokens'
+import { SUPABASE_URL, TOKENS, USERS } from './tokens'
 import { signIn } from './signIn'
 
 /** `hook-test-b`, so this cannot collide with the note round-trip spec on `equals-reel-final`. */
@@ -12,8 +12,7 @@ const PAGE = `/r/${TOKENS.valid}/hook-test-b`
  *  would be reading the stale column the change moved away from — it still exists until its own
  *  migration drops it, and it would answer with whatever it held in the seed no matter what any
  *  reviewer did. Status stays on the video, because that is what it is. */
-const DANA = '11111111-1111-4111-8111-111111111111'
-const FLOOD = '33333333-3333-4333-8333-333333333333'
+const { dana: DANA, flood: FLOOD } = USERS
 
 async function statusOf(request: import('@playwright/test').APIRequestContext, slug: string) {
   const res = await request.get(`${SUPABASE_URL}/rest/v1/videos?select=id,status&slug=eq.${slug}`, {

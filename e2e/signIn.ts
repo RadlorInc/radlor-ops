@@ -23,7 +23,7 @@ export async function signIn(page: Page, who: keyof typeof ACCOUNTS, opts: { fre
     // ⚠️ AND NAVIGATE. The form path lands on the role's home page, so callers reasonably expect to
     // BE there afterwards. The first cached version only set cookies and returned, leaving the page
     // on about:blank — three tests then asserted against a blank page and one of them noticed.
-    await page.goto(who === 'tester' ? '/tester' : '/admin')
+    await page.goto(who === 'tester' ? '/tester' : who === 'admin' ? '/admin' : '/review')
     return
   }
   const { email, password } = ACCOUNTS[who]

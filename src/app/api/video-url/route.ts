@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { callerKey, overLimit } from '../_rateLimit'
-import { reviewerByToken, reviewerVideoBySlug } from '@/lib/db'
+import { reviewerIdentity } from '@/lib/reviewerIdentity'
+import { reviewerVideoBySlug } from '@/lib/db'
 import { SIGNED_URL_TTL_SECONDS, signedVideoUrl } from '@/lib/storage'
 
 /**
@@ -22,7 +23,7 @@ export async function GET(req: Request) {
   }
 
   const q = new URL(req.url).searchParams
-  const reviewer = await reviewerByToken(q.get('token') ?? '')
+  const reviewer = await reviewerIdentity(q.get('token') || null)
   if (!reviewer) return NextResponse.json({ error: 'not_found' }, { status: 404 })
 
   if (overLimit(`videourl:reviewer:${reviewer.id}`, TOKEN_LIMIT, WINDOW_MS)) {

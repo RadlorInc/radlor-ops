@@ -131,29 +131,72 @@ walk through it is a support ticket, not security. A signed-IN **tester** who tr
 
 ## 6. Create the reviewer
 
-Generate a token:
+Reviewers have **accounts** now. The token link still works and is not removed until a human has
+signed in the new way and said it worked — but new reviewers are made this way.
 
-```bash
-node -e "console.log('tok_' + require('crypto').randomBytes(24).toString('base64url'))"
-```
+**Step 1 — the account.** Authentication → Users → **Add user**, with their email. Then **Send
+password recovery** (⋯ on the row).
 
-Then **SQL Editor**:
+⚠️ **Send a single-use recovery link. Do not set a password and send it over WhatsApp.** A password
+in a chat thread is a password that stays in a chat thread, gets read by whoever else has the
+device, and is the same string they will reuse elsewhere. The recovery link is single-use and
+expires.
+
+⚠️ **AND THE CONSEQUENCE, STATED PLAINLY BECAUSE IT IS REAL: there is no SMTP configured on this
+project, so there is no self-serve password reset.** A reviewer who loses their session — new
+laptop, cleared cookies, forgotten password — cannot recover it themselves. **They need a new
+recovery link from you, by hand, every time.** That is the price of not running a mail server for
+two people, and it is the right trade at two people and the wrong one at ten. When it starts costing
+you an interruption a week, configure SMTP; do not soften this paragraph instead.
+
+There is deliberately no force-change-on-first-login: it adds a screen, and the thing it protects
+against — a shared initial password — is exactly what the recovery link already prevents.
+
+**Step 2 — the profile row.** SQL Editor, using the user_id from the Users table:
 
 ```sql
-insert into review.reviewers (name, email, token)
-values ('Their Name', 'them@agency.com', 'tok_…paste…');
+insert into review.profiles (user_id, role, name)
+values ('<user_id from Authentication → Users>', 'reviewer', 'Their Name');
 ```
 
-Their link is `https://<your-vercel-domain>/r/tok_…`. Send it to them. Keep the token — it is stored
-in plain text on purpose so you can re-send the same link instead of issuing a new one.
+**Step 3 — assign them a video.** ⚠️ **This is the step people forget, and it looks like a bug:**
+a reviewer with an account and no assignment signs in successfully and sees an empty list. That is
+correct — no assignment, no video — but it reads as broken.
 
-To revoke:
+```sql
+insert into review.video_reviewers (video_id, reviewer_id)
+select v.id, '<their user_id>' from review.videos v where v.slug = 'their-video';
+```
+
+Assignment is a SQL statement on purpose: there is no reassignment UI, no due dates and no
+reminders, the same way adding a video is a SQL statement.
+
+⚠️ **`role` holds ONE value, and `admin` is a superset of `reviewer`.** Rafi is the admin AND the
+only reviewer today; he does not need two accounts and there is no roles array. He appears as a
+reviewer on `equals-reel` because a `video_reviewers` row says so. **Roles gate the surface;
+assignments decide what is on it** — an admin with no assignments opens `/review` and sees nothing,
+which is right.
+
+### The old token link — still working, on purpose
+
+```sql
+insert into review.reviewers (name, email, token, user_id)
+values ('Their Name', 'them@agency.com', 'tok_…paste…', '<their user_id>');
+```
+
+⚠️ **`user_id` is not optional in practice.** `notes.reviewer_id` and
+`video_reviewers.reviewer_id` hold profile user_ids now; a reviewer row without one resolves to
+**nobody**, and its link 404s. That is deliberate: a link that works while its holder's notes are
+unreachable is worse than a link that does not work.
+
+To revoke a link:
 
 ```sql
 update review.reviewers set revoked_at = now() where email = 'them@agency.com';
 ```
 
-The link 404s from the next request — identically to a token that never existed.
+The link 404s from the next request — identically to a token that never existed. ⚠️ Revoking the
+**link** does not disable the **account**; for that, disable the user in Authentication → Users.
 
 ## 7. Add a video
 

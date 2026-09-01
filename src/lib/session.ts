@@ -4,8 +4,12 @@ import { notFound, redirect } from 'next/navigation'
 import { SCHEMA } from './db'
 
 /**
- * Account sessions for admin and tester. Reviewers have none and never will — they are a token in
- * a URL, which is the whole reason an outside contractor needs no onboarding.
+ * Account sessions for admin, tester and reviewer.
+ *
+ * ⚠️ REVIEWERS HAVE ACCOUNTS NOW. This docblock used to say they never would — "they are a token
+ * in a URL, which is the whole reason an outside contractor needs no onboarding". The token path
+ * still works and is still the only door anyone has actually walked through; it is removed once a
+ * human has signed in the new way and said so.
  *
  * ⚠️ THE BROWSER STILL NEVER TALKS TO SUPABASE. The usual Supabase Auth setup runs a client in the
  * page with `NEXT_PUBLIC_SUPABASE_URL` and the anon key, which would put both into the bundle and
@@ -28,7 +32,14 @@ const ANON = process.env.SUPABASE_ANON_KEY
 export const AT_COOKIE = 'rvr_at'
 export const RT_COOKIE = 'rvr_rt'
 
-export type Role = 'admin' | 'tester'
+/**
+ * ⚠️ ROLES GATE THE SURFACE; ASSIGNMENTS DECIDE WHAT IS ON IT. `admin` is a superset of
+ * `reviewer` — an admin may open the reviewer surface and sees the videos assigned to THEM, which
+ * for an admin with no assignments is an empty list. One person can be both without `role` ever
+ * holding two values: Rafi is the admin AND the only reviewer, and he appears on `equals-reel`
+ * because a `video_reviewers` row says so, not because of anything in his profile.
+ */
+export type Role = 'admin' | 'tester' | 'reviewer'
 export type Profile = { user_id: string; role: Role; name: string }
 
 function config(): { url: string; anon: string } {
@@ -87,7 +98,8 @@ export async function currentProfile(): Promise<Profile | null> {
  *                            from someone who is supposed to walk through it is not security, it
  *                            is a support ticket.
  *   • signed in, wrong role → 404, exactly as if the route did not exist. A tester does not need to
- *                            learn that `/admin` is a real page they are not allowed into.
+ *                            learn that `/admin` is a real page they are not allowed into, and
+ *                            neither does a reviewer.
  */
 export async function requireRole(...allowed: Role[]): Promise<Profile> {
   const profile = await currentProfile()

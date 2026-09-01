@@ -10,7 +10,9 @@ export default async function Login({
 }) {
   // Already signed in? Don't show a login form to someone who is logged in.
   const profile = await currentProfile()
-  if (profile) redirect(profile.role === 'admin' ? '/admin' : '/tester')
+  // ⚠️ Admin lands on /admin, not /review, even though an admin may open both: the surface you are
+  // sent to should be the one your role is FOR. Rafi reaches his own review list from there.
+  if (profile) redirect(profile.role === 'admin' ? '/admin' : profile.role === 'reviewer' ? '/review' : '/tester')
 
   const error = (await searchParams).error
 

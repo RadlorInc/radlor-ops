@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { callerKey, overLimit } from '../_rateLimit'
-import { reviewerByToken, reviewerVideoBySlug, setOutcome } from '@/lib/db'
+import { reviewerIdentity } from '@/lib/reviewerIdentity'
+import { reviewerVideoBySlug, setOutcome } from '@/lib/db'
 
 /**
  * "I'm finished with this one, and here's what I think." Records THIS reviewer's VERDICT —
@@ -35,7 +36,8 @@ export async function POST(req: Request) {
   // that forwards whatever it is given relies on the database to be its input validation.
   const verdict = raw.verdict === 'approved' || raw.verdict === 'changes_needed' ? raw.verdict : null
 
-  const reviewer = await reviewerByToken(token)
+  // Session first, token second — same person either way. See reviewerIdentity().
+  const reviewer = await reviewerIdentity(token || null)
   if (!reviewer) return NextResponse.json({ error: 'not_found' }, { status: 404 })
 
   if (overLimit(`done:reviewer:${reviewer.id}`, TOKEN_LIMIT, WINDOW_MS)) {

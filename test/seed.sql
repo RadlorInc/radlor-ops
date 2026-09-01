@@ -2,14 +2,30 @@
 -- Test data only: this file is never applied to a real project. Schema-qualified because the tool
 -- lives in `review`, not `public` — see the migration.
 
-insert into review.reviewers (id, name, email, token) values
+-- ⚠️ REVIEWERS ARE ACCOUNTS NOW. `notes.reviewer_id` and `video_reviewers.reviewer_id` hold
+-- `profiles.user_id`, and `reviewers.user_id` is the bridge that makes the old token door land on
+-- the same person as /login. Dana and Flood therefore need auth users and profiles BEFORE the
+-- reviewer rows can point at them.
+--
+-- ⚠️ `Gone Reviewer` deliberately has NO user_id as well as being revoked. Two different reasons a
+-- token resolves to nobody, and the resolver has to refuse both — a link that works while its
+-- owner's notes are unreachable is worse than a link that does not work.
+insert into auth.users (id, email) values
+  ('77777777-7777-4777-8777-777777777777', 'dana@example.com'),
+  ('88888888-8888-4888-8888-888888888888', 'flood@example.com');
+
+insert into review.profiles (user_id, role, name) values
+  ('77777777-7777-4777-8777-777777777777', 'reviewer', 'Dana Reviewer'),
+  ('88888888-8888-4888-8888-888888888888', 'reviewer', 'Flood Reviewer');
+
+insert into review.reviewers (id, name, email, token, user_id) values
   ('11111111-1111-4111-8111-111111111111', 'Dana Reviewer', 'dana@example.com',
-   'tok_valid_9f2c4a7b1d8e3506ac91'),
+   'tok_valid_9f2c4a7b1d8e3506ac91', '77777777-7777-4777-8777-777777777777'),
   ('22222222-2222-4222-8222-222222222222', 'Gone Reviewer', 'gone@example.com',
-   'tok_revoked_5b1e8c0a4d7f2396be40'),
+   'tok_revoked_5b1e8c0a4d7f2396be40', null),
   -- Its own reviewer so tripping the per-token limit cannot lock the other specs out.
   ('33333333-3333-4333-8333-333333333333', 'Flood Reviewer', 'flood@example.com',
-   'tok_flood_7c3a9e5f2b6d418093af');
+   'tok_flood_7c3a9e5f2b6d418093af', '88888888-8888-4888-8888-888888888888');
 
 update review.reviewers set revoked_at = now() where id = '22222222-2222-4222-8222-222222222222';
 
@@ -55,40 +71,40 @@ insert into review.video_reviewers (video_id, reviewer_id, verdict) values
   -- Dana and the flood reviewer both, nothing decided. (The rate-limit spec posts notes here as
   -- the flood reviewer; before it was assigned, every one of those posts was a 404 — which is the
   -- assignment filter working, and is how this fixture earned its comment.)
-  ('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', '11111111-1111-4111-8111-111111111111', null),
-  ('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', '33333333-3333-4333-8333-333333333333', null),
+  ('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', '77777777-7777-4777-8777-777777777777', null),
+  ('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', '88888888-8888-4888-8888-888888888888', null),
   -- Dana alone — the verdict spec drives this one end to end, so nothing may be pre-decided.
-  ('bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb', '11111111-1111-4111-8111-111111111111', null),
+  ('bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb', '77777777-7777-4777-8777-777777777777', null),
   -- Approved by everyone assigned, and still carrying an open note.
-  ('dddddddd-dddd-4ddd-8ddd-dddddddddddd', '11111111-1111-4111-8111-111111111111', 'approved'),
+  ('dddddddd-dddd-4ddd-8ddd-dddddddddddd', '77777777-7777-4777-8777-777777777777', 'approved'),
   -- Assigned to somebody who is not Dana. See the video row above.
-  ('eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee', '33333333-3333-4333-8333-333333333333', null),
+  ('eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee', '88888888-8888-4888-8888-888888888888', null),
   -- ⚠️ THE DISAGREEMENT, AND THE ONLY FIXTURE THAT CAN TELL THE NEW RULE FROM THE OLD ONE.
   -- "cleared when every assigned reviewer approved" and "cleared when the verdict column says
   -- approved" agree on every 1:1 row, so a suite where each video has one reviewer would pass
   -- against the code this change replaced.
-  ('ffffffff-ffff-4fff-8fff-ffffffffffff', '11111111-1111-4111-8111-111111111111', 'approved'),
-  ('ffffffff-ffff-4fff-8fff-ffffffffffff', '33333333-3333-4333-8333-333333333333', 'changes_needed'),
+  ('ffffffff-ffff-4fff-8fff-ffffffffffff', '77777777-7777-4777-8777-777777777777', 'approved'),
+  ('ffffffff-ffff-4fff-8fff-ffffffffffff', '88888888-8888-4888-8888-888888888888', 'changes_needed'),
   -- The overwrite spec's own copy of the same shape. See the video row above.
-  ('99999999-9999-4999-8999-999999999999', '11111111-1111-4111-8111-111111111111', 'approved'),
-  ('99999999-9999-4999-8999-999999999999', '33333333-3333-4333-8333-333333333333', 'changes_needed');
+  ('99999999-9999-4999-8999-999999999999', '77777777-7777-4777-8777-777777777777', 'approved'),
+  ('99999999-9999-4999-8999-999999999999', '88888888-8888-4888-8888-888888888888', 'changes_needed');
 -- `quiet-draft` is deliberately UNASSIGNED: zero assignments must not read as "everybody approved",
 -- which is what `[].every()` would say.
 
 -- A v1 note on a video that is now at v2. This is the case the `video_version` column exists for:
 -- without it this line would export under the v2 heading.
 insert into review.notes (video_id, reviewer_id, t_seconds, body, video_version, resolved_at) values
-  ('dddddddd-dddd-4ddd-8ddd-dddddddddddd', '11111111-1111-4111-8111-111111111111',
+  ('dddddddd-dddd-4ddd-8ddd-dddddddddddd', '77777777-7777-4777-8777-777777777777',
    7, 'good to go, but the caption needs the hashtag trimmed', 1, null),
-  ('bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb', '11111111-1111-4111-8111-111111111111',
+  ('bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb', '77777777-7777-4777-8777-777777777777',
    11, 'v1: the logo lands too late', 1, now()),
-  ('bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb', '11111111-1111-4111-8111-111111111111',
+  ('bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb', '77777777-7777-4777-8777-777777777777',
    4, 'v2: better, but the text is still small on a phone', 2, null),
   -- ⚠️ THE EXPORT SKIPS A VIDEO WITH NO NOTES ENTIRELY, so without this line `split-cut` has no
   -- heading and every assertion about what its heading says is unreachable — green against an
   -- export that would happily print CLEARED over the objection. Same shape as the phone spec:
   -- the assertion has to be made at a state that exists.
-  ('ffffffff-ffff-4fff-8fff-ffffffffffff', '11111111-1111-4111-8111-111111111111',
+  ('ffffffff-ffff-4fff-8fff-ffffffffffff', '77777777-7777-4777-8777-777777777777',
    9, 'the transition at the end is abrupt', 1, null);
 
 -- Harness accounts. The stub `auth.users` rows exist so the profiles FK is real; the passwords
@@ -100,6 +116,14 @@ insert into auth.users (id, email) values
 insert into review.profiles (user_id, role, name) values
   ('55555555-5555-4555-8555-555555555555', 'admin',  'Harness Admin'),
   ('66666666-6666-4666-8666-666666666666', 'tester', 'Harness Tester');
+
+-- ⚠️ THE ADMIN, ASSIGNED TO ONE VIDEO — the fixture for "roles gate the surface, assignments decide
+-- what is on it". The admin opens /review and sees THIS video and not Dana's, which an
+-- admin-sees-everything implementation would fail. Without it an admin's /review is empty, and
+-- "empty" is also what a broken query returns. It lives down here rather than with the other
+-- assignments because the profile it points at does not exist until the statement above.
+insert into review.video_reviewers (video_id, reviewer_id, verdict) values
+  ('eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee', '55555555-5555-4555-8555-555555555555', null);
 
 -- A couple of subscriptions so the renewal states have something to render. Dates are RELATIVE to
 -- the day the harness starts, so the "soon" row is always soon and the spec never rots.

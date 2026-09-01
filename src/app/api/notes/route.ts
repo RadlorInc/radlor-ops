@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { callerKey, overLimit } from '../_rateLimit'
-import { insertNote, myAssignment, reviewerByToken, reviewerVideoBySlug, setOutcome } from '@/lib/db'
+import { reviewerIdentity } from '@/lib/reviewerIdentity'
+import { insertNote, myAssignment, reviewerVideoBySlug, setOutcome } from '@/lib/db'
 
 /**
  * Create one timestamped note.
@@ -32,7 +33,8 @@ export async function POST(req: Request) {
   const body = typeof raw.body === 'string' ? raw.body.trim().slice(0, 4000) : ''
   const t = typeof raw.t_seconds === 'number' ? Math.round(raw.t_seconds) : NaN
 
-  const reviewer = await reviewerByToken(token)
+  // Session first, token second — same person either way. See reviewerIdentity().
+  const reviewer = await reviewerIdentity(token || null)
   // 404, not 401/403 — same answer for unknown, revoked and malformed.
   if (!reviewer) return NextResponse.json({ error: 'not_found' }, { status: 404 })
 

@@ -1,44 +1,20 @@
-import Link from 'next/link'
 import { notFound } from 'next/navigation'
-import { reviewerByToken, videosForReviewer } from '@/lib/db'
+import { reviewerIdentity } from '@/lib/reviewerIdentity'
+import { ReviewerList } from '@/app/review/ReviewerSurface'
 
-/** Never cached and never statically generated: the list is per-token and changes as videos move
- *  in and out of `awaiting_review`. */
+/**
+ * ⚠️ THE OLD DOOR. Kept working until a human has signed in at /review and said it worked — the
+ * same rule that governed removing the `?k=<ADMIN_TOKEN>` gate. Deleting this route, the tokens
+ * and the token column is one commit, and it happens after that confirmation, not before.
+ */
 export const dynamic = 'force-dynamic'
 
-export default async function ReviewerList({ params }: { params: Promise<{ token: string }> }) {
+export default async function ReviewerList_({ params }: { params: Promise<{ token: string }> }) {
   const { token } = await params
-  const reviewer = await reviewerByToken(token)
   // Unknown token and revoked token take the SAME branch. A distinct error for "revoked" would
   // confirm to whoever is holding it that the token was once real.
-  if (!reviewer) notFound()
+  const identity = await reviewerIdentity(token)
+  if (!identity) notFound()
 
-  const videos = await videosForReviewer(reviewer.id)
-
-  return (
-    <main className="wrap">
-      <h1>Radlor — videos to review</h1>
-      <p className="muted small">
-        Signed in as {reviewer.name}. This link is yours; please don’t forward it.
-      </p>
-
-      {videos.length === 0 ? (
-        <p className="muted" style={{ marginTop: 24 }}>
-          Nothing waiting on you right now. This page will fill up when the next cut is ready.
-        </p>
-      ) : (
-        <div style={{ marginTop: 20 }}>
-          {videos.map((v) => (
-            <Link key={v.id} className="card" href={`/r/${encodeURIComponent(token)}/${v.slug}`}>
-              <strong>{v.title}</strong>
-              <div className="muted small">
-                {v.slug} · v{v.version}
-                {v.myVerdict && ' · you marked this finished'}
-              </div>
-            </Link>
-          ))}
-        </div>
-      )}
-    </main>
-  )
+  return <ReviewerList identity={identity} hrefBase={`/r/${encodeURIComponent(token)}`} />
 }

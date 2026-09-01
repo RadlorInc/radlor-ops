@@ -196,6 +196,10 @@ async function readBody(req) {
 const ACCOUNTS = {
   'admin@harness.test': { password: 'harness-admin-pw', id: '55555555-5555-4555-8555-555555555555' },
   'tester@harness.test': { password: 'harness-tester-pw', id: '66666666-6666-4666-8666-666666666666' },
+  // The reviewer accounts. Dana holds assignments; Flood is the second reviewer on the split
+  // videos, and is also the one the rate-limit spec floods through the token door.
+  'dana@example.com': { password: 'harness-dana-pw', id: '77777777-7777-4777-8777-777777777777' },
+  'flood@example.com': { password: 'harness-flood-pw', id: '88888888-8888-4888-8888-888888888888' },
 }
 /** Deliberately short so a test can watch a session expire without waiting. */
 const ACCESS_TTL = Number(process.env.FAKE_ACCESS_TTL || 3600)

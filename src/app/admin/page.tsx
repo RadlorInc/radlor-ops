@@ -51,6 +51,12 @@ export default async function Admin() {
       <h1>Dashboard</h1>
       <p className="muted small">
         {me.name} · <a href="/tester">Chapter testing</a> ·{' '}
+        {/* Roles gate the surface; assignments decide what is on it. An admin with no assignments
+            gets an empty list here, which is correct. */}
+        <a href="/review" data-testid="my-review-list">
+          Videos assigned to me
+        </a>{' '}
+        ·{' '}
         <span data-testid="signout-inline">
           <form method="post" action="/api/auth/logout" style={{ display: 'inline' }}>
             <button className="linky" type="submit" data-testid="sign-out">

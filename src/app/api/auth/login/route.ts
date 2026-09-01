@@ -95,7 +95,20 @@ export async function POST(req: Request) {
         .then((r) => (r.ok ? r.json() : []))
         .catch(() => [])
     : []
-  const home = me?.[0]?.role === 'tester' ? '/tester' : '/admin'
+  /**
+   * ⚠️ AN EXPLICIT MAP, AND THE DEFAULT IS NOT `/admin`. This was
+   * `role === 'tester' ? '/tester' : '/admin'` — a ternary whose else-branch quietly meant
+   * "everyone who is not a tester is an admin". Adding the `reviewer` role made that false, and a
+   * reviewer's very first act after signing in was a 404 on `/admin`: the identical failure the
+   * comment above records being fixed for testers, brought back by a role the expression could not
+   * see. A two-valued ternary over a set that later grew is one of the quieter ways this happens.
+   *
+   * Unknown role lands on the login form with an error rather than on somebody else's dashboard.
+   * They are authenticated and can do nothing until a human fixes their profile row, and saying so
+   * is better than a 404 that looks like a broken deploy.
+   */
+  const HOME: Record<string, string> = { admin: '/admin', tester: '/tester', reviewer: '/review' }
+  const home = HOME[me?.[0]?.role as string] ?? '/login?error=norole'
 
   const out = seeOther(home)
   const secure = req.headers.get('x-forwarded-proto') === 'https' || new URL(req.url).protocol === 'https:'
