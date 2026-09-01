@@ -109,3 +109,81 @@ test('and a signed-OUT caller gets 404 from the API, not a redirect that reads a
   const res = await request.post('/api/admin/todo', { data: { task: 'should not land either' } })
   expect(res.status()).toBe(404)
 })
+
+test('a duplicate tool says so instead of failing blankly, and edit exists so nobody has to retry', async ({ page }) => {
+  await signIn(page, 'admin')
+  await page.getByTestId('cost-add').click()
+  await page.getByTestId('cost-tool').fill('Higgsfield')   // already in the seed
+  await page.getByTestId('cost-credits_remaining').fill('19973')
+  await page.getByTestId('cost-save').click()
+
+  const err = page.getByTestId('cost-error')
+  await expect(err).toBeVisible()
+  // Names the thing and says what to do — not "check the numbers".
+  await expect(err).toContainText('Higgsfield')
+  await expect(err).toContainText('Edit that one')
+  await expect(err).not.toContainText('Check the numbers')
+})
+
+test('a thousands separator is a number, not an error', async ({ page, request }) => {
+  await signIn(page, 'admin')
+  await page.getByTestId('cost-add').click()
+  await page.getByTestId('cost-tool').fill('Runway')
+  await page.getByTestId('cost-credits_remaining').fill('19,973')
+  await page.getByTestId('cost-save').click()
+  await expect(page.getByTestId('cost-row').filter({ hasText: 'Runway' })).toBeVisible()
+
+  const [row] = await rows(request, 'subscriptions', '&tool=eq.Runway')
+  expect(Number(row.credits_remaining)).toBe(19973)
+})
+
+test('a bad number names its own field', async ({ page }) => {
+  await signIn(page, 'admin')
+  await page.getByTestId('cost-add').click()
+  await page.getByTestId('cost-tool').fill('Whatever')
+  await page.getByTestId('cost-monthly_cost').fill('twelve pounds')
+  await page.getByTestId('cost-save').click()
+  await expect(page.getByTestId('cost-error')).toContainText('Monthly cost must be a number')
+})
+
+test('editing a subscription updates the row rather than adding a second one', async ({ page, request }) => {
+  await signIn(page, 'admin')
+  const before = (await rows(request, 'subscriptions')).length
+  const target = page.getByTestId('cost-row').filter({ hasText: 'Higgsfield' })
+  await target.getByTestId('cost-edit').click()
+  await page.getByTestId('cost-credits_remaining').fill('19973')
+  await page.getByTestId('cost-save').click()
+
+  await expect
+    .poll(async () => Number((await rows(request, 'subscriptions', '&tool=eq.Higgsfield'))[0]?.credits_remaining))
+    .toBe(19973)
+  // The count must not move — an "edit" that inserts is the bug that started this.
+  expect((await rows(request, 'subscriptions')).length).toBe(before)
+})
+
+test('tester issues appear on the dashboard, action-needed first, with null reporters named as imported', async ({ page }) => {
+  await signIn(page, 'admin')
+  await expect(page.getByTestId('issues-count')).toContainText('needing something')
+
+  // Open and Ready for retest start expanded; Resolved starts collapsed.
+  const open = page.getByTestId('issue-group-open')
+  const retest = page.getByTestId('issue-group-ready_for_retest')
+  if (await open.count()) expect(await open.evaluate((e: HTMLDetailsElement) => e.open)).toBe(true)
+  if (await retest.count()) expect(await retest.evaluate((e: HTMLDetailsElement) => e.open)).toBe(true)
+  const resolved = page.getByTestId('issue-group-resolved')
+  if (await resolved.count()) expect(await resolved.evaluate((e: HTMLDetailsElement) => e.open)).toBe(false)
+
+  // The absence is the fact, rendered as such.
+  await expect(page.getByTestId('issue-reporter').filter({ hasText: 'imported from the sheet' }).first()).toBeVisible()
+})
+
+test('an admin can move an issue to resolved from the dashboard, and the row moves too', async ({ page, request }) => {
+  await signIn(page, 'admin')
+  const [target] = await rows(request, 'issues', '&status=eq.open&limit=1')
+  const row = page.getByTestId('admin-issue').filter({ has: page.locator(`text=${String(target.description).slice(0, 24)}`) })
+  await row.getByTestId('admin-issue-status').selectOption('resolved')
+
+  await expect
+    .poll(async () => (await rows(request, 'issues', `&id=eq.${target.id}`))[0]?.status)
+    .toBe('resolved')
+})

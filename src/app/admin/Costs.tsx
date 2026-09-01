@@ -18,32 +18,83 @@ export default function Costs({ initial, today }: { initial: Subscription[]; tod
   const [rows, setRows] = useState(initial)
   const [form, setForm] = useState(BLANK)
   const [adding, setAdding] = useState(false)
+  /** ⚠️ EDITING EXISTED IN THE API AND NOT IN THE UI, so the only way to change a credit balance
+   *  was to re-add the tool — which hit the unique constraint and answered 500. The brief said
+   *  "a table I edit by hand"; this is that half. */
+  const [editing, setEditing] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const now = new Date(today)
 
   const total = rows.reduce((s, r) => s + Number(r.monthly_cost ?? 0), 0)
 
-  async function add() {
-    if (!form.tool.trim()) return
+  /** The server names the field and the reason; showing anything else here throws that away. */
+  async function send(method: 'POST' | 'PATCH', body: unknown): Promise<Record<string, unknown> | null> {
     setBusy(true)
     setError(null)
     try {
       const res = await fetch('/api/admin/subscription', {
-        method: 'POST',
+        method,
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(form),
+        body: JSON.stringify(body),
       })
-      if (!res.ok) throw new Error()
-      const { subscription } = await res.json()
-      setRows((xs) => [...xs, subscription])
-      setForm(BLANK)
-      setAdding(false)
+      const data = (await res.json().catch(() => ({}))) as { message?: string }
+      if (!res.ok) {
+        setError(data.message ?? 'That did not save.')
+        return null
+      }
+      return data as Record<string, unknown>
     } catch {
-      setError('That did not save. Check the numbers and try again.')
+      setError('Could not reach the server. Try again.')
+      return null
     } finally {
       setBusy(false)
     }
+  }
+
+  async function add() {
+    if (!form.tool.trim()) return
+    const data = await send('POST', form)
+    if (!data) return
+    setRows((xs) => [...xs, data.subscription as Subscription])
+    setForm(BLANK)
+    setAdding(false)
+  }
+
+  async function saveEdit(row: Subscription) {
+    const data = await send('PATCH', { id: row.id, ...form })
+    if (!data) return
+    setRows((xs) =>
+      xs.map((r) =>
+        r.id === row.id
+          ? {
+              ...r,
+              plan: form.plan || null,
+              renewal_date: form.renewal_date || null,
+              monthly_cost: form.monthly_cost === '' ? null : String(Number(form.monthly_cost.replace(/[,\s]/g, ''))),
+              credits_remaining:
+                form.credits_remaining === '' ? null : String(Number(form.credits_remaining.replace(/[,\s]/g, ''))),
+              credits_source: 'manual',
+              last_updated: new Date().toISOString(),
+            }
+          : r,
+      ),
+    )
+    setEditing(null)
+    setForm(BLANK)
+  }
+
+  function startEdit(r: Subscription) {
+    setEditing(r.id)
+    setAdding(false)
+    setError(null)
+    setForm({
+      tool: r.tool,
+      plan: r.plan ?? '',
+      renewal_date: r.renewal_date ?? '',
+      monthly_cost: r.monthly_cost ?? '',
+      credits_remaining: r.credits_remaining ?? '',
+    })
   }
 
   return (
@@ -76,7 +127,14 @@ export default function Costs({ initial, today }: { initial: Subscription[]; tod
               const state = renewalState(r.renewal_date, now)
               return (
                 <tr key={r.id} data-testid="cost-row" data-renewal={state}>
-                  <td>{r.tool}</td>
+                  <td>
+                    {r.tool}
+                    <div>
+                      <button className="linky small" onClick={() => startEdit(r)} data-testid="cost-edit">
+                        edit
+                      </button>
+                    </div>
+                  </td>
                   <td className="muted small">{r.plan ?? '—'}</td>
                   <td>
                     <span className={`pill pill-${state}`} data-testid="renewal-pill">
@@ -104,22 +162,31 @@ export default function Costs({ initial, today }: { initial: Subscription[]; tod
         </table>
       )}
 
-      {adding ? (
+      {adding || editing ? (
         <div className="addrow" data-testid="cost-form">
           {(['tool', 'plan', 'renewal_date', 'monthly_cost', 'credits_remaining'] as const).map((k) => (
             <input
               key={k}
-              type={k === 'renewal_date' ? 'date' : k.includes('cost') || k.includes('credits') ? 'number' : 'text'}
+              /* ⚠️ `text`, not `number`, for the money fields. A number input silently drops a
+                 thousands separator in some browsers and refuses it in others, so the value the
+                 server sees is not the value the person typed. The route parses commas itself. */
+              type={k === 'renewal_date' ? 'date' : 'text'}
+              inputMode={k.includes('cost') || k.includes('credits') ? 'decimal' : undefined}
               placeholder={k.replace(/_/g, ' ')}
               value={form[k]}
+              disabled={editing !== null && k === 'tool'}
               onChange={(e) => setForm({ ...form, [k]: e.target.value })}
               data-testid={`cost-${k}`}
             />
           ))}
-          <button onClick={add} disabled={busy || !form.tool.trim()} data-testid="cost-save">
+          <button
+            onClick={() => (editing ? saveEdit(rows.find((r) => r.id === editing)!) : add())}
+            disabled={busy || !form.tool.trim()}
+            data-testid="cost-save"
+          >
             Save
           </button>
-          <button className="ghost" onClick={() => setAdding(false)}>
+          <button className="ghost" onClick={() => { setAdding(false); setEditing(null); setForm(BLANK); setError(null) }}>
             Cancel
           </button>
         </div>

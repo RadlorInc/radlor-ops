@@ -1,6 +1,8 @@
 import { allNotes, allVideos } from '@/lib/db'
-import { listSubscriptions, listTodos } from '@/lib/adminDb'
+import { listIssues, listSubscriptions, listTodos } from '@/lib/adminDb'
+import { listProfiles } from '@/lib/adminDb'
 import { requireRole } from '@/lib/session'
+import AdminIssues from './AdminIssues'
 import Costs from './Costs'
 import Todos from './Todos'
 
@@ -11,12 +13,15 @@ export default async function Admin() {
 
   // ⚠️ The two admin tables are read AS THE USER (RLS decides); videos and notes still go through
   // the service key, because reviewers have no account for a policy to be written against.
-  const [videos, notes, subscriptions, todos] = await Promise.all([
+  const [videos, notes, subscriptions, todos, issues, people] = await Promise.all([
     allVideos(),
     allNotes(),
     listSubscriptions(),
     listTodos(),
+    listIssues(),
+    listProfiles(),
   ])
+  const names = Object.fromEntries(people.map((p) => [p.user_id, p.name]))
 
   // Unread = not yet acted on. `resolved_at` is the only thing that clears it.
   const unread = new Map<string, number>()
@@ -43,6 +48,8 @@ export default async function Admin() {
       <Costs initial={subscriptions} today={new Date().toISOString()} />
 
       <Todos initial={todos} />
+
+      <AdminIssues initial={issues} names={names} />
 
       <h2 style={{ marginTop: 36 }}>Videos</h2>
       <p className="muted small">

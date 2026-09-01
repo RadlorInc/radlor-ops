@@ -124,3 +124,7 @@ ol.issues li { border-top: 1px solid var(--line); padding: 12px 0; }
 li[data-status='resolved'] > div > .chip { background: #16241c; border-color: #2c4636; color: #cfe8d8; }
 li[data-status='ready_for_retest'] > div > .chip { background: #2a2115; border-color: #4a3a1e; color: #ecd39a; }
 select { font: inherit; color: var(--text); background: #0f1017; border: 1px solid var(--line); border-radius: 8px; padding: 6px 8px; }
+button.linky.small { font-size: 12px; }
+details.group { border-top: 1px solid var(--line); padding: 8px 0; }
+details.group > summary { padding: 4px 0; font-weight: 500; }
+details.group ol.issues li:first-child { border-top: 0; }

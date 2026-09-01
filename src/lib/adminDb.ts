@@ -184,3 +184,8 @@ export function listSessions(testerId?: string): Promise<
   const filter = testerId ? `&tester=eq.${testerId}` : ''
   return asUser('sessions', `testing_sessions?select=id,tester,started_at,last_seen_at,issue_count&order=last_seen_at.desc${filter}`)
 }
+
+/** Names for the reporter column. An admin can read every profile — `profiles_read_all_if_admin`. */
+export function listProfiles(): Promise<{ user_id: string; name: string }[]> {
+  return asUser('profiles', 'profiles?select=user_id,name')
+}
