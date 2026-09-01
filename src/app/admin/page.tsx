@@ -1,10 +1,10 @@
 import { allNotes, allVideos } from '@/lib/db'
-import { requireAdminDuringHandover } from '@/lib/adminGate'
+import { requireRole } from '@/lib/session'
 
 export const dynamic = 'force-dynamic'
 
 export default async function Admin() {
-  const legacy = await requireAdminDuringHandover()
+  const me = await requireRole('admin')
 
   const [videos, notes] = await Promise.all([allVideos(), allNotes()])
 
@@ -19,15 +19,9 @@ export default async function Admin() {
 
   return (
     <main className="wrap">
-      {legacy && (
-        <p className="warn small" data-testid="legacy-gate-notice">
-          You are signed in with the old <code>?k=</code> link, not an account. That path is being
-          removed — create your admin account and sign in at <a href="/login">/login</a>.
-        </p>
-      )}
       <h1>Videos</h1>
       <p className="muted small">
-        <a href="/tester">Chapter testing</a> ·{' '}
+        {me.name} · <a href="/tester">Chapter testing</a> ·{' '}
         <span data-testid="signout-inline">
           <form method="post" action="/api/auth/logout" style={{ display: 'inline' }}>
             <button className="linky" type="submit" data-testid="sign-out">

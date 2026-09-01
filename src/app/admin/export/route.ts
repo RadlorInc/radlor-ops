@@ -1,6 +1,4 @@
-import { cookies } from 'next/headers'
 import { allNotes, allVideos } from '@/lib/db'
-import { ADMIN_COOKIE, tokenValid } from '@/lib/admin'
 import { currentProfile } from '@/lib/session'
 import { formatT } from '@/lib/review'
 
@@ -17,10 +15,9 @@ import { formatT } from '@/lib/review'
 export const dynamic = 'force-dynamic'
 
 export async function GET(req: Request) {
-  // Same handover rule as the page: an admin account, or the legacy link until it is removed.
-  const legacy = tokenValid((await cookies()).get(ADMIN_COOKIE)?.value)
-  const isAdmin = legacy || (await currentProfile())?.role === 'admin'
-  if (!isAdmin) return new Response('Not found', { status: 404 })
+  // A route handler, not a page: it answers 404 rather than redirecting to a login form, because
+  // there is nowhere to render a form inside a text/plain download.
+  if ((await currentProfile())?.role !== 'admin') return new Response('Not found', { status: 404 })
 
   const all = new URL(req.url).searchParams.get('all') === '1'
   const [videos, notes] = await Promise.all([allVideos(), allNotes()])

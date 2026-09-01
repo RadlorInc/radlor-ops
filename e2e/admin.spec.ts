@@ -1,18 +1,15 @@
 import { expect, test } from '@playwright/test'
-import { ADMIN_TOKEN } from './tokens'
-
-/** Done-means #5: /admin without ADMIN_TOKEN is a 404; with it, it lists the videos. Plus the
- *  cookie exchange — the token is in the URL for exactly one request. */
+import { signIn } from './signIn'
 
 /**
- * ⚠️ THE CONTRACT CHANGED WHEN ACCOUNTS ARRIVED, AND THIS IS THE NEW ONE.
- * A signed-out visitor to /admin now gets the LOGIN PAGE, not a 404. That is deliberate: admins and
- * testers are expected users, and hiding the door from someone who is supposed to walk through it
- * is a support ticket, not security. The 404 is reserved for someone who IS signed in and is not
- * an admin — see `auth.spec.ts`, which can only run against the live project.
+ * The admin surface, now gated by an account rather than a shared `?k=` secret.
  *
- * What did NOT change is that a wrong key is indistinguishable from no key.
+ * ⚠️ THE CONTRACT CHANGED WITH ACCOUNTS. A signed-OUT visitor to /admin gets the LOGIN PAGE, not a
+ * 404: admins and testers are expected users, and hiding the door from someone who is supposed to
+ * walk through it is a support ticket, not security. The 404 is reserved for someone who IS signed
+ * in and is not an admin — a tester must not learn that /admin is a real page.
  */
+
 test('/admin signed out goes to the login page', async ({ page }) => {
   const res = await page.goto('/admin')
   expect(res?.status()).toBe(200)
@@ -20,42 +17,73 @@ test('/admin signed out goes to the login page', async ({ page }) => {
   await expect(page.getByTestId('sign-in')).toBeVisible()
 })
 
-test('a wrong admin key is indistinguishable from no key, and sets no cookie', async ({ page }) => {
-  await page.goto('/admin?k=not-the-token')
-  const wrong = { path: new URL(page.url()).pathname, body: await page.locator('body').innerText() }
-  expect(await page.context().cookies()).toEqual([])
+test('a wrong password is refused, and says nothing about whether the account exists', async ({ page }) => {
+  await page.goto('/login')
+  await page.getByTestId('email').fill('admin@harness.test')
+  await page.getByTestId('password').fill('not-the-password')
+  await page.getByTestId('sign-in').click()
+  await expect(page.getByTestId('login-error')).toBeVisible()
+  const real = await page.getByTestId('login-error').innerText()
 
-  await page.goto('/admin')
-  expect({ path: new URL(page.url()).pathname, body: await page.locator('body').innerText() }).toEqual(wrong)
+  await page.goto('/login')
+  await page.getByTestId('email').fill('nobody-here@harness.test')
+  await page.getByTestId('password').fill('not-the-password')
+  await page.getByTestId('sign-in').click()
+  // Identical wording for "wrong password" and "no such account" — otherwise the form is an
+  // account-enumeration oracle, and with self-signup off, knowing who has an account is knowing
+  // who works here.
+  await expect(page.getByTestId('login-error')).toHaveText(real)
 })
 
-test('/admin with the token lists every video, status, version and unread count', async ({ page }) => {
-  const res = await page.goto(`/admin?k=${ADMIN_TOKEN}`)
+test('an admin signs in and sees the video list', async ({ page }) => {
+  await signIn(page, 'admin', { fresh: true })   // this test is about the form itself
+  const res = await page.goto('/admin')
   expect(res?.status()).toBe(200)
 
   const rows = page.getByTestId('admin-row')
   await expect(rows).toHaveCount(4)
-  // Including the draft, which the reviewer cannot see at all.
   await expect(rows.filter({ hasText: 'quiet-draft' })).toContainText('draft')
   await expect(rows.filter({ hasText: 'hook-test-b' })).toContainText('v2')
-  // Verdict is its own column, separate from status.
   await expect(rows.filter({ hasText: 'cta-cut' })).toContainText('approved')
   await expect(rows.filter({ hasText: 'equals-reel-final' })).toContainText('—')
 })
 
-test('the token leaves the URL after one request and the cookie carries it after that', async ({ page }) => {
-  await page.goto(`/admin?k=${ADMIN_TOKEN}`)
+test('a TESTER gets 404 on /admin — and the admin still gets 200, or that proves nothing', async ({ page, browser }) => {
+  await signIn(page, 'tester')
+  await expect(page.getByTestId('tester-greeting')).toBeVisible()
+  expect((await page.goto('/admin'))?.status()).toBe(404)
+  expect((await page.goto('/tester'))?.status()).toBe(200)
 
-  // The parameter is gone from the address the browser ends up on — so it is not in the history,
-  // not in a referrer, and not in any later request line.
-  expect(page.url()).not.toContain(ADMIN_TOKEN)
-  expect(new URL(page.url()).search).toBe('')
+  /**
+   * ⚠️ THE POSITIVE CONTROL, IN THE SAME TEST ON PURPOSE. A build that 404s /admin for EVERYONE
+   * satisfies the assertion above completely. The tester's 404 only means "role gating works"
+   * while an admin, in a separate session, still gets 200 from the same URL.
+   */
+  const other = await browser.newContext()
+  const adminPage = await other.newPage()
+  await signIn(adminPage, 'admin')
+  expect((await adminPage.goto('/admin'))?.status()).toBe(200)
+  await other.close()
+})
 
-  const cookie = (await page.context().cookies()).find((c) => c.name === 'rvr_admin')
-  expect(cookie?.httpOnly).toBe(true)
-  expect(cookie?.path).toBe('/admin')
+test('the session cookies are httpOnly and page script cannot read them', async ({ page }) => {
+  await signIn(page, 'admin', { fresh: true })   // the flags are set by the login ROUTE
+  const jar = await page.context().cookies()
+  const at = jar.find((c) => c.name === 'rvr_at')
+  const rt = jar.find((c) => c.name === 'rvr_rt')
+  expect(at?.httpOnly).toBe(true)
+  expect(rt?.httpOnly).toBe(true)
+  expect(await page.evaluate(() => document.cookie)).toBe('')
+})
 
-  // A bare /admin now works, with no secret anywhere in the request line.
+test('signing out ends the session', async ({ page }) => {
+  await signIn(page, 'admin', { fresh: true })
   expect((await page.goto('/admin'))?.status()).toBe(200)
-  await expect(page.getByTestId('admin-row')).toHaveCount(4)
+
+  await page.getByTestId('sign-out').click()
+  await page.waitForURL(/\/login/)
+  // Not just "the button navigated" — the session must actually be gone.
+  await page.goto('/admin')
+  expect(new URL(page.url()).pathname).toBe('/login')
+  expect((await page.context().cookies()).filter((c) => c.value !== '')).toEqual([])
 })

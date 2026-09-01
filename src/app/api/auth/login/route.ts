@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { callerKey, overLimit } from '../../_rateLimit'
+import { SCHEMA } from '@/lib/db'
 import { AT_COOKIE, RT_COOKIE } from '@/lib/session'
 
 /**
@@ -15,17 +16,25 @@ import { AT_COOKIE, RT_COOKIE } from '@/lib/session'
  */
 export const dynamic = 'force-dynamic'
 
+/**
+ * ⚠️ RELATIVE `Location`, NOT `NextResponse.redirect(new URL(..., req.url))`.
+ * `req.url`'s host is whatever the server resolved, which is NOT always the host the browser used:
+ * on a local production build it came back as `localhost` for a request made to `127.0.0.1`. Those
+ * are different origins for cookies, so the session was set on one host and the redirect sent the
+ * browser to the other — sign-in failed silently, and looked like broken auth rather than a broken
+ * redirect. A relative Location is resolved by the browser against the origin it actually used, so
+ * the mismatch cannot happen.
+ */
+function seeOther(path: string): NextResponse {
+  return new NextResponse(null, { status: 303, headers: { Location: path } })
+}
+
 /** Password guessing is the attack this route exists to be slow about. Ten a minute per IP. */
 const LIMIT = 10
 const WINDOW_MS = 60_000
 
 export async function POST(req: Request) {
-  const back = new URL('/login', req.url)
-
-  if (overLimit(callerKey(req, 'login'), LIMIT, WINDOW_MS)) {
-    back.searchParams.set('error', 'rate')
-    return NextResponse.redirect(back, 303)
-  }
+  if (overLimit(callerKey(req, 'login'), LIMIT, WINDOW_MS)) return seeOther('/login?error=rate')
 
   const form = await req.formData().catch(() => null)
   const email = String(form?.get('email') ?? '').trim().slice(0, 254)
@@ -33,10 +42,7 @@ export async function POST(req: Request) {
   const url = process.env.SUPABASE_URL
   const anon = process.env.SUPABASE_ANON_KEY
 
-  if (!email || !password || !url || !anon) {
-    back.searchParams.set('error', '1')
-    return NextResponse.redirect(back, 303)
-  }
+  if (!email || !password || !url || !anon) return seeOther('/login?error=1')
 
   const res = await fetch(`${url}/auth/v1/token?grant_type=password`, {
     method: 'POST',
@@ -45,28 +51,54 @@ export async function POST(req: Request) {
     cache: 'no-store',
   })
 
-  if (!res.ok) {
-    // ⚠️ The body is NOT read into the redirect. Supabase's message distinguishes "invalid login
-    // credentials" from other states, and passing that through would rebuild the oracle this route
-    // just avoided.
-    back.searchParams.set('error', '1')
-    return NextResponse.redirect(back, 303)
-  }
+  // ⚠️ The body is NOT read into the redirect. Supabase's message distinguishes "invalid login
+  // credentials" from other states, and passing that through would rebuild the oracle this route
+  // just avoided.
+  if (!res.ok) return seeOther('/login?error=1')
 
   const { access_token, refresh_token, expires_in } = (await res.json()) as {
     access_token?: string
     refresh_token?: string
     expires_in?: number
   }
-  if (!access_token || !refresh_token) {
-    back.searchParams.set('error', '1')
-    return NextResponse.redirect(back, 303)
-  }
+  if (!access_token || !refresh_token) return seeOther('/login?error=1')
 
-  // Land on /admin; a tester without admin gets 404 there and can go to /tester. Kept simple
-  // deliberately: a `next` parameter taken from the URL is an open-redirect waiting to happen.
-  const out = NextResponse.redirect(new URL('/admin', req.url), 303)
-  const secure = new URL(req.url).protocol === 'https:'
+  /**
+   * ⚠️ LAND THEM WHERE THEY BELONG. The first version sent everyone to /admin, so a tester's very
+   * first act after signing in was a 404 on their own tool — correct gating, terrible product.
+   * The destination comes from the profile, read with the user's OWN token so the row arrives via
+   * the `profiles_read_own` policy rather than by the app deciding.
+   *
+   * Deliberately NOT a `next` parameter from the URL: that is an open redirect waiting to happen,
+   * and there are exactly two destinations.
+   */
+  const who = await fetch(`${url}/auth/v1/user`, {
+    headers: { apikey: anon, Authorization: `Bearer ${access_token}` },
+    cache: 'no-store',
+  })
+    .then((r) => (r.ok ? r.json() : null))
+    .catch(() => null)
+
+  /**
+   * ⚠️ FILTERED BY `user_id`, NOT LEFT TO RLS ALONE. The first version asked for
+   * `profiles?select=role&limit=1` and trusted the policy to make that mean "my row". It does, in
+   * production — but a query whose correctness depends entirely on a policy elsewhere returns
+   * SOMEBODY'S role the moment that policy widens, and it returned the admin's the moment it met
+   * an environment with no RLS at all. The filter and the policy now have to agree; either alone
+   * gives the right answer.
+   */
+  const me = who?.id
+    ? await fetch(`${url}/rest/v1/profiles?select=role&user_id=eq.${who.id}&limit=1`, {
+        headers: { apikey: anon, Authorization: `Bearer ${access_token}`, 'Accept-Profile': SCHEMA },
+        cache: 'no-store',
+      })
+        .then((r) => (r.ok ? r.json() : []))
+        .catch(() => [])
+    : []
+  const home = me?.[0]?.role === 'tester' ? '/tester' : '/admin'
+
+  const out = seeOther(home)
+  const secure = req.headers.get('x-forwarded-proto') === 'https' || new URL(req.url).protocol === 'https:'
   const opts = { httpOnly: true, sameSite: 'lax' as const, path: '/', secure }
   out.cookies.set(AT_COOKIE, access_token, { ...opts, maxAge: expires_in ?? 3600 })
   // The refresh token outlives the access token; that is what stops an hourly re-login.

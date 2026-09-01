@@ -35,3 +35,13 @@ insert into review.notes (video_id, reviewer_id, t_seconds, body, video_version,
    11, 'v1: the logo lands too late', 1, now()),
   ('bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb', '11111111-1111-4111-8111-111111111111',
    4, 'v2: better, but the text is still small on a phone', 2, null);
+
+-- Harness accounts. The stub `auth.users` rows exist so the profiles FK is real; the passwords
+-- live in `test/fake-supabase.mjs`, which is the only thing that checks them.
+insert into auth.users (id, email) values
+  ('55555555-5555-4555-8555-555555555555', 'admin@harness.test'),
+  ('66666666-6666-4666-8666-666666666666', 'tester@harness.test');
+
+insert into review.profiles (user_id, role, name) values
+  ('55555555-5555-4555-8555-555555555555', 'admin',  'Harness Admin'),
+  ('66666666-6666-4666-8666-666666666666', 'tester', 'Harness Tester');

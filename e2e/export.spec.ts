@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test'
-import { ADMIN_TOKEN } from './tokens'
+import { signIn } from './signIn'
 
 /** Done-means #6, plus the thing that makes `resolved_at` a column something reads. The seed has
  *  one RESOLVED v1 note and one open v2 note on `hook-test-b`. */
@@ -11,7 +11,7 @@ test('/admin/export without a session or key is a 404', async ({ page }) => {
 })
 
 test('the export is open notes only, grouped by video and version, and says what it hid', async ({ page }) => {
-  await page.goto(`/admin?k=${ADMIN_TOKEN}`)
+  await signIn(page, 'admin')
   const res = await page.goto('/admin/export')
   expect(res?.status()).toBe(200)
   expect(res!.headers()['content-type']).toContain('text/plain')
@@ -26,7 +26,7 @@ test('the export is open notes only, grouped by video and version, and says what
 })
 
 test('?all=1 includes resolved notes, struck through, under their own version heading', async ({ page }) => {
-  await page.goto(`/admin?k=${ADMIN_TOKEN}`)
+  await signIn(page, 'admin')
   const md = await (await page.goto('/admin/export?all=1'))!.text()
 
   expect(md).toContain('## hook-test-b — v1')

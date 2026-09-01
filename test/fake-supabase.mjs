@@ -61,7 +61,7 @@ const HERE = dirname(fileURLToPath(import.meta.url))
 const ROOT = join(HERE, '..')
 const PORT = Number(process.env.FAKE_SUPABASE_PORT || 54329)
 const SECRET = 'fake-storage-secret'
-const TABLES = new Set(['reviewers', 'videos', 'notes'])
+const TABLES = new Set(['reviewers', 'videos', 'notes', 'profiles'])
 /** These tables live in `review`, not `public` — the shared project's `public` belongs to the
  *  marketing site. The shim ENFORCES the profile header for the same reason real PostgREST does:
  *  without it the app would be asking for `public.reviewers`, which does not exist. If this were
@@ -73,6 +73,21 @@ const db = new PGlite()
 // Supabase ships these two roles; PGlite does not. The migration's REVOKEs name them, so they have
 // to exist for the file to run unmodified — which is the point of running the real file.
 await db.exec('create role anon; create role authenticated; create role service_role;')
+/**
+ * ⚠️ A STUB `auth` SCHEMA, SO THE PROFILES MIGRATION RUNS VERBATIM RATHER THAN BEING SKIPPED.
+ * Two tiny objects — the `users` table its foreign key points at, and `auth.uid()`. That is enough
+ * for the real DDL, the real FK and the real CHECK constraint to execute.
+ *
+ * It does NOT make RLS work. `auth.uid()` here reads a setting nobody sets, and PGlite has one
+ * superuser who bypasses policies anyway. The declared blind spot above is unchanged: this makes
+ * the SHAPE of the schema real, not its authorisation.
+ */
+await db.exec(`
+  create schema if not exists auth;
+  create table if not exists auth.users (id uuid primary key, email text);
+  create or replace function auth.uid() returns uuid language sql stable
+    as $$ select nullif(current_setting('request.jwt.claim.sub', true), '')::uuid $$;
+`)
 // Every migration, in filename order — not one hardcoded path. The first version named the file
 // directly and would have silently stopped covering anything added beside it; it broke loudly the
 // day the file was renamed to match the applied version, which was the good outcome.
@@ -85,7 +100,7 @@ for (const f of (await readdir(join(ROOT, 'supabase/migrations'))).filter((f) =>
   // project: it has no `storage` schema and no `auth` schema, so a migration referencing either
   // cannot run. Anything in a skipped file is verified LIVE or not at all — see the declared blind
   // spot above, of which this is the same class one level over.
-  const missing = /\bstorage\./.test(sql) ? 'storage' : /\bauth\.|auth\.uid\(\)/.test(sql) ? 'auth' : null
+  const missing = /\bstorage\./.test(sql) ? 'storage' : null
   if (missing) {
     console.log(`  skipped ${f} — touches the ${missing} schema, which PGlite does not have`)
     continue
@@ -153,6 +168,47 @@ async function readBody(req) {
   return chunks.length ? JSON.parse(Buffer.concat(chunks).toString()) : {}
 }
 
+/**
+ * ⚠️ A STAND-IN FOR SUPABASE AUTH, AND IT AUTHENTICATES NOTHING REAL.
+ * It exists so the offline suite can still reach `/admin` and `/tester` after the `?k=` gate was
+ * removed — without it, ten checks including the export format and every verdict assertion would
+ * have had no way in and would simply have been deleted. Passwords are a hardcoded map; the
+ * "JWT" is base64 with no signature, because nothing here verifies one.
+ *
+ * What it DOES faithfully reproduce is EXPIRY, which is the point: `exp` is real and honoured, so
+ * the proxy's refresh path can be driven deterministically instead of waiting an hour.
+ */
+const ACCOUNTS = {
+  'admin@harness.test': { password: 'harness-admin-pw', id: '55555555-5555-4555-8555-555555555555' },
+  'tester@harness.test': { password: 'harness-tester-pw', id: '66666666-6666-4666-8666-666666666666' },
+}
+/** Deliberately short so a test can watch a session expire without waiting. */
+const ACCESS_TTL = Number(process.env.FAKE_ACCESS_TTL || 3600)
+const refreshTokens = new Map()
+
+/** ⚠️ `jti` is not decoration. Without it two tokens minted in the same SECOND are byte-identical,
+ *  because `exp` has second resolution and nothing else varies — so a test asserting "the token
+ *  changed after a refresh" cannot tell a successful refresh from no refresh at all. It failed
+ *  exactly that way once. Real Supabase JWTs carry a signature that differs; this stands in for it. */
+const mkAccess = (id, email) =>
+  `x.${Buffer.from(
+    JSON.stringify({ sub: id, email, exp: Math.floor(Date.now() / 1000) + ACCESS_TTL, jti: Math.random().toString(36).slice(2) }),
+  ).toString('base64url')}.y`
+function readAccess(token) {
+  try {
+    const p = JSON.parse(Buffer.from(String(token).split('.')[1], 'base64url').toString())
+    if (!p.exp || p.exp * 1000 < Date.now()) return null
+    return p
+  } catch {
+    return null
+  }
+}
+function issue(id, email) {
+  const refresh = `refresh-${id}-${Math.random().toString(36).slice(2)}`
+  refreshTokens.set(refresh, { id, email })
+  return { access_token: mkAccess(id, email), refresh_token: refresh, expires_in: ACCESS_TTL, token_type: 'bearer' }
+}
+
 const server = createServer(async (req, res) => {
   const url = new URL(req.url, 'http://127.0.0.1')
   try {
@@ -160,6 +216,27 @@ const server = createServer(async (req, res) => {
     // require a profile header and answer 404 without one, which the harness would read as "not
     // up yet" and wait out the full timeout.
     if (url.pathname === '/health') return json(res, 200, { ok: true })
+
+    // ---- Auth --------------------------------------------------------------------------
+    if (url.pathname === '/auth/v1/token' && req.method === 'POST') {
+      const body = await readBody(req)
+      if (url.searchParams.get('grant_type') === 'refresh_token') {
+        const who = refreshTokens.get(body.refresh_token)
+        if (!who) return json(res, 400, { error: 'invalid_grant' })
+        refreshTokens.delete(body.refresh_token) // single use, like the real thing
+        return json(res, 200, issue(who.id, who.email))
+      }
+      const acct = ACCOUNTS[String(body.email || '').toLowerCase()]
+      if (!acct || acct.password !== body.password) {
+        return json(res, 400, { error: 'invalid_grant', error_description: 'Invalid login credentials' })
+      }
+      return json(res, 200, issue(acct.id, String(body.email).toLowerCase()))
+    }
+    if (url.pathname === '/auth/v1/user' && req.method === 'GET') {
+      const p = readAccess((req.headers.authorization || '').replace(/^Bearer /, ''))
+      if (!p) return json(res, 401, { message: 'invalid or expired token' })
+      return json(res, 200, { id: p.sub, email: p.email })
+    }
 
     // ---- Storage: mint a signed URL -------------------------------------------------
     let m = url.pathname.match(/^\/storage\/v1\/object\/sign\/([^/]+)\/(.+)$/)

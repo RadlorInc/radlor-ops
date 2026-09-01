@@ -1,6 +1,10 @@
 /** Fixtures shared by the specs and by `playwright.config.ts`. These match `test/seed.sql`, which
  *  is loaded into the offline PGlite database at harness start-up. Test values only. */
-export const ADMIN_TOKEN = 'admin_e2e_token_do_not_reuse'
+/** Harness accounts — see `test/fake-supabase.mjs`. Not credentials to anything real. */
+export const ACCOUNTS = {
+  admin: { email: 'admin@harness.test', password: 'harness-admin-pw' },
+  tester: { email: 'tester@harness.test', password: 'harness-tester-pw' },
+}
 export const SUPABASE_URL = 'http://127.0.0.1:54329'
 export const PORT = 3019
 

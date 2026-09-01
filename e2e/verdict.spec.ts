@@ -1,5 +1,6 @@
 import { expect, test } from '@playwright/test'
-import { ADMIN_TOKEN, SUPABASE_URL, TOKENS } from './tokens'
+import { SUPABASE_URL, TOKENS } from './tokens'
+import { signIn } from './signIn'
 
 /** `hook-test-b`, so this cannot collide with the note round-trip spec on `equals-reel-final`. */
 const PAGE = `/r/${TOKENS.valid}/hook-test-b`
@@ -69,7 +70,7 @@ test('the route refuses a bad token, a bad verdict, and a video the reviewer can
 })
 
 test('/admin surfaces approved-with-open-notes instead of letting it pass silently', async ({ page }) => {
-  await page.goto(`/admin?k=${ADMIN_TOKEN}`)
+  await signIn(page, 'admin')
   const banner = page.getByTestId('approved-with-notes')
   await expect(banner).toBeVisible()
   await expect(banner).toContainText('cta-cut')
@@ -77,7 +78,7 @@ test('/admin surfaces approved-with-open-notes instead of letting it pass silent
 })
 
 test('the export puts the verdict in the heading', async ({ page }) => {
-  await page.goto(`/admin?k=${ADMIN_TOKEN}`)
+  await signIn(page, 'admin')
   const md = await (await page.goto('/admin/export'))!.text()
   expect(md).toContain('## cta-cut — v1 — APPROVED')
   expect(md).toContain('## hook-test-b — v2 — APPROVED')
@@ -92,7 +93,7 @@ test('the export puts the verdict in the heading', async ({ page }) => {
  * question that can be answered.
  */
 test('an older version does not borrow the current verdict', async ({ page }) => {
-  await page.goto(`/admin?k=${ADMIN_TOKEN}`)
+  await signIn(page, 'admin')
   const md = await (await page.goto('/admin/export?all=1'))!.text()
   // The v1 heading must exist, or the next assertion proves nothing.
   expect(md).toContain('## hook-test-b — v1')

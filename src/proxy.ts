@@ -1,19 +1,12 @@
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
-import { ADMIN_COOKIE, ADMIN_COOKIE_MAX_AGE, ADMIN_PARAM, tokenValid } from '@/lib/admin'
-
 const AT_COOKIE = 'rvr_at'
 const RT_COOKIE = 'rvr_rt'
 
 /**
- * Two jobs, both of which have to happen before a page renders.
- *
- * 1. REFRESH AN EXPIRING SESSION. A server component cannot set cookies, so the only place a new
- *    access token can be stored is here. Without it a signed-in admin is thrown back to the login
- *    form every hour.
- *
- * 2. TAKE THE LEGACY ADMIN TOKEN OUT OF THE URL after exactly one request — unchanged, and still
- *    load-bearing until real accounts have replaced it.
+ * Refreshes an expiring session before the page renders — the only place it can happen, because a
+ * server component cannot set cookies. Without it a signed-in admin is thrown back to the login
+ * form every hour, and the first person that happens to will be a tester mid-write-up.
  *
  * ⚠️ THIS IS NOT THE AUTHORISATION CHECK. It refreshes a token; it never decides who may see a
  * page. That decision is `requireRole()` in the page itself, against a token Supabase validated.
@@ -21,25 +14,6 @@ const RT_COOKIE = 'rvr_rt'
  * route.
  */
 export async function proxy(req: NextRequest) {
-  // --- 2. legacy ?k= exchange -------------------------------------------------------------
-  const supplied = req.nextUrl.searchParams.get(ADMIN_PARAM)
-  if (supplied !== null) {
-    const url = req.nextUrl.clone()
-    url.searchParams.delete(ADMIN_PARAM)
-    const res = NextResponse.redirect(url, 302)
-    if (tokenValid(supplied)) {
-      res.cookies.set(ADMIN_COOKIE, supplied, {
-        httpOnly: true,
-        sameSite: 'lax',
-        path: '/admin',
-        secure: req.nextUrl.protocol === 'https:',
-        maxAge: ADMIN_COOKIE_MAX_AGE,
-      })
-    }
-    return res
-  }
-
-  // --- 1. refresh -------------------------------------------------------------------------
   const access = req.cookies.get(AT_COOKIE)?.value
   const refresh = req.cookies.get(RT_COOKIE)?.value
   if (!refresh || (access && !expiringSoon(access))) return NextResponse.next()

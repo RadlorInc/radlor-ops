@@ -1,5 +1,5 @@
 import { defineConfig } from '@playwright/test'
-import { ADMIN_TOKEN, PORT, SUPABASE_URL } from './e2e/tokens'
+import { PORT, SUPABASE_URL } from './e2e/tokens'
 
 /**
  * The E2E harness runs entirely OFFLINE, against `test/fake-supabase.mjs` — PGlite running this
@@ -53,7 +53,7 @@ export default defineConfig({
       env: {
         SUPABASE_URL,
         SUPABASE_SERVICE_ROLE_KEY: 'fake-service-role-key-for-the-offline-harness',
-        ADMIN_TOKEN,
+        SUPABASE_ANON_KEY: 'fake-anon-key-for-the-offline-harness',
       },
     },
   ],
