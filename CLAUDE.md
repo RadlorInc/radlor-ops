@@ -45,6 +45,29 @@ is mitigation, not erasure. ⚠️ **"Safe to break" and "safe to publish" are d
 Establish a remote's visibility BEFORE the first push, not after — a first push publishes the whole
 history at once.
 
+### The third face: filtering on the property under test
+
+Same disease, added 2026-09-01. `e2e/tester.spec.ts` asserted a new issue was flagged
+`all_chapters`, and fetched the row with `?all_chapters=eq.true&order=created_at.desc&limit=1`.
+Break the flag and the query returns an **older** row that already had it — green, on a build where
+the feature was gone.
+
+> **A filter that can only return rows already satisfying the assertion is not a query, it is a way
+> of not looking.** Fetch the row by its identity — newest overall, or by id — then assert the
+> property. The tell is a `WHERE` clause naming the same column as the `expect`.
+
+So the rule has three faces, all of which pass because the code equals itself:
+**(a)** grep-coupled to where a literal lives · **(b)** import-coupled to the value under test ·
+**(c)** filter-coupled to the property under test.
+
+### And the corollary about deleting a check
+
+A test that goes green on something the harness **structurally cannot observe** is worse than no
+test, because it consumes the attention that would otherwise notice the gap. When
+`e2e/tester.spec.ts` needed "a tester sees only their own issues" — an RLS policy, invisible to
+PGlite — the right move was to **delete it and move the property to a live script**, not to make it
+pass offline. Deleting a check is sometimes the honest option; making it green never is.
+
 ## The rest of the standing rules for this repo
 
 - ⚠️ **State the property the assertion actually checks, not the stronger one you believe is true.** A report that overstates a PASSING test is harder to catch than a failing one — nothing goes red and everything downstream reads as verified. `e2e/token-404.spec.ts` compares two 404 pages' `innerText`; it reached the reader as *"byte-identical bodies"*, which was never true (Next serialises the route param, so each 404 carries its own token). The test was right; the sentence about it was not. It surfaced only because a later run compared the raw bodies and disagreed with the passing test — when a claim and a test disagree, the claim is the likelier liar.
