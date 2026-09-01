@@ -29,7 +29,9 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: 'rate_limited' }, { status: 429 })
   }
 
-  const video = await reviewerVideoBySlug(q.get('slug') ?? '')
+  // Assignment-scoped, so a token cannot sign a URL for a video it was never given. This is the
+  // route that hands out a bearer credential for the object itself, so it is the one that matters.
+  const video = await reviewerVideoBySlug(q.get('slug') ?? '', reviewer.id)
   if (!video) return NextResponse.json({ error: 'not_found' }, { status: 404 })
 
   const url = await signedVideoUrl(video.storage_path)

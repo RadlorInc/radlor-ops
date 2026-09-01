@@ -24,7 +24,56 @@ insert into review.videos (id, slug, title, storage_path, version, status, verdi
   -- Already judged, and STILL has an open note. "Approved · N open notes" is a real state and
   -- /admin must surface it rather than let it pass silently.
   ('dddddddd-dddd-4ddd-8ddd-dddddddddddd', 'cta-cut', 'CTA cut', 'cta-cut-v1.webm',
-   1, 'reviewed', 'approved', 3);
+   1, 'reviewed', 'approved', 3),
+  -- ⚠️ REVIEWABLE, AND NOT DANA'S. Without this the assignment filter cannot be told apart from
+  -- the status filter that preceded it: every other reviewable video here is assigned to Dana, so
+  -- "she gets a 404" would be explained just as well by `status`. This one is `awaiting_review`
+  -- and belongs to somebody else, which makes the assignment the ONLY thing that can 404 it.
+  ('eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee', 'flood-only', 'Flood only', 'flood-only-v1.webm',
+   1, 'awaiting_review', null, 4),
+  -- Two reviewers who disagree. `status` is `reviewed` because both have answered; being answered
+  -- and being cleared are different questions, and this row is the one that keeps them different.
+  ('ffffffff-ffff-4fff-8fff-ffffffffffff', 'split-cut', 'Split cut', 'split-cut-v1.webm',
+   1, 'reviewed', null, 5),
+  -- ⚠️ A SECOND SPLIT VIDEO, SO THE FIRST STAYS A FIXTURE. The spec that proves one reviewer
+  -- cannot overwrite another has to WRITE verdicts, and a spec that mutates the row a later spec
+  -- reads makes that later spec pass or fail on test order rather than on the code. Caught exactly
+  -- that way: the /admin disagreement assertion went red because the overwrite spec had already
+  -- cleared Dana's verdict on `split-cut`.
+  ('99999999-9999-4999-8999-999999999999', 'overwrite-cut', 'Overwrite cut', 'overwrite-cut-v1.webm',
+   1, 'reviewed', null, 6);
+
+-- ⚠️ ASSIGNMENTS, AND THE MULTI-REVIEWER CASES THE TABLE EXISTS FOR. Without rows here every
+-- reviewer page is empty and every /admin row reads "nobody assigned" — which is correct, and is
+-- the whole change: no assignment, no video.
+--
+-- `hook-test-b` is the one that matters: TWO reviewers, one approved and one asking for changes.
+-- A suite where every video has exactly one reviewer cannot tell the new rule from the old one —
+-- "cleared when everybody approved" and "cleared when the verdict column says approved" agree on
+-- every 1:1 row, so a 1:1-only fixture would pass against the code this change replaced.
+insert into review.video_reviewers (video_id, reviewer_id, verdict) values
+  -- Dana and the flood reviewer both, nothing decided. (The rate-limit spec posts notes here as
+  -- the flood reviewer; before it was assigned, every one of those posts was a 404 — which is the
+  -- assignment filter working, and is how this fixture earned its comment.)
+  ('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', '11111111-1111-4111-8111-111111111111', null),
+  ('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', '33333333-3333-4333-8333-333333333333', null),
+  -- Dana alone — the verdict spec drives this one end to end, so nothing may be pre-decided.
+  ('bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb', '11111111-1111-4111-8111-111111111111', null),
+  -- Approved by everyone assigned, and still carrying an open note.
+  ('dddddddd-dddd-4ddd-8ddd-dddddddddddd', '11111111-1111-4111-8111-111111111111', 'approved'),
+  -- Assigned to somebody who is not Dana. See the video row above.
+  ('eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee', '33333333-3333-4333-8333-333333333333', null),
+  -- ⚠️ THE DISAGREEMENT, AND THE ONLY FIXTURE THAT CAN TELL THE NEW RULE FROM THE OLD ONE.
+  -- "cleared when every assigned reviewer approved" and "cleared when the verdict column says
+  -- approved" agree on every 1:1 row, so a suite where each video has one reviewer would pass
+  -- against the code this change replaced.
+  ('ffffffff-ffff-4fff-8fff-ffffffffffff', '11111111-1111-4111-8111-111111111111', 'approved'),
+  ('ffffffff-ffff-4fff-8fff-ffffffffffff', '33333333-3333-4333-8333-333333333333', 'changes_needed'),
+  -- The overwrite spec's own copy of the same shape. See the video row above.
+  ('99999999-9999-4999-8999-999999999999', '11111111-1111-4111-8111-111111111111', 'approved'),
+  ('99999999-9999-4999-8999-999999999999', '33333333-3333-4333-8333-333333333333', 'changes_needed');
+-- `quiet-draft` is deliberately UNASSIGNED: zero assignments must not read as "everybody approved",
+-- which is what `[].every()` would say.
 
 -- A v1 note on a video that is now at v2. This is the case the `video_version` column exists for:
 -- without it this line would export under the v2 heading.
@@ -34,7 +83,13 @@ insert into review.notes (video_id, reviewer_id, t_seconds, body, video_version,
   ('bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb', '11111111-1111-4111-8111-111111111111',
    11, 'v1: the logo lands too late', 1, now()),
   ('bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb', '11111111-1111-4111-8111-111111111111',
-   4, 'v2: better, but the text is still small on a phone', 2, null);
+   4, 'v2: better, but the text is still small on a phone', 2, null),
+  -- ⚠️ THE EXPORT SKIPS A VIDEO WITH NO NOTES ENTIRELY, so without this line `split-cut` has no
+  -- heading and every assertion about what its heading says is unreachable — green against an
+  -- export that would happily print CLEARED over the objection. Same shape as the phone spec:
+  -- the assertion has to be made at a state that exists.
+  ('ffffffff-ffff-4fff-8fff-ffffffffffff', '11111111-1111-4111-8111-111111111111',
+   9, 'the transition at the end is abrupt', 1, null);
 
 -- Harness accounts. The stub `auth.users` rows exist so the profiles FK is real; the passwords
 -- live in `test/fake-supabase.mjs`, which is the only thing that checks them.

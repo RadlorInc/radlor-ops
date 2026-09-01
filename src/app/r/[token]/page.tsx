@@ -13,7 +13,7 @@ export default async function ReviewerList({ params }: { params: Promise<{ token
   // confirm to whoever is holding it that the token was once real.
   if (!reviewer) notFound()
 
-  const videos = await videosForReviewer()
+  const videos = await videosForReviewer(reviewer.id)
 
   return (
     <main className="wrap">
@@ -33,7 +33,7 @@ export default async function ReviewerList({ params }: { params: Promise<{ token
               <strong>{v.title}</strong>
               <div className="muted small">
                 {v.slug} · v{v.version}
-                {v.status === 'reviewed' && ' · you marked this finished'}
+                {v.myVerdict && ' · you marked this finished'}
               </div>
             </Link>
           ))}

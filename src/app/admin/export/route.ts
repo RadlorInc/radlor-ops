@@ -1,4 +1,5 @@
-import { allNotes, allVideos } from '@/lib/db'
+import { allAssignments, allNotes, allReviewers, allVideos } from '@/lib/db'
+import { clearance, progressLabel } from '@/lib/clearance'
 import { currentProfile } from '@/lib/session'
 import { formatT } from '@/lib/review'
 
@@ -20,7 +21,13 @@ export async function GET(req: Request) {
   if ((await currentProfile())?.role !== 'admin') return new Response('Not found', { status: 404 })
 
   const all = new URL(req.url).searchParams.get('all') === '1'
-  const [videos, notes] = await Promise.all([allVideos(), allNotes()])
+  const [videos, notes, assignments, reviewers] = await Promise.all([
+    allVideos(),
+    allNotes(),
+    allAssignments(),
+    allReviewers(),
+  ])
+  const reviewerName = new Map(reviewers.map((r) => [r.id, r.name]))
   const known = new Set(videos.map((v) => v.id))
 
   const mine = notes.filter((n) => known.has(n.video_id))
@@ -41,17 +48,32 @@ export async function GET(req: Request) {
     if (!versions) continue
     for (const version of [...versions.keys()].sort((a, b) => a - b)) {
       /**
-       * ⚠️ THE VERDICT IS ONLY STAMPED ON THE CURRENT VERSION'S HEADING, AND THIS IS THE SAME TRAP
-       * `notes.video_version` exists for, one level up. `verdict` lives on the video row, so it is
-       * the verdict NOW — printing it against a v1 heading for a video that is now at v2 would
-       * label an old round with a judgement that was never passed on it. We do not store verdict
-       * history, so older versions get no verdict rather than a borrowed one. If per-version
-       * verdicts are ever wanted, that is a `video_version` column on a verdicts table, not a
-       * change here.
+       * ⚠️ THE VERDICTS ARE ONLY STAMPED ON THE CURRENT VERSION'S HEADING, AND THIS IS THE SAME
+       * TRAP `notes.video_version` exists for, one level up. A verdict is the verdict NOW —
+       * printing it against a v1 heading for a video that is now at v2 would label an old round
+       * with a judgement never passed on it. We do not store verdict history, so older versions get
+       * no verdict rather than a borrowed one. If per-version verdicts are ever wanted, that is a
+       * `video_version` column on `video_reviewers`, not a change here.
+       *
+       * ⚠️ AND IT PRINTS EVERY REVIEWER'S ANSWER, NOT A SUMMARY. This export is what gets pasted
+       * into a chat and acted on: "APPROVED" over a heading where one of two people asked for
+       * changes is how the objection gets posted past. `CLEARED TO POST` appears only when every
+       * assigned reviewer approved.
        */
-      const stamp = version === v.version && v.verdict
-        ? ` — ${v.verdict === 'approved' ? 'APPROVED' : 'CHANGES NEEDED'}`
-        : ''
+      const mineOnVideo = assignments.filter((a) => a.video_id === v.id)
+      const c = clearance(mineOnVideo)
+      const said = mineOnVideo
+        .filter((a) => a.verdict)
+        .map((a) => `${reviewerName.get(a.reviewer_id) ?? 'unknown reviewer'}: ${a.verdict === 'approved' ? 'approved' : 'changes needed'}`)
+        .join(', ')
+      const stamp =
+        version !== v.version || c.assigned === 0
+          ? ''
+          : c.cleared
+            ? ` — CLEARED TO POST (${said})`
+            : c.decided === 0
+              ? ` — ${progressLabel(c)}`
+              : ` — NOT CLEARED · ${progressLabel(c)} · ${said}`
       out.push(`## ${v.slug} — v${version}${stamp}`)
       const list = versions.get(version)!
       for (const n of [...list].sort((a, b) => a.t_seconds - b.t_seconds || a.created_at.localeCompare(b.created_at))) {

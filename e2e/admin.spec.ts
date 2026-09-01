@@ -41,11 +41,12 @@ test('an admin signs in and sees the video list', async ({ page }) => {
   expect(res?.status()).toBe(200)
 
   const rows = page.getByTestId('admin-row')
-  await expect(rows).toHaveCount(4)
+  await expect(rows).toHaveCount(7)
   await expect(rows.filter({ hasText: 'quiet-draft' })).toContainText('draft')
   await expect(rows.filter({ hasText: 'hook-test-b' })).toContainText('v2')
   await expect(rows.filter({ hasText: 'cta-cut' })).toContainText('approved')
-  await expect(rows.filter({ hasText: 'equals-reel-final' })).toContainText('—')
+  // Assigned but undecided reads as undecided — not as a dash that could equally mean unassigned.
+  await expect(rows.filter({ hasText: 'equals-reel-final' })).toContainText('not finished')
 })
 
 test('a TESTER gets 404 on /admin — and the admin still gets 200, or that proves nothing', async ({ page, browser }) => {

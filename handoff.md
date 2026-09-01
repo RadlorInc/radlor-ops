@@ -55,35 +55,55 @@ places to edit one list ends with neither being right. If sync is asked for, say
    `Business Case Validation` → Product. He asked for a call rather than a fourth question; the
    label is in the script's docblock, in its output and here, because a guess whose provenance is
    only in a chat log reads as fact by the next session. Correcting one is one word in `/admin`.
-2. **Reviewer accounts** (a third role, then deleting the token path entirely). **Not started.**
-   Both answers Rafi asked for before any building are now here rather than only in a chat message:
-
-   **(a) Password delivery — no force-change-on-first-login. Send a single-use Supabase recovery
-   link**, not a password over WhatsApp. Trade named: without SMTP there is no self-serve reset, so
-   a reviewer who loses their session needs a new link from Rafi.
-
-   **(b) Scope — a reviewer should see their own video and nothing else. ⚠️ TODAY THEY SEE ALL OF
-   THEM.** Measured, not assumed: `/r/<token>` calls `videosForReviewer()`, which is
-   `status=in.(awaiting_review,reviewed)` with **no reviewer filter at all**
-   ([src/lib/db.ts:112](src/lib/db.ts:112)) — every reviewable video, each with its `verdict`. And
-   `/r/<token>/<slug>` looks the video up by slug alone, so any valid token opens any reviewable
-   slug. Nothing is exposed right now only because `review.videos` holds **one** row.
-   Nobody chose this; it fell out of there being one video. So:
-   - **There is no reviewer→video assignment in the schema to preserve.** Accounts do not inherit
-     the property "their own video" — that property has never existed. It has to be built, and it
-     is the part that actually needs a migration; swapping the token for a login without it just
-     makes the same wide view reachable by a durable credential instead of a link.
-   - Notes are already correctly scoped — `notes` keys on `(video_id, reviewer_id, version)`, so no
-     reviewer has ever seen another's notes.
-   - **`verdict` is a column on `videos`, not per reviewer.** One video, two reviewers, one verdict
-     field: the second overwrites the first. Fine today at 1:1 — named so it is a decision when a
-     video gets a second reviewer, not a surprise.
-   - Laziest shape that matches reality: `videos.reviewer_id`. A join table when a video genuinely
-     needs two reviewers, not before.
+2. **Reviewer accounts.** ⚠️ **Half of this is now BUILT, and the half that is built has to be
+   applied to the live database BEFORE the next push.** See "Multiple reviewers" below. What is
+   still not started is the auth swap itself: a third role, a login for reviewers, then deleting
+   the token path. Password delivery is **agreed and unchanged**: a single-use Supabase recovery
+   link, no force-change-on-first-login. ⚠️ **And the consequence stays written down in the docs
+   as it is: no SMTP means no self-serve reset, so a reviewer who loses their session needs a new
+   link from Rafi.** Do not soften that line — it is what makes someone ask for SMTP at the point
+   it starts costing them something.
 
    ⚠️ **The migration has real data.** `review.reviewers` has rows and `notes.reviewer_id` points at
-   them. Repoint first, read the notes back row-by-row (count, timestamps, bodies, author), and drop
-   the token column in a **separate** migration so a bad repoint cannot take the token path with it.
+   them, and now `video_reviewers.reviewer_id` does too. Repoint first, read the notes back
+   row-by-row (count, timestamps, bodies, author), and drop the token column in a **separate**
+   migration so a bad repoint cannot take the token path with it.
+
+## Multiple reviewers — built 2026-09-02, NOT YET DEPLOYED
+
+Rafi asked for more than one person on the same video. `review.video_reviewers` is the assignment
+— `(video_id, reviewer_id, assigned_at, verdict)`, PK on the first two — and it is where `verdict`
+now lives. **The rule: a video is cleared to post only when EVERY assigned reviewer has approved.**
+One `changes_needed` is not cleared however many approvals sit beside it; a later approval does not
+overwrite an earlier objection, because each verdict is its own row. `src/lib/clearance.ts` holds
+that in one function, `npm run test:clearance` checks it, and both it and the assignment scoping
+were proven with `scripts/break-check.sh` rather than asserted.
+
+⚠️⚠️ **APPLY `supabase/migrations/20260902090000_video_reviewers.sql` BEFORE PUSHING.** The commit
+is deliberately NOT pushed. Vercel deploys on push, and the deployed app reads `video_reviewers` —
+against a database without that table every reviewer page and `/admin` breaks at once. This is the
+same shape as the `SUPABASE_ANON_KEY` deploy that took the live waitlist form down for four
+minutes: the dependency goes into the target environment first, and is confirmed there, not after.
+Order: apply the migration → read the backfill back → push → re-run the four live check scripts.
+
+⚠️ **The backfill refuses to guess.** `videos.verdict` records no author, so with more than one
+reviewer "who approved this" has no answer and copying one verdict onto both rows would fabricate
+an approval. The migration raises unless there is exactly one reviewer. There is exactly one today,
+so `equals-reel`'s real approval carries across intact — that is the whole reason it is copied
+rather than dropped.
+
+⚠️ **`videos.verdict` is NOT dropped, on purpose.** Nothing reads or writes it any more, but the
+drop — and the `revoke update (verdict)` that belongs with it — is a **separate migration, after
+the copy has been read back**. Same sequencing as the reviewer-token column: a bad backfill must
+not be able to take the only copy of the data with it. Until that second migration, treat the
+column as stale, and do not reintroduce a read of it.
+
+**Assignment is a SQL statement Rafi runs**, like adding a video. Deliberately no reassignment UI,
+no due dates, no reminders — and the web tier has no INSERT or DELETE grant on the table, so a
+route bug cannot unassign a reviewer and take their verdict with it.
+
+**Still true, and load-bearing:** a reviewer sees their own notes and their own verdict, never
+another reviewer's. It is what stops one reviewer anchoring on another's opinion.
 
 ## Open findings and their triggers
 
@@ -112,8 +132,9 @@ again rather than rhetorical.
 ## Checks
 
 ```bash
-npm run test:e2e        # 50 Playwright, fully offline against test/fake-supabase.mjs
+npm run test:e2e        # 53 Playwright, fully offline against test/fake-supabase.mjs
 npm run test:verdict    # the break-check verdict logic
+npm run test:clearance  # when a video is cleared to post — every assigned reviewer approved
 node --test test/renewal.test.mjs
 ```
 
@@ -176,4 +197,7 @@ after that**, and the assertion stops depending on a control to be meaningful.
   driven by throwaway accounts; Rafi driving them by hand is outstanding.
 - **The stronger issues RLS comparison** — pending a real tester issue, then a re-run of
   `check-tester-cannot-read-admin`. Detail above; do not let the 4-of-4 line absorb it.
+- **Everything in "Multiple reviewers" above, against the live project.** 53 offline specs pass and
+  two break-checks bind, which is behaviour. The migration has not been applied, the backfill has
+  not been read back, and no second reviewer exists in production yet.
 - **Self-signup being off** in Supabase Auth — cannot be read from here.

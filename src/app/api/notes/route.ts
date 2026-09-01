@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { callerKey, overLimit } from '../_rateLimit'
-import { insertNote, reviewerByToken, reviewerVideoBySlug, setOutcome } from '@/lib/db'
+import { insertNote, myAssignment, reviewerByToken, reviewerVideoBySlug, setOutcome } from '@/lib/db'
 
 /**
  * Create one timestamped note.
@@ -45,7 +45,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'bad_timestamp' }, { status: 400 })
   }
 
-  const video = await reviewerVideoBySlug(slug)
+  const video = await reviewerVideoBySlug(slug, reviewer.id)
   if (!video) return NextResponse.json({ error: 'not_found' }, { status: 404 })
 
   // The version is stamped from the video row HERE, not sent by the client: it is what tells v1
@@ -63,8 +63,12 @@ export async function POST(req: Request) {
   // that survives new feedback is a lie about what the reviewer currently thinks, and "approved"
   // sitting above a note that contradicts it is the shape that gets something posted. The client
   // is told, so the page can say what happened rather than changing underneath them.
-  const reopened = video.status === 'reviewed' || video.verdict !== null
-  if (reopened) await setOutcome(video.id, 'awaiting_review', null)
+  // ⚠️ THEIR OWN VERDICT, AND ONLY THEIRS. A note is this reviewer changing their mind, not a
+  // reason to reopen anybody else's finished review — and emphatically not a way for a note to
+  // clear somebody else's `changes_needed`.
+  const mine = await myAssignment(video.id, reviewer.id)
+  const reopened = mine?.verdict != null
+  if (reopened) await setOutcome(video.id, reviewer.id, null)
 
   return NextResponse.json(
     { note: { id: note.id, t_seconds: note.t_seconds, body: note.body }, reopened },

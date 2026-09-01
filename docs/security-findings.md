@@ -337,3 +337,53 @@ mostly design rationale that is defensible in public and arguably good for a com
 checkable claims); move the operational sections to a private repo; or make the repo private. The
 guard note now at the top of that `handoff.md` at least stops the next person adding to it
 unknowingly.
+
+---
+
+## 7. Any valid reviewer token opened any reviewable video — 2026-09-02
+
+**Fixed the same day, by `review.video_reviewers`. Nothing was exposed; that is the point of
+writing it down.**
+
+`/r/<token>` listed every video with `status in ('awaiting_review','reviewed')` and
+`/r/<token>/<slug>` resolved a slug through the same filter. Neither asked which reviewer was
+asking, because until now **there was no reviewer→video link in the schema at all**. So a valid
+token — any valid token — listed every video that was out for review, opened any of them, and
+`/api/video-url` would sign a URL for the object. The other reviewer's *notes* were never reachable
+(`notes` is keyed `(video_id, reviewer_id, video_version)`), but their `verdict` was, because it was
+a column on `videos`.
+
+⚠️ **NOBODY DECIDED THIS.** There is no commit where a wider rule was chosen, and no comment
+defending it. It fell out of there being one reviewer and one video, where "every reviewable video"
+and "your video" are the same set. The filter that looked like access control was `status`, and
+status is a position in a workflow, not an answer to who is asking.
+
+⚠️ **And the exposure was zero the whole time — which is exactly why it survived.** One reviewer,
+one video: every test passed, every page was correct, and the tool behaved impeccably. Nothing
+about the data staying thin was guaranteed, or even likely; it was going to stop being thin the
+first time a second reviewer was added, which is the change that surfaced this. **Uncontested
+behaviour that is only safe because the data is thin is a finding, and the moment to record it is
+before the data grows, because nobody decides to grow it — it just grows.**
+
+### What replaced it
+
+`review.video_reviewers (video_id, reviewer_id, assigned_at, verdict)` is the missing condition:
+no assignment, no video. Applied in `src/lib/db.ts` at every reviewer entry point — the list, the
+page, `/api/notes`, `/api/review-done`, and `/api/video-url`, which is the one that hands out a
+bearer credential for the object itself.
+
+### The test that would have caught it, and why the old suite could not
+
+Every reviewable video in the fixture belonged to the one reviewer, so "she can open it" and "she
+was assigned it" were indistinguishable. The seed now carries **`flood-only`** — `awaiting_review`,
+assigned to somebody else — so the assignment is the only thing that can 404 it, with the other
+reviewer getting 200 on the same slug as the positive control. Verified by breaking it:
+`scripts/break-check.sh` with the assignment check removed from `reviewerVideoBySlug` takes
+`e2e/verdict.spec.ts` red on its own `expect`.
+
+### What it does not cover
+
+The token itself is unchanged: still a bearer string in a URL, still shareable by forwarding the
+link. Assignment scopes *what a token reaches*, not *who is holding it*. That is the reviewer-
+accounts work, and it is the next thing.
+

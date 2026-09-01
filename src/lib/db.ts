@@ -34,10 +34,18 @@ export type Video = {
   storage_path: string
   version: number
   status: 'draft' | 'awaiting_review' | 'reviewed' | 'revising'
-  /** The reviewer's judgement, separate from `status`. Null until they say. */
-  verdict: Verdict
   sort_order: number
 }
+
+/**
+ * One reviewer's assignment to one video, and their own verdict on it.
+ *
+ * ⚠️ THE VERDICT LIVES HERE, NOT ON `videos`. `review.videos.verdict` still exists as a stale
+ * column that nothing reads or writes — it is dropped in its own migration once the copy has been
+ * read back. Do not reintroduce a read of it; the whole point is that "what did the reviewers
+ * conclude" has as many answers as there are reviewers.
+ */
+export type Assignment = { video_id: string; reviewer_id: string; verdict: Verdict }
 
 export type Verdict = 'approved' | 'changes_needed' | null
 export type Note = {
@@ -109,41 +117,113 @@ export async function reviewerByToken(token: string): Promise<Reviewer | null> {
  */
 const REVIEWER_VISIBLE = 'status=in.(awaiting_review,reviewed)'
 
-export async function videosForReviewer(): Promise<Video[]> {
-  return rest<Video[]>(
-    'reviewer video list',
-    `videos?select=id,slug,title,storage_path,version,status,verdict,sort_order&${REVIEWER_VISIBLE}&order=sort_order.asc,created_at.asc`,
+const VIDEO_COLS = 'id,slug,title,storage_path,version,status,sort_order'
+
+/**
+ * ⚠️ STATUS IS NOT AN AUTHORIZATION FILTER, AND FOR A LONG TIME IT WAS THE ONLY ONE HERE. Both
+ * functions below used to select on `REVIEWER_VISIBLE` alone, so any valid token listed every
+ * reviewable video and opened any reviewable slug. Nothing chose that; there was one video, so it
+ * never showed. The assignment is the condition now: `assignedTo()` first, and a video not in it
+ * does not exist as far as that reviewer is concerned. Finding #7.
+ */
+export async function assignmentsFor(reviewerId: string): Promise<Assignment[]> {
+  return rest<Assignment[]>(
+    'reviewer assignments',
+    `video_reviewers?select=video_id,reviewer_id,verdict&reviewer_id=eq.${reviewerId}`,
   )
 }
 
-/** Reviewer-facing lookup: a draft, or a cut being revised, does not exist as far as they know. */
-export async function reviewerVideoBySlug(slug: string): Promise<Video | null> {
+/** Carries THEIR verdict, not the video's — "you marked this finished" has to mean *you*, and
+ *  `videos.status` is now derived from everyone, so it cannot answer that question. */
+export async function videosForReviewer(reviewerId: string): Promise<(Video & { myVerdict: Verdict })[]> {
+  const mine = await assignmentsFor(reviewerId)
+  if (mine.length === 0) return []
+  const videos = await rest<Video[]>(
+    'reviewer video list',
+    `videos?select=${VIDEO_COLS}&${REVIEWER_VISIBLE}&order=sort_order.asc,created_at.asc`,
+  )
+  const byId = new Map(mine.map((a) => [a.video_id, a.verdict]))
+  return videos.filter((v) => byId.has(v.id)).map((v) => ({ ...v, myVerdict: byId.get(v.id) ?? null }))
+}
+
+/**
+ * Reviewer-facing lookup: a draft, a cut being revised, OR a video they were never assigned does
+ * not exist as far as they know — all three are the same 404, which is the same reason an unknown
+ * and a revoked token are.
+ */
+export async function reviewerVideoBySlug(slug: string, reviewerId: string): Promise<Video | null> {
   const rows = await rest<Video[]>(
     'video lookup',
-    `videos?select=id,slug,title,storage_path,version,status,verdict,sort_order&slug=eq.${encodeURIComponent(slug)}&${REVIEWER_VISIBLE}&limit=1`,
+    `videos?select=${VIDEO_COLS}&slug=eq.${encodeURIComponent(slug)}&${REVIEWER_VISIBLE}&limit=1`,
+  )
+  const video = rows[0]
+  if (!video) return null
+  return (await myAssignment(video.id, reviewerId)) ? video : null
+}
+
+export async function myAssignment(videoId: string, reviewerId: string): Promise<Assignment | null> {
+  const rows = await rest<Assignment[]>(
+    'assignment lookup',
+    `video_reviewers?select=video_id,reviewer_id,verdict&video_id=eq.${videoId}&reviewer_id=eq.${reviewerId}&limit=1`,
   )
   return rows[0] ?? null
 }
 
+/** Every assignment on one video — the admin's per-reviewer view, and the input to `clearance()`. */
+export async function assignmentsForVideo(videoId: string): Promise<Assignment[]> {
+  return rest<Assignment[]>(
+    'video assignments',
+    `video_reviewers?select=video_id,reviewer_id,verdict&video_id=eq.${videoId}`,
+  )
+}
+
+/** ponytail: all assignments in one read, grouped in JS — same call the note list makes, same
+ *  ceiling (a founder, a handful of videos), and it keeps the harness speaking plain PostgREST. */
+export async function allAssignments(): Promise<Assignment[]> {
+  return rest<Assignment[]>('admin assignment list', 'video_reviewers?select=video_id,reviewer_id,verdict')
+}
+
+export async function allReviewers(): Promise<Reviewer[]> {
+  return rest<Reviewer[]>('admin reviewer list', 'reviewers?select=id,name,email,revoked_at&order=name.asc')
+}
+
 /**
- * The only write the reviewer can cause besides a note, and the only columns the web tier may
- * change at all. Two legal moves:
- *   • "I'm finished, and here's what I think"  → reviewed + a verdict
- *   • "…except I just thought of something"    → awaiting_review + verdict CLEARED
+ * The only write the reviewer can cause besides a note. Two legal moves, both on THEIR OWN row:
+ *   • "I'm finished, and here's what I think"  → their verdict
+ *   • "…except I just thought of something"    → their verdict CLEARED
  *
  * ⚠️ THE VERDICT IS ALWAYS WRITTEN, INCLUDING AS NULL. A verdict that survives new feedback is a
  * lie about what the reviewer currently thinks, so reopening must clear it rather than leave the
  * old one standing next to a note that contradicts it.
+ *
+ * ⚠️ AND CLEARING IS PER REVIEWER. One reviewer thinking of something more does not reopen anybody
+ * else's finished review, and — the direction that matters — cannot erase somebody else's
+ * objection. Nothing in this file can: `changes_needed` is only ever removed by the row's own
+ * reviewer, on their own row.
  */
 export async function setOutcome(
   videoId: string,
-  status: 'reviewed' | 'awaiting_review',
+  reviewerId: string,
   verdict: Verdict,
 ): Promise<void> {
-  await rest<unknown>('video outcome update', `videos?id=eq.${videoId}`, {
+  // ⚠️ ONE REVIEWER'S ROW, NEVER THE VIDEO'S. The filter names both keys because that is the whole
+  // change: a PATCH that reached only `video_id` would set every assigned reviewer's verdict to
+  // this one's answer — which is precisely the overwrite that moving the column here undid.
+  await rest<unknown>('verdict update', `video_reviewers?video_id=eq.${videoId}&reviewer_id=eq.${reviewerId}`, {
     method: 'PATCH',
     headers: { Prefer: 'return=minimal' },
-    body: JSON.stringify({ status, verdict }),
+    body: JSON.stringify({ verdict }),
+  })
+
+  // `status` is the VIDEO's position, so it is derived from all the assignments rather than set by
+  // whoever pressed last. Otherwise reviewer B adding a note drags the video back to
+  // `awaiting_review` after reviewer A finished, and the table reports on the last click.
+  const all = await assignmentsForVideo(videoId)
+  const status = all.length > 0 && all.every((a) => a.verdict !== null) ? 'reviewed' : 'awaiting_review'
+  await rest<unknown>('video status update', `videos?id=eq.${videoId}`, {
+    method: 'PATCH',
+    headers: { Prefer: 'return=minimal' },
+    body: JSON.stringify({ status }),
   })
 }
 
@@ -173,7 +253,7 @@ export async function insertNote(n: {
 export async function allVideos(): Promise<Video[]> {
   return rest<Video[]>(
     'admin video list',
-    'videos?select=id,slug,title,storage_path,version,status,verdict,sort_order&order=sort_order.asc,created_at.asc',
+    `videos?select=${VIDEO_COLS}&order=sort_order.asc,created_at.asc`,
   )
 }
 
