@@ -5,6 +5,12 @@ bucket — the code assumes they exist and fails loudly if they don't.
 
 Time: about fifteen minutes, once.
 
+> ⚠️ **The `?k=<ADMIN_TOKEN>` gate is GONE.** `/admin` and `/tester` need a real account now —
+> Supabase Auth, email + password, **self-signup off**. Accounts are created by hand in
+> Authentication → Users (tick *Auto Confirm User*; there is no SMTP), and their `review.profiles`
+> row is written with the service key. Nothing signed in can grant itself a role. `ADMIN_TOKEN` is
+> no longer read by anything and can be deleted from Vercel and `.env.local`.
+>
 > **Steps 1, 2 and 4 are already done** on `ghuvnqbthbcmqfxcrjrh` (2026-08-31): the `review` schema,
 > its three tables and grants, and the private `review-videos` bucket all exist and were verified by
 > reading the database back. **What is left for you is step 3 (Exposed schemas) and step 5 (env
@@ -105,28 +111,23 @@ minted by `/api/video-url`, which dies after five minutes.
 ```
 SUPABASE_URL               https://<ref>.supabase.co
 SUPABASE_SERVICE_ROLE_KEY  <service_role key from step 1>
-ADMIN_TOKEN                <a long random string — see below>
+SUPABASE_ANON_KEY          <anon / publishable key>
 ```
 
-Generate the admin token with:
+`SUPABASE_ANON_KEY` is the project's public key. It is server-only here too — it talks to Supabase
+Auth and reads as the SIGNED-IN USER so RLS policies apply. It gets no `NEXT_PUBLIC_` prefix,
+because the browser still never contacts Supabase in this app.
 
-```bash
-node -e "console.log(require('crypto').randomBytes(24).toString('base64url'))"
-```
+Check it landed: `curl -s https://<domain>/api/health` → `"auth_configured": true`.
 
 4. Deploy.
 
-> `ADMIN_TOKEN` unset means `/admin` is **closed**, not open — a missing variable can never be a
-> way in. If you deploy without it, `/admin` 404s until you set it and redeploy.
+> A missing `SUPABASE_ANON_KEY` means nobody can sign in — closed, not open.
 
-You open `/admin?k=<ADMIN_TOKEN>` **once**. The app immediately swaps it for an httpOnly cookie and
-redirects to `/admin` with the parameter stripped, so the token lands in your browser history, any
-referrer header and Vercel's request log exactly once rather than on every request. After that,
-bookmark the bare `/admin` — the cookie lasts a week, and rotating `ADMIN_TOKEN` kills every
-outstanding one.
-
-(If you want to hit it from `curl` rather than a browser, you need to hold the cookie and follow
-the redirect: `curl -sL -c jar -b jar 'https://<domain>/admin/export?k=<ADMIN_TOKEN>'`.)
+Sign in at `/login`. A signed-OUT visitor to `/admin` or `/tester` gets the login page rather than
+a 404 — admins and testers are expected users, and hiding the door from someone who is supposed to
+walk through it is a support ticket, not security. A signed-IN **tester** who tries `/admin` gets a
+**404**, because they do not need to learn that page exists.
 
 ## 6. Create the reviewer
 
