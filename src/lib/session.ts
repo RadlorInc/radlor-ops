@@ -95,3 +95,22 @@ export async function requireRole(...allowed: Role[]): Promise<Profile> {
   if (!allowed.includes(profile.role)) notFound()
   return profile
 }
+
+/**
+ * The same gate for ROUTE HANDLERS, and it must not behave like the page one.
+ *
+ * ⚠️ `requireRole()` REDIRECTS a signed-out caller to /login. That is right for a page and wrong
+ * for an endpoint: a POST from a signed-out client would follow the redirect and come back **200
+ * with a login page in the body**, which reads as success to anything checking a status code. It
+ * did exactly that — a tester's write was rejected by RLS underneath, but the route answered 200.
+ *
+ * Returns the profile, or a 404 Response to return as-is. 404 not 403, for the same reason as
+ * everywhere else here: nothing confirms the endpoint exists to someone who should not have it.
+ */
+export async function requireRoleApi(...allowed: Role[]): Promise<{ profile: Profile } | { deny: Response }> {
+  const profile = await currentProfile()
+  if (!profile || !allowed.includes(profile.role)) {
+    return { deny: new Response(JSON.stringify({ error: 'not_found' }), { status: 404, headers: { 'Content-Type': 'application/json' } }) }
+  }
+  return { profile }
+}

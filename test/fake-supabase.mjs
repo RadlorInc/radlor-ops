@@ -61,13 +61,25 @@ const HERE = dirname(fileURLToPath(import.meta.url))
 const ROOT = join(HERE, '..')
 const PORT = Number(process.env.FAKE_SUPABASE_PORT || 54329)
 const SECRET = 'fake-storage-secret'
-const TABLES = new Set(['reviewers', 'videos', 'notes', 'profiles'])
+const TABLES = new Set(['reviewers', 'videos', 'notes', 'profiles', 'subscriptions', 'todos'])
 /** These tables live in `review`, not `public` — the shared project's `public` belongs to the
  *  marketing site. The shim ENFORCES the profile header for the same reason real PostgREST does:
  *  without it the app would be asking for `public.reviewers`, which does not exist. If this were
  *  lenient, dropping the header from `src/lib/db.ts` would break nothing here and pass. */
 const SCHEMA = 'review'
 const IDENT = /^[a-z_][a-z0-9_]*$/
+
+/**
+ * ⚠️ PGlite PARSES `date` COLUMNS INTO JS `Date`; REAL PostgREST RETURNS `YYYY-MM-DD`.
+ * Left alone, `JSON.stringify` turns the Date into a full ISO timestamp and the app — which builds
+ * `${renewal}T00:00:00Z` to compare at UTC midnight — produces `NaN` and reports every renewal as
+ * having no date. Caught by a renewal spec going `Expected: "soon", Received: "none"`.
+ *
+ * Fixed in the STAND-IN rather than by making the app accept both shapes: the app should speak to
+ * one contract, and a harness that hands it a shape production never sends is a harness that hides
+ * bugs in one direction and invents them in the other. 1082 is Postgres's `date` OID.
+ */
+const DATE_AS_TEXT = { parsers: { 1082: (v) => v } }
 
 const db = new PGlite()
 // Supabase ships these two roles; PGlite does not. The migration's REVOKEs name them, so they have
@@ -276,7 +288,7 @@ const server = createServer(async (req, res) => {
       }
       if (req.method === 'GET') {
         const { sql, args } = buildSelect(table, url.searchParams)
-        const r = await db.query(sql, args)
+        const r = await db.query(sql, args, DATE_AS_TEXT)
         return json(res, 200, r.rows)
       }
       if (req.method === 'PATCH') {

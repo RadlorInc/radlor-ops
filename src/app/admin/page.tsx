@@ -1,12 +1,22 @@
 import { allNotes, allVideos } from '@/lib/db'
+import { listSubscriptions, listTodos } from '@/lib/adminDb'
 import { requireRole } from '@/lib/session'
+import Costs from './Costs'
+import Todos from './Todos'
 
 export const dynamic = 'force-dynamic'
 
 export default async function Admin() {
   const me = await requireRole('admin')
 
-  const [videos, notes] = await Promise.all([allVideos(), allNotes()])
+  // ⚠️ The two admin tables are read AS THE USER (RLS decides); videos and notes still go through
+  // the service key, because reviewers have no account for a policy to be written against.
+  const [videos, notes, subscriptions, todos] = await Promise.all([
+    allVideos(),
+    allNotes(),
+    listSubscriptions(),
+    listTodos(),
+  ])
 
   // Unread = not yet acted on. `resolved_at` is the only thing that clears it.
   const unread = new Map<string, number>()
@@ -19,7 +29,7 @@ export default async function Admin() {
 
   return (
     <main className="wrap">
-      <h1>Videos</h1>
+      <h1>Dashboard</h1>
       <p className="muted small">
         {me.name} · <a href="/tester">Chapter testing</a> ·{' '}
         <span data-testid="signout-inline">
@@ -30,11 +40,16 @@ export default async function Admin() {
           </form>
         </span>
       </p>
+      <Costs initial={subscriptions} today={new Date().toISOString()} />
+
+      <Todos initial={todos} />
+
+      <h2 style={{ marginTop: 36 }}>Videos</h2>
       <p className="muted small">
         <a href="/admin/export">Open notes as markdown →</a> ·{' '}
         <a href="/admin/export?all=1">including resolved</a>
       </p>
-      <table style={{ marginTop: 16 }}>
+      <table style={{ marginTop: 10 }}>
         <thead>
           <tr>
             <th>Slug</th>
