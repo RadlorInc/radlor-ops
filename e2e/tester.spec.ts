@@ -1,0 +1,130 @@
+import { expect, test } from '@playwright/test'
+import { SUPABASE_URL } from './tokens'
+import { signIn } from './signIn'
+
+async function rows(request: import('@playwright/test').APIRequestContext, table: string, q = '') {
+  const res = await request.get(`${SUPABASE_URL}/rest/v1/${table}?select=*${q}`, {
+    headers: { 'Accept-Profile': 'review' },
+  })
+  return (await res.json()) as Record<string, unknown>[]
+}
+
+test.describe.configure({ mode: 'serial' })
+
+test('the form has no date field and no hours field, and filing sets both itself', async ({ page, request }) => {
+  await signIn(page, 'tester')
+  await page.goto('/tester')
+
+  /**
+   * ⚠️ THE ABSENCE IS THE ASSERTION. The sheet had testers typing a date — in two formats, with one
+   * row missing it — and a `Working Record` tab for hours that held ZERO rows from the day it was
+   * created. Neither field exists here; both are captured.
+   */
+  await expect(page.getByTestId('issue-form')).toBeVisible()
+  await expect(page.locator('[data-testid="issue-form"] input[type="date"]')).toHaveCount(0)
+  await expect(page.locator('[data-testid="issue-form"]').getByText(/hours/i)).toHaveCount(0)
+
+  const before = await rows(request, 'testing_sessions')
+  await page.getByTestId('issue-description').fill('The repeat button is missing on the nest game')
+  await page.getByTestId('issue-area').fill('Nest game')
+  await page.getByTestId('issue-type').fill('missing control')
+  await page.getByTestId('issue-chapter').fill('1')
+  await page.getByTestId('issue-age').selectOption('3-5')
+  await page.getByTestId('issue-submit').click()
+  await expect(page.getByTestId('issue-list')).toContainText('repeat button is missing')
+
+  const [filed] = await rows(request, 'issues', '&area=eq.Nest%20game')
+  expect(filed).toBeTruthy()
+  expect(filed.type).toBe('missing control')   // the two columns are separately populated
+  expect(filed.chapter).toBe('1')
+  expect(filed.all_chapters).toBe(false)
+  expect(filed.age_band).toBe('3-5')
+  expect(String(filed.created_at).slice(0, 4)).toMatch(/^20\d\d$/)   // set on submit
+
+  // The Working Record, captured rather than typed. The row is written by the POST; the summary
+  // is server-rendered, so it appears on the next load — asserted after a reload rather than
+  // pretending it is instant.
+  const after = await rows(request, 'testing_sessions')
+  expect(after.length).toBeGreaterThan(before.length)
+  await page.reload()
+  await expect(page.getByTestId('working-record')).toContainText('Captured from when you file')
+})
+
+test('filing again extends the same session rather than starting a new one', async ({ page, request }) => {
+  await signIn(page, 'tester')
+  await page.goto('/tester')
+  const before = await rows(request, 'testing_sessions')
+
+  await page.getByTestId('issue-description').fill('Second issue in the same sitting')
+  await page.getByTestId('issue-submit').click()
+  await expect(page.getByTestId('issue-list')).toContainText('same sitting')
+
+  const after = await rows(request, 'testing_sessions')
+  // Same count — a sitting is one session. A new row per issue would make "hours" meaningless.
+  expect(after.length).toBe(before.length)
+  expect(Number(after[0].issue_count)).toBeGreaterThan(Number(before[0].issue_count))
+})
+
+test('"all chapters" is a scope, not a chapter', async ({ page, request }) => {
+  await signIn(page, 'tester')
+  await page.goto('/tester')
+  await page.getByTestId('issue-description').fill('Every heading uses "shall"')
+  await page.getByTestId('issue-chapter').fill('7')
+  await page.getByTestId('issue-all-chapters').check()
+  // Ticking it clears and disables the chapter box — the two cannot both be set.
+  await expect(page.getByTestId('issue-chapter')).toBeDisabled()
+  await expect(page.getByTestId('issue-chapter')).toHaveValue('')
+  await page.getByTestId('issue-submit').click()
+  await expect(page.getByTestId('issue-list')).toContainText('Every heading uses')
+
+  // Newest all-chapters row: the seed has an imported one too, so order matters here.
+  const [row] = await rows(request, 'issues', '&all_chapters=eq.true&order=created_at.desc&limit=1')
+  expect(row.all_chapters).toBe(true)
+  expect(row.chapter).toBe(null)
+})
+
+test('a TESTER cannot move a status; an ADMIN can — and the row proves it', async ({ page, browser, request }) => {
+  await signIn(page, 'tester')
+  await page.goto('/tester')
+  // A tester sees the state, but not a control to change it.
+  await expect(page.getByTestId('issue-status').first()).toBeVisible()
+  await expect(page.locator('[data-testid="issue-list"] select')).toHaveCount(0)
+
+  const [target] = await rows(request, 'issues', '&status=eq.open&limit=1')
+  const res = await page.request.patch('/api/tester/issue', {
+    data: { id: target.id, status: 'resolved' },
+  })
+  expect(res.status()).toBe(404)
+  const [unchanged] = await rows(request, 'issues', `&id=eq.${target.id}`)
+  expect(unchanged.status).toBe('open')
+
+  /**
+   * ⚠️ THE POSITIVE CONTROL. Without it, "the tester was refused" is equally consistent with a
+   * route that refuses everyone and a status nothing can ever change.
+   */
+  const ctx = await browser.newContext()
+  const admin = await ctx.newPage()
+  await signIn(admin, 'admin')
+  const ok = await admin.request.patch('/api/tester/issue', {
+    data: { id: target.id, status: 'resolved' },
+  })
+  expect(ok.status()).toBe(200)
+  const [changed] = await rows(request, 'issues', `&id=eq.${target.id}`)
+  expect(changed.status).toBe('resolved')
+  await ctx.close()
+})
+
+/**
+ * ⚠️ "A TESTER SEES ONLY THEIR OWN ISSUES" IS NOT TESTED HERE, AND CANNOT BE.
+ * That property is `issues_read_own`, an RLS policy — and PGlite runs as one superuser with no role
+ * switching, so every policy in this schema is invisible to this harness by construction. A version
+ * of this test did exist and failed for exactly that reason: the stand-in handed the tester every
+ * row, because there is nothing there to stop it.
+ *
+ * Writing it anyway with a workaround would be worse than not having it: it would report green on a
+ * property nothing offline can observe. It is verified against the live project instead, by
+ * `scripts/check-tester-cannot-read-admin.mjs`, with the same two controls.
+ *
+ * What IS testable here, and is tested above, is the app's half: a tester gets no status control and
+ * the route refuses their PATCH with a 404 while an admin's succeeds.
+ */

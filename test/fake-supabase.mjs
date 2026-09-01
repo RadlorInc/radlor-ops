@@ -61,7 +61,7 @@ const HERE = dirname(fileURLToPath(import.meta.url))
 const ROOT = join(HERE, '..')
 const PORT = Number(process.env.FAKE_SUPABASE_PORT || 54329)
 const SECRET = 'fake-storage-secret'
-const TABLES = new Set(['reviewers', 'videos', 'notes', 'profiles', 'subscriptions', 'todos'])
+const TABLES = new Set(['reviewers', 'videos', 'notes', 'profiles', 'subscriptions', 'todos', 'issues', 'testing_sessions'])
 /** These tables live in `review`, not `public` — the shared project's `public` belongs to the
  *  marketing site. The shim ENFORCES the profile header for the same reason real PostgREST does:
  *  without it the app would be asking for `public.reviewers`, which does not exist. If this were
@@ -140,6 +140,9 @@ function buildSelect(table, params) {
     else if (v.startsWith('eq.')) {
       args.push(v.slice(3))
       where.push(`${k}::text = $${args.length}`)
+    } else if (v.startsWith('gte.')) {
+      args.push(v.slice(4))
+      where.push(`${k} >= $${args.length}::timestamptz`)
     } else if (v.startsWith('in.(') && v.endsWith(')')) {
       // `status=in.(awaiting_review,reviewed)` — the reviewer-visible filter.
       const vals = v.slice(4, -1).split(',').map((x) => x.trim()).filter(Boolean)

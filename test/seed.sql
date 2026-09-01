@@ -59,3 +59,9 @@ insert into review.todos (task, status, area, sort_order) values
   ('Stripe Setup', 'not_started', null, 1),
   ('organise Events', 'not_started', 'Marketing', 2),
   ('Pick a domain', 'done', null, 3);
+
+-- Two issues so the tester list and the filters have something to act on. One belongs to the
+-- harness tester, one is an imported row with no reporter — the shape the real import produced.
+insert into review.issues (reporter, imported_from, description, area, type, chapter, all_chapters, age_band, status) values
+  ('66666666-6666-4666-8666-666666666666', null, 'The turtles are too close together to read the numbers', 'Smallest first game', null, '1', false, '3-5', 'open'),
+  (null, 'Chapter_Testing_tester2', 'Any "shall" should be changed to "should".', null, 'Titles', null, true, '3-5', 'ready_for_retest');

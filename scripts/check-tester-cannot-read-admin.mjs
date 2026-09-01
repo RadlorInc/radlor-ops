@@ -105,6 +105,40 @@ if (sawAdmin || !sawOnlySelf) {
   console.log('\nFAIL — a tester can read rows reserved for admins. RLS is not doing the work.')
   process.exit(1)
 }
-console.log('\nPASS — both controls green, and the tester is limited to their own row by policy,')
+// ── AND THE SAME QUESTION FOR ISSUES ─────────────────────────────────────────────────────────
+// `issues_read_own` returns a tester their own rows and an admin everyone's, from the SAME query.
+// The offline harness cannot see this at all — PGlite has one superuser and no policies — so this
+// is the only place it is checked. The imported sheet rows have `reporter = null`, so they are
+// visible to an admin and to nobody else, which makes the difference measurable.
+async function readIssues(token) {
+  const res = await fetch(`${base}/rest/v1/issues?select=id,reporter`, {
+    headers: { apikey: anon, Authorization: `Bearer ${token}`, 'Accept-Profile': 'review' },
+  })
+  return res.ok ? await res.json() : null
+}
+
+const adminIssues = await readIssues(admin.token)
+const testerIssues = await readIssues(tester.token)
+console.log(`\nISSUES     admin sees                  → ${adminIssues ? adminIssues.length : 'ERROR'} row(s)`)
+console.log(`           tester sees                 → ${testerIssues ? testerIssues.length : 'ERROR'} row(s)`)
+
+if (!adminIssues || !testerIssues) {
+  console.log('\nFAIL — could not read issues as one of the two roles.')
+  process.exit(1)
+}
+// The control: an admin must see MORE than nothing, or "the tester sees fewer" is meaningless.
+if (adminIssues.length === 0) {
+  console.log('\nFAIL — the admin sees no issues at all, so the comparison below proves nothing.')
+  console.log('       Import the sheet or file one, then run this again.')
+  process.exit(1)
+}
+const testerSawSomeoneElses = testerIssues.some((i) => i.reporter !== tester.id)
+if (testerSawSomeoneElses) {
+  console.log("\nFAIL — a tester can read issues they did not file. `issues_read_own` is not holding.")
+  process.exit(1)
+}
+console.log(`           tester saw only its own     → yes ✔`)
+
+console.log('\nPASS — both controls green, the tester is limited to their own rows by policy,')
 console.log('       at the database, with a token the database accepted.')
 process.exit(0)

@@ -103,3 +103,84 @@ export function patchSubscription(id: string, patch: Record<string, unknown>): P
     body: JSON.stringify({ ...patch, last_updated: new Date().toISOString() }),
   })
 }
+
+export type Issue = {
+  id: string
+  reporter: string | null
+  imported_from: string | null
+  description: string
+  area: string | null
+  type: string | null
+  chapter: string | null
+  all_chapters: boolean
+  age_band: string | null
+  status: 'open' | 'ready_for_retest' | 'resolved'
+  created_at: string
+}
+
+const ISSUE_COLS =
+  'id,reporter,imported_from,description,area,type,chapter,all_chapters,age_band,status,created_at'
+
+/**
+ * ⚠️ NO `reporter` FILTER HERE, AND THAT IS THE POINT. `issues_read_own` returns a tester their own
+ * rows and an admin everyone's — the same query, two answers, decided by the database. Adding
+ * `reporter=eq.<me>` would make it look right while the policy did nothing, which is how RLS ends
+ * up decorative.
+ */
+export function listIssues(): Promise<Issue[]> {
+  return asUser<Issue[]>('issues', `issues?select=${ISSUE_COLS}&order=created_at.desc`)
+}
+
+export function insertIssue(row: Record<string, unknown>): Promise<Issue[]> {
+  return asUser<Issue[]>('issue insert', 'issues', {
+    method: 'POST',
+    headers: { Prefer: 'return=representation' },
+    body: JSON.stringify(row),
+  })
+}
+
+export function patchIssue(id: string, patch: Record<string, unknown>): Promise<null> {
+  return asUser<null>('issue update', `issues?id=eq.${id}`, {
+    method: 'PATCH',
+    headers: { Prefer: 'return=minimal' },
+    body: JSON.stringify({ ...patch, updated_at: new Date().toISOString() }),
+  })
+}
+
+/**
+ * The `Working Record` tab, captured rather than typed.
+ *
+ * A session is opened by filing an issue and extended by the next one; a gap longer than the window
+ * starts a new one. Nobody opens a second tab, which is exactly why that tab held zero rows from
+ * the day it was created.
+ */
+const SESSION_GAP_MINUTES = 60
+
+export async function touchSession(testerId: string): Promise<void> {
+  const cutoff = new Date(Date.now() - SESSION_GAP_MINUTES * 60_000).toISOString()
+  const open = await asUser<{ id: string; issue_count: number }[]>(
+    'session lookup',
+    `testing_sessions?select=id,issue_count&tester=eq.${testerId}&last_seen_at=gte.${cutoff}&order=last_seen_at.desc&limit=1`,
+  )
+  const now = new Date().toISOString()
+  if (open[0]) {
+    await asUser<null>('session extend', `testing_sessions?id=eq.${open[0].id}`, {
+      method: 'PATCH',
+      headers: { Prefer: 'return=minimal' },
+      body: JSON.stringify({ last_seen_at: now, issue_count: open[0].issue_count + 1 }),
+    })
+    return
+  }
+  await asUser<null>('session start', 'testing_sessions', {
+    method: 'POST',
+    headers: { Prefer: 'return=minimal' },
+    body: JSON.stringify({ tester: testerId, started_at: now, last_seen_at: now, issue_count: 1 }),
+  })
+}
+
+export function listSessions(testerId?: string): Promise<
+  { id: string; tester: string; started_at: string; last_seen_at: string; issue_count: number }[]
+> {
+  const filter = testerId ? `&tester=eq.${testerId}` : ''
+  return asUser('sessions', `testing_sessions?select=id,tester,started_at,last_seen_at,issue_count&order=last_seen_at.desc${filter}`)
+}
