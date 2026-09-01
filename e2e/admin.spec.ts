@@ -81,9 +81,15 @@ test('signing out ends the session', async ({ page }) => {
   expect((await page.goto('/admin'))?.status()).toBe(200)
 
   await page.getByTestId('sign-out').click()
-  await page.waitForURL(/\/login/)
-  // Not just "the button navigated" — the session must actually be gone.
+  await page.waitForLoadState('networkidle')
+
+  /**
+   * ⚠️ ASSERTED ON THE SESSION, NOT ON THE LANDING URL. The first version waited for `/login`, and
+   * against a broken logout that leaves the cookies intact `/login` REDIRECTS A SIGNED-IN USER
+   * STRAIGHT BACK to /admin — so the test timed out instead of failing an assertion. Red, but not
+   * for a reason anyone could read. These two facts are what "signed out" means.
+   */
+  expect((await page.context().cookies()).filter((c) => c.value !== '')).toEqual([])
   await page.goto('/admin')
   expect(new URL(page.url()).pathname).toBe('/login')
-  expect((await page.context().cookies()).filter((c) => c.value !== '')).toEqual([])
 })
