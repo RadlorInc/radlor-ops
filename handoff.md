@@ -10,7 +10,15 @@
 Vercel deploys on push to `main` — it does, verified; do not wait on a manual deploy.
 
 ⚠️ **Do not pin a SHA here.** Check it instead: `git log --oneline -1 origin/main`, then confirm the
-deployment actually moved (the CSS chunk hash in the served HTML changes between builds).
+deploy from the **Vercel dashboard's Deployments list**, which names the commit.
+
+⚠️⚠️ **DO NOT USE THE CSS CHUNK HASH TO DETECT A DEPLOY. This file used to recommend it; it is
+removed, not caveated.** It reported "no deploy" twice on 2026-09-02 when the deploy had in fact
+landed — both times in the same direction, and the second one produced a confident wrong diagnosis
+of a live 404 and a proposed write to the production database. A method that has been wrong every
+time it mattered does not get a narrower description. The readable signals from here are the page
+HTML, the response headers, and **behaviour only one build has** — `/review` answering `307 → /login`
+instead of `404` is what settled it, because that route does not exist in the older build.
 
 **Database:** the **`radlor-site` Supabase project**, `ghuvnqbthbcmqfxcrjrh`, schema **`review`**.
 Not its own project — the free tier caps the account at two. The schema is a namespace, not a
@@ -96,22 +104,7 @@ post* until the length check was added.
    `20260902093000_video_reviewers_revoke_insert.sql` and the CLAUDE.md rule it produced. Now:
    select ✔ · update(verdict) ✔ · insert ✘ · delete ✘ · anon select ✘.
 4. Pushed. `origin/main` at `4569c76`.
-5. ⚠️ **AND THE DEPLOY IS NOT CONFIRMED.** The served CSS chunk hash was
-   `1uyi2fkzh267u.css` before the push and was still `1uyi2fkzh267u.css` after **ten minutes of
-   polling** — and this push edited `globals.css`, so a landed build cannot serve the same hash.
-   Either the deploy has not run or it did not come from this push. **Do not read "the pages
-   render 200" as the deploy landing**: they render because the migration was purely additive, so
-   the OLD build runs fine against the NEW database. That is the sequencing working, not evidence.
-
-   ⚠️ Comparing the live hash to a LOCAL `npm run build` does not work — checked, not assumed: the
-   pre-push CSS builds to `13jjruq3j4jzj` here and the post-push CSS to `0rjmzmykdmv5h`, and the
-   live site serves neither. Turbopack's chunk hash is not portable between this machine and
-   Vercel's builder. The hash can answer *"did the deployment move?"*, never *"which source is
-   live?"* — and this file's own advice should be read that narrowly.
-
-   **The one-glance discriminator is `/admin`, which needs Rafi's login:** the new build's video
-   table has **Reviewers** and **Cleared to post** columns; the old one has a single **Verdict**
-   column. Sign in and look. If it still says Verdict, the deploy did not land.
+5. Pushed and deployed. ⚠️ See the incident below before repeating this sequence.
 
 ⚠️ **`videos.verdict` is still there, and now it is safe to drop.** Nothing reads or writes it; the
 copy has been read back off the live database. The drop and the `revoke update (verdict)` that goes
@@ -125,9 +118,25 @@ so a route bug cannot invent an assignment. A fabricated assignment is a fabrica
 another reviewer's. It is what stops one reviewer anchoring on another's opinion.
 
 ⚠️ **The Vercel MCP connector cannot see this project** — `list_deployments` 403s and
-`get_deployment` 404s on `video-reviewer-liard.vercel.app` under the only team it can reach. So the
-deployed SHA cannot be confirmed from a tool here; confirm a deploy by watching the CSS chunk hash
-in the served HTML move, as this file has always said.
+`get_deployment` 404s under the only team it can reach (which holds `adaptivelearn` /
+`RadlorInc/learn` and nothing else). **Auto-deploy IS on and works**: every push all day produced a
+Ready production deployment. So a deploy that looks missing from here is a reading failure, not a
+pipeline failure — check the dashboard, or a behaviour only the new build has.
+
+## ⚠️ The incident on 2026-09-02 — read before applying another migration
+
+The reviewer page 404'd in production for the length of a deploy, because a **repointing** migration
+was applied ahead of the push on the rule that the database goes first. That rule is for ADDITIVE
+migrations. Full write-up as finding #9 in [docs/security-findings.md](docs/security-findings.md);
+the two sentences worth carrying:
+
+> **"Migration first" is not the rule. The dependency goes in before the thing that needs it — and
+> for a migration that changes what an existing column MEANS, the running app is the dependency, so
+> the order inverts. The deploy window is an outage window.**
+
+> **A measurement that has been wrong every time it mattered gets deleted, not caveated.** The
+> CSS-chunk-hash deploy check said "not deployed" twice while the deploy was Ready, and on that
+> basis a write to production data was proposed for a system that was already fine.
 
 ## Open findings and their triggers
 

@@ -424,3 +424,50 @@ approved"* — rather than trusting it to fall out of the other cases. `/admin` 
 glance either. The e2e suite drives `quiet-draft`, which is seeded with no assignments for exactly
 this.
 
+---
+
+## 9. A repointing migration took the reviewer page down for the length of a deploy — 2026-09-02
+
+**Self-inflicted, recovered by the deploy itself, ~6 minutes. The rule it breaks is one this repo
+already had written down, applied to the wrong shape of change.**
+
+`20260902110000_reviewer_accounts.sql` moved `notes.reviewer_id` and `video_reviewers.reviewer_id`
+from holding `reviewers.id` to holding `profiles.user_id`. It was applied to the live database
+BEFORE the matching code was pushed, on the standing rule that the database dependency goes in
+first. For the ~6 minutes between the migration and the build going Ready, the running build
+resolved a token to `reviewers.id` and looked assignments up by it, while the rows held `user_id`.
+No match: the reviewer's list rendered empty and every video 404'd. Measured, both sides:
+
+| | value | old build compares | new build compares |
+|---|---|---|---|
+| `reviewers.id` | `9005210c…` | ✅ this | — |
+| `reviewers.user_id` | `0c313ddb…` | — | ✅ this |
+| `video_reviewers.reviewer_id` | `0c313ddb…` | ✗ no match | ✓ match |
+
+⚠️ **"MIGRATION FIRST" IS NOT THE RULE. The rule is: the dependency goes in before the thing that
+needs it.** For an ADDITIVE migration the app is the dependent, so the database goes first and the
+old build simply ignores the new table — that is why `video_reviewers` shipped with no outage at
+all. For a REPOINTING migration the running app is what the data depends on, and the order inverts.
+**A migration that changes what an existing column MEANS is a breaking change to every running
+reader, and the deploy window is an outage window.** The shape that avoids it is one both builds can
+read — write the new value alongside the old, cut over, then remove — or a confirmed deploy window.
+
+### What made it worse, and is the more useful half
+
+The outage was diagnosed **against a build that was not running.** A CSS-chunk-hash check had
+reported "the deploy has not landed" — twice, wrongly, both in the same direction — so the
+conclusion was "old build, new data" at a moment when the new build had in fact been Ready for
+minutes. On that reasoning a write to the production database was proposed. It was blocked, and the
+actual deployment list showed fourteen Ready deployments that day.
+
+⚠️ **A measurement instrument that has been wrong every time it mattered is not weak, it is broken,
+and the fix is to delete it rather than to describe it more narrowly.** It has been removed from
+the handoff, not caveated. The signals that actually answered the question: `/review` responding
+`307 → /login` rather than `404`, because that route exists in exactly one of the two builds. **Pick
+a discriminator that only one build can produce, not a hash you have no known-good value for.**
+
+⚠️ And the near-miss is worth its own line: **the proposed remedy was a write to production data,
+justified by an unverified belief about which code was running.** The reasoning was checkable in one
+request and was not checked, because the conclusion already explained the symptom. Nothing needed
+fixing; the deploy had already fixed it.
+
