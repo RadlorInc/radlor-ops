@@ -88,11 +88,52 @@ export default function Todos({ initial }: { initial: Todo[] }) {
 
   const open = items.filter((t) => t.status !== 'done').length
 
+  /** Done out of total, per area, biggest first. Items with no area are grouped as "No area" so
+   *  the meters always add up to the list — a summary that silently drops rows is worse than none. */
+  const areas = Object.values(
+    items.reduce<Record<string, { name: string; done: number; total: number }>>((acc, t) => {
+      const name = t.area?.trim() || 'No area'
+      acc[name] ??= { name, done: 0, total: 0 }
+      acc[name].total += 1
+      if (t.status === 'done') acc[name].done += 1
+      return acc
+    }, {}),
+  ).sort((a, b) => b.total - a.total || a.name.localeCompare(b.name))
+
   return (
     <section style={{ marginTop: 36 }}>
       <h2>
         To-do <span className="muted small" data-testid="todo-open-count">({open} open of {items.length})</span>
       </h2>
+
+      {/**
+        * ⚠️ SMALL MULTIPLES OF ONE METER, NOT A PIE AND NOT A STACKED BAR. Each area is its own
+        * ratio against its own total — "3 of 5 done" — and ratios against different denominators
+        * do not belong in one part-to-whole. One hue, because these are the same measurement seven
+        * times, not seven different things.
+        *
+        * It lives inside this component rather than in a dashboard-wide KPI strip on the server,
+        * and that is the whole reason it can be trusted: the list below mutates client-side as
+        * items are added and advanced, so a summary rendered anywhere else would quietly disagree
+        * with the list it is summarising the moment anybody clicked something.
+        */}
+      {areas.length > 0 && (
+        <div className="areameters" data-testid="area-progress">
+          {areas.map((a) => (
+            <div className="row2" key={a.name}>
+              <span className="name" title={a.name}>{a.name}</span>
+              <span className="meter" data-state={a.done === a.total ? 'cleared' : undefined}>
+                <span className="track">
+                  <span className="fill" style={{ width: `${(a.done / a.total) * 100}%` }} />
+                </span>
+              </span>
+              <span className="count">
+                {a.done}/{a.total}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
 
       <div style={{ display: 'flex', gap: 8, margin: '10px 0 14px' }}>
         <input

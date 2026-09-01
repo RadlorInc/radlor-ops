@@ -46,6 +46,17 @@ export default function AdminIssues({
         </span>
       </h2>
 
+      {/* Resolved out of filed. The same meter as the to-do areas and the clearance column —
+          three ratios in one dashboard should not be three different pictures. */}
+      {items.length > 0 && (
+        <div className="meter" style={{ maxWidth: 320, margin: '2px 0 14px' }} data-state={open === 0 ? 'cleared' : undefined}>
+          <span className="track">
+            <span className="fill" style={{ width: `${((items.length - open) / items.length) * 100}%` }} />
+          </span>
+          <span className="count">{items.length - open} resolved</span>
+        </div>
+      )}
+
       {ORDER.map((status) => {
         const group = items.filter((i) => i.status === status)
         if (group.length === 0) return null

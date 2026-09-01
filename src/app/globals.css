@@ -233,6 +233,70 @@ button.linky {
 button.linky:hover { background: none; color: #a3b9ff; }
 button.linky.small { font-size: 13px; }
 
+/* ── Figures and meters ─────────────────────────────────────────────────────────────────────
+ *
+ * ⚠️ NO SPARKLINES AND NO DELTAS ANYWHERE, AND THAT IS A DATA FACT, NOT A STYLE CHOICE. A stat
+ * tile's trend and its "+12% vs last month" both need a previous period, and nothing in this
+ * schema stores one — there is no history table for spend, for to-do counts or for issues. A
+ * sparkline drawn from the only row that exists is decoration that looks like evidence.
+ */
+
+/* Exactly ONE hero per view: the monthly bill. Proportional figures on purpose — `tabular-nums`
+   gives every digit the width of a zero, which at 44px makes a number look gappy. Tabular is for
+   columns that must line up, which is the table below, not this. */
+.hero { display: flex; align-items: baseline; gap: 10px; margin: 2px 0 14px; }
+.hero .figure { font-size: 44px; line-height: 1; font-weight: 600; letter-spacing: -0.02em; }
+.hero .unit { font-size: 15px; color: var(--muted); }
+
+/**
+ * Part-to-whole in one bar. Categorical hues in FIXED ORDER — slot 1 is always slot 1, so a tool
+ * keeps its colour when another is added or removed. Validated against this surface with the
+ * dataviz validator: all six pass the lightness band, chroma floor, CVD separation (worst
+ * adjacent ΔE 8.4 protan) and 3:1 contrast.
+ *
+ * ⚠️ The 2px gaps are `--panel`, the surface behind the bar, not a border: a border would add
+ * width and misstate every segment's share. The bar is never the only reading of this data — the
+ * costs table underneath is the table view, and each segment is named in the legend below it.
+ */
+.sharebar {
+  display: flex; gap: 2px; height: 14px; margin: 0 0 10px;
+  border-radius: 4px; overflow: hidden; background: var(--panel);
+}
+.sharebar > span { display: block; min-width: 3px; }
+.sharebar > span:first-child { border-radius: 4px 0 0 4px; }
+.sharebar > span:last-child { border-radius: 0 4px 4px 0; }
+
+.legend { display: flex; flex-wrap: wrap; gap: 4px 16px; margin: 0 0 16px; padding: 0; list-style: none; font-size: 13px; }
+.legend li { display: flex; align-items: center; gap: 7px; }
+/* ⚠️ The swatch carries identity; the text stays in ink. Colouring the label the same as its
+   series is the quickest way to fail contrast on the lighter slots. */
+.legend .swatch { width: 9px; height: 9px; border-radius: 2px; flex: 0 0 auto; }
+.legend .amount { color: var(--muted); font-variant-numeric: tabular-nums; }
+
+/**
+ * A ratio against a limit. The track is a dim step of the fill's own hue rather than plain grey,
+ * so the state reads across the whole bar and not only across the filled part.
+ */
+.meter { display: flex; align-items: center; gap: 8px; }
+.meter .track {
+  flex: 1 1 auto; min-width: 44px; height: 6px; border-radius: 3px;
+  background: color-mix(in srgb, var(--meter-hue, var(--accent)) 22%, transparent);
+  overflow: hidden;
+}
+.meter .fill {
+  display: block; height: 100%; border-radius: 3px;
+  background: var(--meter-hue, var(--accent));
+  transition: width var(--t) ease;
+}
+.meter .count { font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.meter[data-state='cleared'] { --meter-hue: #4ec98a; }
+.meter[data-state='blocked'] { --meter-hue: var(--attention); }
+
+/* Per-area progress above the to-do list: small multiples of the same meter, one per area. */
+.areameters { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 6px 20px; margin: 0 0 14px; }
+.areameters .row2 { display: grid; grid-template-columns: 8.5em 1fr auto; align-items: center; gap: 10px; }
+.areameters .name { font-size: 13px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
 /* ── Admin dashboard ─────────────────────────────────────────────────────────────────────── */
 
 ol.todos { list-style: none; margin: 0; padding: 0; }

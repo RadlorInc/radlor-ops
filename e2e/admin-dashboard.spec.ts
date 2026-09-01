@@ -191,3 +191,34 @@ test('an admin can move an issue to resolved from the dashboard, and the row mov
     .poll(async () => (await rows(request, 'issues', `&id=eq.${target.id}`))[0]?.status)
     .toBe('resolved')
 })
+
+/**
+ * ⚠️ A SUMMARY THAT SILENTLY DROPS ROWS IS WORSE THAN NO SUMMARY. Both pictures on this page are
+ * derived — the per-area meters group the to-do list, the spend bar folds anything past the sixth
+ * tool into "Other" — and each is one `.slice()` or one `reduce` away from quietly leaving
+ * something out. Nothing else on the page would go red if they did: the list underneath would
+ * still be complete and correct, and the number above it would just be wrong.
+ *
+ * So the assertions are the ARITHMETIC, against the rendered list, not the presence of a bar.
+ */
+test('the pictures account for every row they summarise', async ({ page }) => {
+  await signIn(page, 'admin')
+
+  // Every to-do is in exactly one area meter: the denominators must sum to the list length.
+  const items = await page.getByTestId('todo-task').count()
+  const counts = await page.getByTestId('area-progress').locator('.count').allInnerTexts()
+  const totals = counts.map((c) => Number(c.split('/')[1]))
+  expect(totals.length).toBeGreaterThan(0)
+  expect(totals.reduce((a, b) => a + b, 0)).toBe(items)
+
+  // And the spend legend names every tool that costs something — the £0 row has no share, so it
+  // is the one that must NOT be there. Asserting "3 entries" would pass on a bar that dropped
+  // Vercel and invented a segment.
+  const legend = await page.getByTestId('spend-legend').innerText()
+  expect(legend).toContain('Higgsfield')
+  expect(legend).toContain('Vercel')
+  expect(legend).not.toContain('Supabase')
+  const pcts = [...legend.matchAll(/(\d+)%/g)].map((m) => Number(m[1]))
+  expect(pcts.reduce((a, b) => a + b, 0)).toBeGreaterThanOrEqual(99)
+  expect(pcts.reduce((a, b) => a + b, 0)).toBeLessThanOrEqual(101)
+})

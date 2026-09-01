@@ -124,6 +124,22 @@ export default async function Admin() {
                 <div className="muted small" data-testid="progress-label">
                   {c.disagreement ? `disagreement · ${progressLabel(c)}` : progressLabel(c)}
                 </div>
+                {/* ⚠️ THE BAR IS NEVER THE ONLY READING. It sits under the word and the sentence
+                    that already say the same thing, because a fill length cannot distinguish
+                    "both approved" from "both answered, one objected" — the state that matters
+                    most here. `blocked` colours it amber when an objection is standing; the words
+                    above are what carry that meaning for anyone who cannot see the difference. */}
+                {c.assigned > 0 && (
+                  <span
+                    className="meter"
+                    data-state={c.cleared ? 'cleared' : c.changesNeeded > 0 ? 'blocked' : undefined}
+                    style={{ marginTop: 4, maxWidth: 120 }}
+                  >
+                    <span className="track">
+                      <span className="fill" style={{ width: `${(c.decided / c.assigned) * 100}%` }} />
+                    </span>
+                  </span>
+                )}
               </td>
               <td>{unread.get(v.id) ?? 0}</td>
             </tr>
