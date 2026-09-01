@@ -60,6 +60,48 @@ So the rule has three faces, all of which pass because the code equals itself:
 **(a)** grep-coupled to where a literal lives · **(b)** import-coupled to the value under test ·
 **(c)** filter-coupled to the property under test.
 
+### The fourth face: a check whose result depends on another check
+
+Added 2026-09-02. Two specs in `e2e/verdict.spec.ts` both drove `split-cut` — one *wrote* verdicts
+to prove a reviewer cannot overwrite another, the other *read* the seeded disagreement off `/admin`.
+The reader passed or failed on which ran first.
+
+> **A suite where one test's result depends on another's order reports test order, not behaviour.**
+> It fails in both directions — green because the mutation happened to run last, red on a build
+> that is fine. The fix is a fixture per spec (`overwrite-cut` now exists solely so `split-cut`
+> stays a fixture), not a re-ordering, and not a restore step at the end of the mutating test.
+
+⚠️ **And the fixtures have to be the cases the OLD code gets wrong**, or a break-check is theatre.
+`quiet-draft` could not prove the new assignment filter: `status` already refused it on the build
+being replaced, so it 404s either way. `flood-only` — reviewable, and somebody else's — can only be
+refused by the assignment. Same for the clearing rule: "every assigned reviewer approved" and "the
+`verdict` column says approved" agree on every 1:1 row, so a fixture where each video has one
+reviewer passes against the code you just deleted. It took `split-cut`, with two reviewers who
+disagree, before the check could tell the two rules apart. **Pick the fixture the old code answers
+wrong; that is what makes the red mean something** — the same job the positive controls do in
+`check-anon-locked-out.mjs`.
+
+### The grants you DON'T write are load-bearing too
+
+Added 2026-09-02. `20260902090000_video_reviewers.sql` granted `select` and `update (verdict)` and
+said in a comment: *"It cannot INSERT."* Read back off the live project, `service_role` **could**
+insert. Nothing granted it — `20260831165900` had set
+
+```sql
+alter default privileges in schema review grant select, insert on tables to service_role;
+```
+
+so every table created in this schema arrives with INSERT already on it.
+
+> **In a schema carrying default privileges, the absence of a `grant` line looks exactly like a
+> denial and is not one.** Naming the grants you want describes an intention; only a `revoke`
+> enforces one. And the diff shows you the lines that are there, never the ones inherited.
+
+PGlite runs as one superuser, so this class is invisible to `npm run test:e2e` at any effort — it is
+the same axis as the GRANTs that left the suite 19/19 green while every route would have answered
+`42501`. **Read privileges back out of the live project after creating a table**, with
+`has_table_privilege` / `has_column_privilege`, and assert the falses as loudly as the trues.
+
 ### And the corollary about deleting a check
 
 A test that goes green on something the harness **structurally cannot observe** is worse than no

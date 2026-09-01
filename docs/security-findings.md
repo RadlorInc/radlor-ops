@@ -387,3 +387,40 @@ The token itself is unchanged: still a bearer string in a URL, still shareable b
 link. Assignment scopes *what a token reaches*, not *who is holding it*. That is the reviewer-
 accounts work, and it is the next thing.
 
+---
+
+## 8. `[].every()` is `true` — an empty assignment set nearly read as "cleared to post" — 2026-09-02
+
+**Caught before it shipped. Recorded because of where it came from, not because of what it cost.**
+
+The clearing rule is "every assigned reviewer has approved". Written the obvious way —
+
+```js
+cleared: assignments.every((a) => a.verdict === 'approved')
+```
+
+— a video with **zero** assignments is cleared. Not because anyone decided that an unreviewed video
+is fine to post, but because that is what JavaScript's `every()` answers for an empty array. It is
+the correct answer to the question the language is asking (*is there a counterexample?*) and the
+opposite of the answer to the question the product is asking (*has everybody signed off?*).
+
+⚠️ **This is the worst output this feature could produce.** Every other failure mode here is
+visible: a missing verdict shows as missing, a disagreement shows as a disagreement. "Cleared to
+post" on a video **no human has opened** looks exactly like "cleared to post" on a video two people
+approved. And it would have arrived on rows that are entirely normal — a video added and not yet
+assigned is the default state of every new video.
+
+⚠️ **The class, which is the reason this is in findings and not in a code comment: a default that
+comes from a language rather than from a decision.** Nobody writes down "and if nobody was asked,
+post it" — so nobody reviews it, and no reader of the rule notices it is missing, because the code
+reads exactly like the sentence it is supposed to implement. Vacuous truth over an empty collection
+is the common one; `Math.max()` of nothing, an all-`AND` filter with no clauses, and a permission
+check that iterates an empty rule list are the same shape.
+
+`src/lib/clearance.ts` requires `assignments.length > 0` explicitly, and
+`test/clearance.test.mjs` asserts the empty case on its own — *"nobody assigned is not everybody
+approved"* — rather than trusting it to fall out of the other cases. `/admin` renders it as
+`nobody assigned`, which is a different string from every other state, so it cannot be misread at a
+glance either. The e2e suite drives `quiet-draft`, which is seeded with no assignments for exactly
+this.
+

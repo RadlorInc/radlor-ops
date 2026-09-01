@@ -69,7 +69,7 @@ places to edit one list ends with neither being right. If sync is asked for, say
    row-by-row (count, timestamps, bodies, author), and drop the token column in a **separate**
    migration so a bad repoint cannot take the token path with it.
 
-## Multiple reviewers — built 2026-09-02, NOT YET DEPLOYED
+## Multiple reviewers — built, applied and pushed 2026-09-02
 
 Rafi asked for more than one person on the same video. `review.video_reviewers` is the assignment
 — `(video_id, reviewer_id, assigned_at, verdict)`, PK on the first two — and it is where `verdict`
@@ -79,31 +79,39 @@ overwrite an earlier objection, because each verdict is its own row. `src/lib/cl
 that in one function, `npm run test:clearance` checks it, and both it and the assignment scoping
 were proven with `scripts/break-check.sh` rather than asserted.
 
-⚠️⚠️ **APPLY `supabase/migrations/20260902090000_video_reviewers.sql` BEFORE PUSHING.** The commit
-is deliberately NOT pushed. Vercel deploys on push, and the deployed app reads `video_reviewers` —
-against a database without that table every reviewer page and `/admin` breaks at once. This is the
-same shape as the `SUPABASE_ANON_KEY` deploy that took the live waitlist form down for four
-minutes: the dependency goes into the target environment first, and is confirmed there, not after.
-Order: apply the migration → read the backfill back → push → re-run the four live check scripts.
+⚠️ **Two findings came out of it**, both in [docs/security-findings.md](docs/security-findings.md):
+**#7** any valid token opened any reviewable video (nobody decided that; it fell out of there being
+one video) and **#8** `[].every()` is `true`, so a video with zero assignments read as *cleared to
+post* until the length check was added.
 
-⚠️ **The backfill refuses to guess.** `videos.verdict` records no author, so with more than one
-reviewer "who approved this" has no answer and copying one verdict onto both rows would fabricate
-an approval. The migration raises unless there is exactly one reviewer. There is exactly one today,
-so `equals-reel`'s real approval carries across intact — that is the whole reason it is copied
-rather than dropped.
+**Applied to the live project 2026-09-01/02, in this order, with a read between each step:**
 
-⚠️ **`videos.verdict` is NOT dropped, on purpose.** Nothing reads or writes it any more, but the
-drop — and the `revoke update (verdict)` that belongs with it — is a **separate migration, after
-the copy has been read back**. Same sequencing as the reviewer-token column: a bad backfill must
-not be able to take the only copy of the data with it. Until that second migration, treat the
-column as stale, and do not reintroduce a read of it.
+1. `20260902090000_video_reviewers.sql` — applied. Pre-state read first: 1 reviewer, 1 video, 1
+   verdict, table absent. The backfill's one-reviewer guard therefore did not fire.
+2. Backfill **read back as a row, not as a success code**: `equals-reel` → Rafi's assignment
+   (`9005210c…`), `verdict = 'approved'`, `videos.verdict` still `approved` beside it, 1 assignment
+   total. Then read again through **PostgREST with the profile header**, which is the path the app
+   actually uses — a `select` privilege and an exposed schema are different questions.
+3. ⚠️ **The privilege read-back found the previous migration's comment was FALSE** — see
+   `20260902093000_video_reviewers_revoke_insert.sql` and the CLAUDE.md rule it produced. Now:
+   select ✔ · update(verdict) ✔ · insert ✘ · delete ✘ · anon select ✘.
+4. Pushed. `origin/main` at `25c6a18`.
+
+⚠️ **`videos.verdict` is still there, and now it is safe to drop.** Nothing reads or writes it; the
+copy has been read back off the live database. The drop and the `revoke update (verdict)` that goes
+with it are the next migration — still a separate one, applied on its own.
 
 **Assignment is a SQL statement Rafi runs**, like adding a video. Deliberately no reassignment UI,
-no due dates, no reminders — and the web tier has no INSERT or DELETE grant on the table, so a
-route bug cannot unassign a reviewer and take their verdict with it.
+no due dates, no reminders — and the web tier now genuinely has no INSERT or DELETE on the table,
+so a route bug cannot invent an assignment. A fabricated assignment is a fabricated reviewer.
 
 **Still true, and load-bearing:** a reviewer sees their own notes and their own verdict, never
 another reviewer's. It is what stops one reviewer anchoring on another's opinion.
+
+⚠️ **The Vercel MCP connector cannot see this project** — `list_deployments` 403s and
+`get_deployment` 404s on `video-reviewer-liard.vercel.app` under the only team it can reach. So the
+deployed SHA cannot be confirmed from a tool here; confirm a deploy by watching the CSS chunk hash
+in the served HTML move, as this file has always said.
 
 ## Open findings and their triggers
 
