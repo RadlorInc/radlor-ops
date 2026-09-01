@@ -95,7 +95,23 @@ post* until the length check was added.
 3. ⚠️ **The privilege read-back found the previous migration's comment was FALSE** — see
    `20260902093000_video_reviewers_revoke_insert.sql` and the CLAUDE.md rule it produced. Now:
    select ✔ · update(verdict) ✔ · insert ✘ · delete ✘ · anon select ✘.
-4. Pushed. `origin/main` at `25c6a18`.
+4. Pushed. `origin/main` at `4569c76`.
+5. ⚠️ **AND THE DEPLOY IS NOT CONFIRMED.** The served CSS chunk hash was
+   `1uyi2fkzh267u.css` before the push and was still `1uyi2fkzh267u.css` after **ten minutes of
+   polling** — and this push edited `globals.css`, so a landed build cannot serve the same hash.
+   Either the deploy has not run or it did not come from this push. **Do not read "the pages
+   render 200" as the deploy landing**: they render because the migration was purely additive, so
+   the OLD build runs fine against the NEW database. That is the sequencing working, not evidence.
+
+   ⚠️ Comparing the live hash to a LOCAL `npm run build` does not work — checked, not assumed: the
+   pre-push CSS builds to `13jjruq3j4jzj` here and the post-push CSS to `0rjmzmykdmv5h`, and the
+   live site serves neither. Turbopack's chunk hash is not portable between this machine and
+   Vercel's builder. The hash can answer *"did the deployment move?"*, never *"which source is
+   live?"* — and this file's own advice should be read that narrowly.
+
+   **The one-glance discriminator is `/admin`, which needs Rafi's login:** the new build's video
+   table has **Reviewers** and **Cleared to post** columns; the old one has a single **Verdict**
+   column. Sign in and look. If it still says Verdict, the deploy did not land.
 
 ⚠️ **`videos.verdict` is still there, and now it is safe to drop.** Nothing reads or writes it; the
 copy has been read back off the live database. The drop and the `revoke update (verdict)` that goes
@@ -205,7 +221,11 @@ after that**, and the assertion stops depending on a control to be meaningful.
   driven by throwaway accounts; Rafi driving them by hand is outstanding.
 - **The stronger issues RLS comparison** — pending a real tester issue, then a re-run of
   `check-tester-cannot-read-admin`. Detail above; do not let the 4-of-4 line absorb it.
-- **Everything in "Multiple reviewers" above, against the live project.** 53 offline specs pass and
-  two break-checks bind, which is behaviour. The migration has not been applied, the backfill has
-  not been read back, and no second reviewer exists in production yet.
+- **That the multi-reviewer build is actually DEPLOYED.** The database half is applied and read
+  back; the app half is pushed and unconfirmed — see step 5 above. Nothing is broken either way,
+  because the migration only added.
+- **Multiple reviewers against the live project.** Production still has one reviewer and one
+  video, so the 1:1 case is the only one exercised there. `/admin`'s disagreement banner, the
+  progress label and the clearing rule have been driven only against the offline fixture. Assigning
+  a second reviewer to `equals-reel` is the smallest thing that changes that.
 - **Self-signup being off** in Supabase Auth — cannot be read from here.
