@@ -64,4 +64,9 @@ insert into review.todos (task, status, area, sort_order) values
 -- harness tester, one is an imported row with no reporter — the shape the real import produced.
 insert into review.issues (reporter, imported_from, description, area, type, chapter, all_chapters, age_band, status) values
   ('66666666-6666-4666-8666-666666666666', null, 'The turtles are too close together to read the numbers', 'Smallest first game', null, '1', false, '3-5', 'open'),
-  (null, 'Chapter_Testing_tester2', 'Any "shall" should be changed to "should".', null, 'Titles', null, true, '3-5', 'ready_for_retest');
+  (null, 'Chapter_Testing_tester2', 'Any "shall" should be changed to "should".', null, 'Titles', null, true, '3-5', 'ready_for_retest'),
+  -- ⚠️ A RESOLVED ONE, so the admin dashboard's three status groups all EXIST. Without it the
+  -- resolved group never rendered, and an assertion guarded by `if (group.count())` silently
+  -- skipped — a conditional assertion that can vanish is the same family as one that filters on the
+  -- property it is testing.
+  (null, 'Chapter_Testing_tester2', 'The star award pop up says "Amazing!" twice.', 'Chapter ending star award pop up', null, '1', false, '3-5', 'resolved');

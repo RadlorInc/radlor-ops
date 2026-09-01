@@ -165,13 +165,17 @@ test('tester issues appear on the dashboard, action-needed first, with null repo
   await signIn(page, 'admin')
   await expect(page.getByTestId('issues-count')).toContainText('needing something')
 
-  // Open and Ready for retest start expanded; Resolved starts collapsed.
-  const open = page.getByTestId('issue-group-open')
-  const retest = page.getByTestId('issue-group-ready_for_retest')
-  if (await open.count()) expect(await open.evaluate((e: HTMLDetailsElement) => e.open)).toBe(true)
-  if (await retest.count()) expect(await retest.evaluate((e: HTMLDetailsElement) => e.open)).toBe(true)
-  const resolved = page.getByTestId('issue-group-resolved')
-  if (await resolved.count()) expect(await resolved.evaluate((e: HTMLDetailsElement) => e.open)).toBe(false)
+  /**
+   * ⚠️ UNCONDITIONAL. The first version wrapped each of these in `if (await group.count())` — and
+   * the seed had no RESOLVED issue, so the one assertion that mattered never ran and the check
+   * passed against a build where every group started expanded. A guard that can skip the assertion
+   * is the same disease as a filter that can only match rows already satisfying it.
+   */
+  const openState = async (status: string) =>
+    page.getByTestId(`issue-group-${status}`).evaluate((e: HTMLDetailsElement) => e.open)
+  expect(await openState('open')).toBe(true)
+  expect(await openState('ready_for_retest')).toBe(true)
+  expect(await openState('resolved')).toBe(false)   // the two that need action are not buried under it
 
   // The absence is the fact, rendered as such.
   await expect(page.getByTestId('issue-reporter').filter({ hasText: 'imported from the sheet' }).first()).toBeVisible()
