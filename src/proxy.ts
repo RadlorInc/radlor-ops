@@ -74,9 +74,8 @@ function expiringSoon(jwt: string): boolean {
   }
 }
 
-// ⚠️ `/review` is here and `/r/:path*` is NOT. The token door has no session to refresh, and
-// putting it through the refresh path would spend a Supabase round trip on every reviewer page
-// load for a cookie that is never set.
+// Every surface behind an account is here, `/review` included — a reviewer mid-write-up is exactly
+// who must not be thrown back to the login form by an expiring hour.
 export const config = {
   matcher: ['/admin', '/admin/:path*', '/tester', '/tester/:path*', '/review', '/review/:path*'],
 }

@@ -12,7 +12,7 @@ import { reviewerVideoBySlug, setOutcome } from '@/lib/db'
  * assignment (see `setOutcome`), so one person finishing does not announce the video as reviewed
  * while somebody else still has it open.
  *
- * The reviewer's token authorises this and nothing else: the route resolves the token server-side,
+ * The reviewer's SESSION authorises this and nothing else: the route resolves it server-side,
  * looks the video up through the same assignment-scoped filter as the page, and can only write the
  * `verdict` column of THEIR OWN assignment row — the grant is column-level, so even a bug here
  * cannot repoint `storage_path`, and the PATCH filter names both keys so it cannot reach another
@@ -30,14 +30,13 @@ export async function POST(req: Request) {
   }
 
   const raw = (await req.json().catch(() => ({}))) as Record<string, unknown>
-  const token = typeof raw.token === 'string' ? raw.token : ''
   const slug = typeof raw.slug === 'string' ? raw.slug : ''
   // Whitelisted, not passed through: the CHECK constraint would catch a bad value, but a route
   // that forwards whatever it is given relies on the database to be its input validation.
   const verdict = raw.verdict === 'approved' || raw.verdict === 'changes_needed' ? raw.verdict : null
 
-  // Session first, token second — same person either way. See reviewerIdentity().
-  const reviewer = await reviewerIdentity(token || null)
+  // The session says who is asking. There is no other way in.
+  const reviewer = await reviewerIdentity()
   if (!reviewer) return NextResponse.json({ error: 'not_found' }, { status: 404 })
 
   if (overLimit(`done:reviewer:${reviewer.id}`, TOKEN_LIMIT, WINDOW_MS)) {

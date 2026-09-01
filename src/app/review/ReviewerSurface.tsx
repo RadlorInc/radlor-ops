@@ -7,13 +7,11 @@ import Review from './Review'
 /**
  * The reviewer's two screens, rendered from an IDENTITY rather than from a token.
  *
- * ⚠️ ONE IMPLEMENTATION, TWO DOORS. `/review` (signed in) and `/r/<token>` (the old link) both
- * render these. Two copies would drift, and the copy that drifts is the one nobody is looking at —
- * which, while the token path is the only one anyone has used, would be the NEW one. When the
- * token door is deleted, its two page files go and nothing in here changes.
+ * The token door has been removed; deleting it was two page files and nothing in here changed,
+ * which is what sharing one implementation bought.
  */
 
-export async function ReviewerList({ identity, hrefBase }: { identity: ReviewerIdentity; hrefBase: string }) {
+export async function ReviewerList({ identity }: { identity: ReviewerIdentity }) {
   const videos = await videosForReviewer(identity.id)
 
   return (
@@ -21,17 +19,13 @@ export async function ReviewerList({ identity, hrefBase }: { identity: ReviewerI
       <h1>Radlor — videos to review</h1>
       <p className="muted small">
         Signed in as {identity.name}.{' '}
-        {identity.via === 'token' ? (
-          'This link is yours; please don’t forward it.'
-        ) : (
-          <span data-testid="signout-inline">
-            <form method="post" action="/api/auth/logout" style={{ display: 'inline' }}>
-              <button className="linky" type="submit" data-testid="sign-out">
-                Sign out
-              </button>
-            </form>
-          </span>
-        )}
+        <span data-testid="signout-inline">
+          <form method="post" action="/api/auth/logout" style={{ display: 'inline' }}>
+            <button className="linky" type="submit" data-testid="sign-out">
+              Sign out
+            </button>
+          </form>
+        </span>
       </p>
 
       {videos.length === 0 ? (
@@ -41,7 +35,7 @@ export async function ReviewerList({ identity, hrefBase }: { identity: ReviewerI
       ) : (
         <div style={{ marginTop: 20 }}>
           {videos.map((v) => (
-            <Link key={v.id} className="card" href={`${hrefBase}/${v.slug}`} data-testid="video-card">
+            <Link key={v.id} className="card" href={`/review/${v.slug}`} data-testid="video-card">
               <strong>{v.title}</strong>
               <div className="muted small">
                 {v.slug} · v{v.version}
@@ -55,17 +49,7 @@ export async function ReviewerList({ identity, hrefBase }: { identity: ReviewerI
   )
 }
 
-export async function ReviewerVideo({
-  identity,
-  slug,
-  token,
-  listHref,
-}: {
-  identity: ReviewerIdentity
-  slug: string
-  token: string | null
-  listHref: string
-}) {
+export async function ReviewerVideo({ identity, slug }: { identity: ReviewerIdentity; slug: string }) {
   // Filters on the ASSIGNMENT and on status, so three different things are the same 404: a draft,
   // a cut being revised, and a video this reviewer was never assigned.
   const video = await reviewerVideoBySlug(slug, identity.id)
@@ -78,8 +62,6 @@ export async function ReviewerVideo({
 
   return (
     <Review
-      token={token}
-      listHref={listHref}
       slug={video.slug}
       title={video.title}
       version={video.version}

@@ -177,26 +177,18 @@ reviewer on `equals-reel` because a `video_reviewers` row says so. **Roles gate 
 assignments decide what is on it** — an admin with no assignments opens `/review` and sees nothing,
 which is right.
 
-### The old token link — still working, on purpose
+### The token link is gone
 
-```sql
-insert into review.reviewers (name, email, token, user_id)
-values ('Their Name', 'them@agency.com', 'tok_…paste…', '<their user_id>');
-```
+`/r/<token>` was removed on 2026-09-02, after Rafi signed in at `/review` and confirmed it worked.
+That order was the point: the new door was built, kept alongside the old one, opened by a human, and
+only then was the old one deleted — the same sequencing as the `?k=<ADMIN_TOKEN>` gate. Deleting it
+cost nothing because both doors had already been made to resolve to the same `profiles.user_id`, so
+no note and no assignment changed owner.
 
-⚠️ **`user_id` is not optional in practice.** `notes.reviewer_id` and
-`video_reviewers.reviewer_id` hold profile user_ids now; a reviewer row without one resolves to
-**nobody**, and its link 404s. That is deliberate: a link that works while its holder's notes are
-unreachable is worse than a link that does not work.
-
-To revoke a link:
-
-```sql
-update review.reviewers set revoked_at = now() where email = 'them@agency.com';
-```
-
-The link 404s from the next request — identically to a token that never existed. ⚠️ Revoking the
-**link** does not disable the **account**; for that, disable the user in Authentication → Users.
+`review.reviewers` is now **vestigial**: nothing in `src/` reads it, names come from
+`review.profiles`, and the `token` column is dropped. The table itself is left standing for one
+release with the emails still in it; dropping it is a separate decision and a one-line migration,
+taken when nobody has wanted to look at the old rows for a while.
 
 ## 7. Add a video
 

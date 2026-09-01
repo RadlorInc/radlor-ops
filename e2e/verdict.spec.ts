@@ -1,9 +1,9 @@
 import { expect, test } from '@playwright/test'
-import { SUPABASE_URL, TOKENS, USERS } from './tokens'
+import { SUPABASE_URL, USERS } from './tokens'
 import { signIn } from './signIn'
 
 /** `hook-test-b`, so this cannot collide with the note round-trip spec on `equals-reel-final`. */
-const PAGE = `/r/${TOKENS.valid}/hook-test-b`
+const PAGE = '/review/hook-test-b'
 
 /** Reads out of the DATABASE, not off the page that just wrote it. A verdict button that updates
  *  the UI while the row stays null is the failure this whole spec exists for.
@@ -38,6 +38,7 @@ async function rowOf(
 test('choosing "Needs changes" records status AND verdict in the row', async ({ page, request }) => {
   expect(await rowOf(request, 'hook-test-b')).toEqual({ status: 'awaiting_review', verdict: null })
 
+  await signIn(page, 'dana')
   await page.goto(PAGE)
   await expect(page.getByTestId('verdict-approved')).toBeVisible()
   await page.getByTestId('verdict-changes').click()
@@ -48,6 +49,7 @@ test('choosing "Needs changes" records status AND verdict in the row', async ({ 
 })
 
 test('a note afterwards CLEARS the verdict, not just the status', async ({ page, request }) => {
+  await signIn(page, 'dana')
   await page.goto(PAGE)
   await page.getByTestId('add-note').click()
   await page.getByTestId('note-body').fill('one more — the end card sits too long')
@@ -60,6 +62,7 @@ test('a note afterwards CLEARS the verdict, not just the status', async ({ page,
 })
 
 test('approving records the other verdict, and the reviewer is not locked out', async ({ page, request }) => {
+  await signIn(page, 'dana')
   await page.goto(PAGE)
   await page.getByTestId('verdict-approved').click()
   await expect(page.getByTestId('verdict-label')).toHaveText('Approved — good to post.')
@@ -71,30 +74,26 @@ test('approving records the other verdict, and the reviewer is not locked out', 
   await expect(page.getByTestId('note-list')).toContainText('the end card sits too long')
 })
 
-test('the route refuses a bad token, a bad verdict, and a video the reviewer cannot see', async ({ request }) => {
-  // Ported from the spec this replaced: unknown and revoked are the same 404 here too.
-  for (const token of [TOKENS.revoked, TOKENS.unknown]) {
-    const res = await request.post('/api/review-done', { data: { token, slug: 'hook-test-b', verdict: 'approved' } })
-    expect(res.status(), token).toBe(404)
-  }
-  const bad = await request.post('/api/review-done', {
-    data: { token: TOKENS.valid, slug: 'hook-test-b', verdict: 'shipped' },
-  })
+test('the route refuses a signed-out caller, a bad verdict, and a video the reviewer cannot see', async ({ page, request }) => {
+  /**
+   * ⚠️ THE SIGNED-OUT CASE IS A 404, NOT A REDIRECT. A POST from a signed-out client that followed
+   * a redirect would come back 200 with a login page in the body, which reads as success to
+   * anything checking a status code. `request` carries no cookies, so this is that caller.
+   */
+  const out = await request.post('/api/review-done', { data: { slug: 'hook-test-b', verdict: 'approved' } })
+  expect(out.status()).toBe(404)
+
+  await signIn(page, 'dana')
+  const bad = await page.request.post('/api/review-done', { data: { slug: 'hook-test-b', verdict: 'shipped' } })
   expect(bad.status()).toBe(400)
-  const draft = await request.post('/api/review-done', {
-    data: { token: TOKENS.valid, slug: 'quiet-draft', verdict: 'approved' },
-  })
+  const draft = await page.request.post('/api/review-done', { data: { slug: 'quiet-draft', verdict: 'approved' } })
   expect(draft.status()).toBe(404)
 
   // ⚠️ AND A VIDEO THAT IS PERFECTLY REVIEWABLE, JUST NOT HERS. `quiet-draft` above is refused by
-  // `status`, which is the filter that was already there — it would 404 on the build this change
-  // replaced too, so on its own it proves nothing about the assignment. `flood-only` is
-  // `awaiting_review` and assigned to somebody else, so the assignment is the only thing that can
-  // refuse it. This is the finding: before `video_reviewers`, any valid token opened any
-  // reviewable slug.
-  const notMine = await request.post('/api/review-done', {
-    data: { token: TOKENS.valid, slug: 'flood-only', verdict: 'approved' },
-  })
+  // `status`, which is a filter that has always been there — on its own it proves nothing about
+  // the assignment. `flood-only` is `awaiting_review` and assigned to somebody else, so the
+  // assignment is the only thing that can refuse it.
+  const notMine = await page.request.post('/api/review-done', { data: { slug: 'flood-only', verdict: 'approved' } })
   expect(notMine.status()).toBe(404)
 
   // No attempt moved anything.
@@ -103,39 +102,44 @@ test('the route refuses a bad token, a bad verdict, and a video the reviewer can
   expect(await rowOf(request, 'flood-only', FLOOD)).toEqual({ status: 'awaiting_review', verdict: null })
 })
 
-test('a reviewer sees only the videos they were assigned — page AND list', async ({ page, request }) => {
+test('a reviewer sees only the videos they were assigned — page AND list', async ({ page, browser }) => {
+  await signIn(page, 'dana')
+  await page.goto('/review')
   // The list: `flood-only` is awaiting review, so status alone would have shown it.
-  await page.goto(`/r/${TOKENS.valid}`)
   await expect(page.getByText('Hook test B')).toBeVisible()
   await expect(page.getByText('Flood only')).toHaveCount(0)
 
   // The page, and the route that hands out a signed URL for the object itself.
-  expect((await page.goto(`/r/${TOKENS.valid}/flood-only`))?.status()).toBe(404)
-  const url = await request.get(`/api/video-url?token=${TOKENS.valid}&slug=flood-only`)
+  expect((await page.goto('/review/flood-only'))?.status()).toBe(404)
+  const url = await page.request.get('/api/video-url?slug=flood-only')
   expect(url.status()).toBe(404)
 
   // ⚠️ THE POSITIVE CONTROL. Every assertion above is satisfied by a build where nothing resolves
-  // at all — the flood reviewer getting 200 on the same slug is what makes them mean "not yours".
-  expect((await page.goto(`/r/${TOKENS.flood}/flood-only`))?.status()).toBe(200)
+  // at all — the other reviewer getting 200 on the same slug is what makes them mean "not yours".
+  const other = await browser.newPage()
+  await signIn(other, 'flood')
+  expect((await other.goto('/review/flood-only'))?.status()).toBe(200)
+  await other.close()
 })
 
 /** ⚠️ `overwrite-cut`, NOT `split-cut`. This spec writes verdicts, and the /admin spec below reads
  *  a seeded disagreement; pointing both at one row made that one pass or fail on test order. */
-test('one reviewer cannot overwrite another reviewer, in either direction', async ({ request }) => {
+test('one reviewer cannot overwrite another reviewer, in either direction', async ({ page, request }) => {
   const before = await rowOf(request, 'overwrite-cut', FLOOD)
   expect(before.verdict).toBe('changes_needed')
 
+  await signIn(page, 'dana')
   // Dana approves the same video. Her answer must land on HER row and leave the objection standing.
-  const res = await request.post('/api/review-done', {
-    data: { token: TOKENS.valid, slug: 'overwrite-cut', verdict: 'approved' },
+  const res = await page.request.post('/api/review-done', {
+    data: { slug: 'overwrite-cut', verdict: 'approved' },
   })
   expect(res.status()).toBe(200)
   expect((await rowOf(request, 'overwrite-cut', DANA)).verdict).toBe('approved')
   expect((await rowOf(request, 'overwrite-cut', FLOOD)).verdict).toBe('changes_needed')
 
   // And a note from Dana clears HER verdict only — not the other reviewer's.
-  const note = await request.post('/api/notes', {
-    data: { token: TOKENS.valid, slug: 'overwrite-cut', t_seconds: 3, body: 'actually, one more thing' },
+  const note = await page.request.post('/api/notes', {
+    data: { slug: 'overwrite-cut', t_seconds: 3, body: 'actually, one more thing' },
   })
   expect(note.status()).toBe(201)
   expect((await rowOf(request, 'overwrite-cut', DANA)).verdict).toBe(null)

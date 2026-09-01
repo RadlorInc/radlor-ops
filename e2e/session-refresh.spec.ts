@@ -1,5 +1,6 @@
 import { expect, test } from '@playwright/test'
 import { ACCOUNTS } from './tokens'
+import { signIn } from './signIn'
 
 /**
  * The proxy's token refresh — what decides whether a tester mid-write-up is thrown back to a login
@@ -71,7 +72,15 @@ test('an expired access token is refreshed, and the page renders signed in', asy
 })
 
 test('with no refresh token, an expired session is over', async ({ page, context }) => {
-  await loginFresh(page)
+  /**
+   * ⚠️ THE CACHED SESSION, NOT A FRESH ONE — and the reason is a limit, not a preference. The
+   * login route allows ten attempts a minute per IP, the suite now signs in as four different
+   * people, and this test was the one that tipped over: it passed alone and went red in the full
+   * run. It does not need a fresh login. The test above does — it SPENDS the refresh token, and
+   * those are single-use — but this one deletes the refresh token before doing anything, so a
+   * cached session is exactly as good and costs no attempt.
+   */
+  await signIn(page, 'admin')
   const at = (await context.cookies()).find((c) => c.name === 'rvr_at')!.value
   const sub = JSON.parse(Buffer.from(at.split('.')[1], 'base64url').toString()).sub
 

@@ -2,14 +2,9 @@
 -- Test data only: this file is never applied to a real project. Schema-qualified because the tool
 -- lives in `review`, not `public` — see the migration.
 
--- ⚠️ REVIEWERS ARE ACCOUNTS NOW. `notes.reviewer_id` and `video_reviewers.reviewer_id` hold
--- `profiles.user_id`, and `reviewers.user_id` is the bridge that makes the old token door land on
--- the same person as /login. Dana and Flood therefore need auth users and profiles BEFORE the
--- reviewer rows can point at them.
---
--- ⚠️ `Gone Reviewer` deliberately has NO user_id as well as being revoked. Two different reasons a
--- token resolves to nobody, and the resolver has to refuse both — a link that works while its
--- owner's notes are unreachable is worse than a link that does not work.
+-- ⚠️ THE `review.reviewers` ROWS AND THEIR TOKENS ARE GONE FROM THIS FILE. The token door was
+-- removed on 2026-09-02 after Rafi signed in at /review and confirmed it; nothing reads that table
+-- any more, and seeding it would be seeding a fixture for a feature that does not exist.
 insert into auth.users (id, email) values
   ('77777777-7777-4777-8777-777777777777', 'dana@example.com'),
   ('88888888-8888-4888-8888-888888888888', 'flood@example.com');
@@ -17,17 +12,6 @@ insert into auth.users (id, email) values
 insert into review.profiles (user_id, role, name) values
   ('77777777-7777-4777-8777-777777777777', 'reviewer', 'Dana Reviewer'),
   ('88888888-8888-4888-8888-888888888888', 'reviewer', 'Flood Reviewer');
-
-insert into review.reviewers (id, name, email, token, user_id) values
-  ('11111111-1111-4111-8111-111111111111', 'Dana Reviewer', 'dana@example.com',
-   'tok_valid_9f2c4a7b1d8e3506ac91', '77777777-7777-4777-8777-777777777777'),
-  ('22222222-2222-4222-8222-222222222222', 'Gone Reviewer', 'gone@example.com',
-   'tok_revoked_5b1e8c0a4d7f2396be40', null),
-  -- Its own reviewer so tripping the per-token limit cannot lock the other specs out.
-  ('33333333-3333-4333-8333-333333333333', 'Flood Reviewer', 'flood@example.com',
-   'tok_flood_7c3a9e5f2b6d418093af', '88888888-8888-4888-8888-888888888888');
-
-update review.reviewers set revoked_at = now() where id = '22222222-2222-4222-8222-222222222222';
 
 insert into review.videos (id, slug, title, storage_path, version, status, verdict, sort_order) values
   ('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', 'equals-reel-final', 'Equals sign reel (final cut)',

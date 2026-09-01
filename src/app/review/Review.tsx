@@ -15,16 +15,6 @@ const ANCHORS = [
 ] as const
 
 export default function Review(props: {
-  /**
-   * ⚠️ NULL WHEN THE REVIEWER IS SIGNED IN, and that is the whole difference between the two
-   * surfaces. When it is null nothing puts a token in a URL or a request body — the session
-   * cookie identifies them, and `reviewerIdentity()` on the server resolves both to the same
-   * person. Kept as a prop rather than read from the path so the token path can be deleted by
-   * deleting its pages.
-   */
-  token: string | null
-  /** Where "all videos" goes back to — `/review`, or `/r/<token>` while that door is still open. */
-  listHref: string
   slug: string
   title: string
   version: number
@@ -33,9 +23,7 @@ export default function Review(props: {
   reviewerEmail: string
   initialNotes: NoteView[]
 }) {
-  const { token, listHref, slug, title, version, reviewerName, reviewerEmail } = props
-  /** The token, when there is one, as a query fragment / body field. Empty for a session. */
-  const auth = token ? { token } : {}
+  const { slug, title, version, reviewerName, reviewerEmail } = props
   const videoRef = useRef<HTMLVideoElement>(null)
   const bodyRef = useRef<HTMLTextAreaElement>(null)
 
@@ -62,8 +50,8 @@ export default function Review(props: {
   // than rendered into the HTML — there is no permanent link to leak.
   useEffect(() => {
     let live = true
-    const q = new URLSearchParams({ slug, ...(token ? { token } : {}) })
-    fetch(`/api/video-url?${q}`)
+    // Nothing but the slug: the session cookie says who is asking.
+    fetch(`/api/video-url?slug=${encodeURIComponent(slug)}`)
       .then(async (r) => {
         if (!r.ok) throw new Error(`video url ${r.status}`)
         return (await r.json()) as { url: string }
@@ -73,7 +61,7 @@ export default function Review(props: {
     return () => {
       live = false
     }
-  }, [token, slug])
+  }, [slug])
 
   useEffect(() => {
     const id = setInterval(() => setAnchor((a) => (a + 1) % ANCHORS.length), 20_000)
@@ -104,7 +92,7 @@ export default function Review(props: {
       const res = await fetch('/api/notes', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...auth, slug, t_seconds: draftAt, body }),
+        body: JSON.stringify({ slug, t_seconds: draftAt, body }),
       })
       if (!res.ok) {
         const d = (await res.json().catch(() => ({}))) as { error?: string }
@@ -137,7 +125,7 @@ export default function Review(props: {
       const res = await fetch('/api/review-done', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...auth, slug, verdict: choice }),
+        body: JSON.stringify({ slug, verdict: choice }),
       })
       if (!res.ok) throw new Error('could not save that')
       setVerdict(choice)
@@ -153,7 +141,7 @@ export default function Review(props: {
     <main className="wrap">
       <h1>{title}</h1>
       <p className="muted small">
-        {slug} · v{version} · <a href={listHref}>all videos</a>
+        {slug} · v{version} · <a href="/review">all videos</a>
       </p>
 
       <div className="row" style={{ marginTop: 16 }}>

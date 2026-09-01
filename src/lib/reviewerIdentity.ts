@@ -1,41 +1,32 @@
 import 'server-only'
-import { reviewerByToken, type Reviewer } from './db'
+import type { Reviewer } from './db'
 import { currentProfile, currentUser } from './session'
 
 /**
  * WHO IS REVIEWING — resolved from a session, or from a token, to the SAME identity.
  *
- * ⚠️ TWO DOORS, ONE PERSON. `notes.reviewer_id` and `video_reviewers.reviewer_id` hold
- * `profiles.user_id`, so both paths must produce that id or a reviewer's history splits in half
- * depending on how they arrived. `reviewers.user_id` is what makes the token path land on the same
- * row as the login path.
- *
- * ⚠️ THE SESSION IS TRIED FIRST, AND A TOKEN CANNOT UPGRADE A SESSION. A signed-in reviewer who
- * also pastes a token gets their own session identity; a token is never allowed to name a
- * different person than the cookie already did. That way the token path can be deleted later
- * without changing who anything belongs to.
+ * ⚠️ ONE DOOR NOW. The `/r/<token>` path is gone — Rafi signed in at /review on 2026-09-02 and
+ * confirmed it, which was the condition for removing it. Deleting it cost nothing precisely
+ * because both doors had been made to resolve to the same `profiles.user_id` first: no note and no
+ * assignment changed owner when the token stopped existing.
  *
  * ⚠️ AND `admin` IS ACCEPTED HERE. Roles gate the surface, assignments decide what is on it — the
  * one reviewer in production is also the admin account. An admin with no assignments resolves
  * fine and then sees nothing, which is the correct empty list rather than an error.
  */
-export type ReviewerIdentity = Reviewer & { via: 'session' | 'token' }
+export type ReviewerIdentity = Reviewer
 
-export async function reviewerIdentity(token: string | null): Promise<ReviewerIdentity | null> {
+export async function reviewerIdentity(): Promise<ReviewerIdentity | null> {
   const profile = await currentProfile()
   if (profile && (profile.role === 'reviewer' || profile.role === 'admin')) {
     const user = await currentUser()
     return {
       id: profile.user_id,
       name: profile.name,
-      // The watermark reads this. It used to come off `reviewers.email`; for a session it is the
-      // address they actually signed in with, which is the stronger version of the same claim.
+      // The watermark reads this: the address they actually signed in with.
       email: user?.email ?? '',
       revoked_at: null,
-      via: 'session',
     }
   }
-  if (!token) return null
-  const reviewer = await reviewerByToken(token)
-  return reviewer ? { ...reviewer, via: 'token' } : null
+  return null
 }

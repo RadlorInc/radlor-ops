@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test'
-import { SUPABASE_URL, TOKENS, USERS } from './tokens'
+import { SUPABASE_URL, USERS } from './tokens'
 import { signIn } from './signIn'
 
 /**
@@ -81,37 +81,16 @@ test('a reviewer notes and finishes WITHOUT a token, and it lands on their own r
 })
 
 /**
- * ⚠️ THE ONE THAT MAKES THE REPOINT SAFE TO TRUST. Both doors must reach the same person, or a
- * reviewer's history splits in half depending on how they arrived — and the half they cannot see
- * looks exactly like work that was lost. Written from one door and read from the other, in both
- * directions.
+ * ⚠️ THE "TWO DOORS ARE ONE PERSON" TEST LIVED HERE AND IS DELETED, NOT REWRITTEN. It wrote a note
+ * through /review and read it back through /r/<token>, both directions. There is no second door
+ * any more, so there is nothing for it to compare — a rewrite would have been a second copy of
+ * "a reviewer sees their own notes", dressed as the stronger property it can no longer check.
+ *
+ * What it bought is already banked: it went red under break-check when the bridge was broken, and
+ * on that evidence the token path was removed without a single note changing owner. A check whose
+ * subject has been deleted is deleted with it — see CLAUDE.md on when removing a check is the
+ * honest option.
+ *
+ * What survives it, and is checked above: notes written before the swap still belong to the
+ * account, because the seeded notes render on the signed-in page.
  */
-test('the token door and the login door are the same person', async ({ page, request }) => {
-  await signIn(page, 'dana')
-  await page.goto('/review/equals-reel-final')
-  await page.getByTestId('add-note').click()
-  await page.getByTestId('note-body').fill('written while signed in')
-  await page.getByTestId('save-note').click()
-  await expect(page.getByTestId('note-list')).toContainText('written while signed in')
-
-  // Read it back through the OLD door, with no session at all.
-  const anon = await page.context().browser()!.newContext()
-  const tokenPage = await anon.newPage()
-  await tokenPage.goto(`/r/${TOKENS.valid}/equals-reel-final`)
-  await expect(tokenPage.getByTestId('note-list')).toContainText('written while signed in')
-
-  // And the other direction: written through the token door, visible signed in.
-  await tokenPage.getByTestId('add-note').click()
-  await tokenPage.getByTestId('note-body').fill('written through the link')
-  await tokenPage.getByTestId('save-note').click()
-  await expect(tokenPage.getByTestId('note-list')).toContainText('written through the link')
-  await anon.close()
-
-  await page.reload()
-  await expect(page.getByTestId('note-list')).toContainText('written through the link')
-
-  // Both are one author in the database, not two.
-  const bodies = (await notesOf(request, USERS.dana)).map((n) => n.body)
-  expect(bodies).toContain('written while signed in')
-  expect(bodies).toContain('written through the link')
-})

@@ -1,11 +1,12 @@
 import { expect, test } from '@playwright/test'
-import { TOKENS } from './tokens'
+import { signIn } from './signIn'
 
 /** The reviewer may well watch on a phone. iPhone 14-ish logical viewport. */
 test.use({ viewport: { width: 390, height: 844 } })
 
 test('the review page works at a phone width', async ({ page }) => {
-  await page.goto(`/r/${TOKENS.valid}/equals-reel-final`)
+  await signIn(page, 'dana')
+  await page.goto('/review/equals-reel-final')
   await expect(page.getByTestId('player')).toBeVisible()
 
   // Nothing may push the page sideways.
@@ -36,7 +37,8 @@ test('the review page works at a phone width', async ({ page }) => {
 })
 
 test('the reviewer list works at a phone width', async ({ page }) => {
-  await page.goto(`/r/${TOKENS.valid}`)
+  await signIn(page, 'dana')
+  await page.goto('/review')
   await expect(page.getByText('Equals sign reel (final cut)')).toBeVisible()
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)
   expect(overflow).toBeLessThanOrEqual(0)

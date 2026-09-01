@@ -1,12 +1,13 @@
 import { expect, test } from '@playwright/test'
-import { TOKENS } from './tokens'
+import { signIn } from './signIn'
 
 /** The three spec items a status code cannot prove: the watermark, `controlsList="nodownload"`,
  *  and the seven-question panel. */
 
-const PAGE = `/r/${TOKENS.valid}/equals-reel-final`
+const PAGE = '/review/equals-reel-final'
 
 test('the player carries the download and PiP deterrents', async ({ page }) => {
+  await signIn(page, 'dana')
   await page.goto(PAGE)
   const player = page.getByTestId('player')
   await expect(player).toHaveAttribute('controlsList', 'nodownload')
@@ -28,6 +29,7 @@ test('the player carries the download and PiP deterrents', async ({ page }) => {
  */
 test('the player holds its shape before the video has loaded', async ({ page }) => {
   await page.route('**/object/sign/**', (r) => r.abort())
+  await signIn(page, 'dana')
   await page.goto(PAGE)
   const player = page.getByTestId('player')
   await expect(player).toBeVisible()
@@ -41,6 +43,7 @@ test('the player holds its shape before the video has loaded', async ({ page }) 
 })
 
 test('the watermark shows who is watching, and does not eat clicks', async ({ page }) => {
+  await signIn(page, 'dana')
   await page.goto(PAGE)
   const mark = page.getByTestId('watermark')
   await expect(mark).toContainText('Dana Reviewer')
@@ -56,6 +59,7 @@ test('the watermark shows who is watching, and does not eat clicks', async ({ pa
 })
 
 test('the watermark moves, so a crop cannot lose it', async ({ page }) => {
+  await signIn(page, 'dana')
   await page.goto(PAGE)
   const mark = page.getByTestId('watermark')
   const before = await mark.boundingBox()
@@ -97,6 +101,7 @@ const SEVEN = [
 ]
 
 test('the seven questions are on the page, verbatim, collapsed', async ({ page }) => {
+  await signIn(page, 'dana')
   await page.goto(PAGE)
   const panel = page.locator('details.questions')
   // Collapsed by default — it is a reference, not the main event.

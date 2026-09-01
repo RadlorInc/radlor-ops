@@ -14,10 +14,12 @@ import 'server-only'
  * does not read our tables: it looks for `public.reviewers` and 404s. Sending it explicitly is
  * also what stops an unqualified request ever landing in the site's schema by accident.
  *
- * ⚠️ AND IT IS THE ONE PLACE A REVIEWER TOKEN IS EVER PUT IN A URL — `reviewers?token=eq.<token>`.
- * That is why `rest()` below takes a `label` and NEVER puts the request path into an error or a
- * log line. A thrown fetch error that stringifies its own URL is how a token ends up in Vercel's
- * log drain in plain text, and it would look like ordinary error handling in the diff.
+ * ⚠️ NO REQUEST FROM THIS MODULE CARRIES A SECRET IN ITS PATH ANY MORE — the reviewer token is
+ * gone, and with it the only query that ever put one in a URL. `rest()` still takes a `label` and
+ * still never puts the request path into an error or a log line, and that stays: it costs nothing,
+ * and the next thing anyone filters on could be an email or an id. The rule was never really about
+ * tokens; it is that a fetch error which stringifies its own URL looks exactly like ordinary error
+ * handling in the diff.
  */
 
 const URL_ = process.env.SUPABASE_URL
@@ -94,25 +96,6 @@ async function rest<T>(label: string, path: string, init?: RequestInit): Promise
 
 /** The token → reviewer resolution. Revoked and unknown are BOTH `null` — the caller must not be
  *  able to tell them apart, or a 404 vs a 403 confirms the token once existed. */
-/**
- * ⚠️ THE `id` THIS RETURNS IS A `profiles.user_id`, NOT `reviewers.id`. Since the account swap,
- * `notes.reviewer_id` and `video_reviewers.reviewer_id` hold user_ids; `reviewers.user_id` is the
- * bridge that keeps the old token door leading to the same person as the new login door. A token
- * whose row has no `user_id` resolves to NOBODY rather than to a reviewer with no history — the
- * same 404 as unknown and revoked, because "your link works but your notes are gone" is worse than
- * a link that does not work.
- */
-export async function reviewerByToken(token: string): Promise<Reviewer | null> {
-  if (!token || token.length < 8 || token.length > 200) return null
-  const rows = await rest<{ user_id: string | null; name: string; email: string; revoked_at: string | null }[]>(
-    'reviewer lookup',
-    `reviewers?select=user_id,name,email,revoked_at&token=eq.${encodeURIComponent(token)}&limit=1`,
-  )
-  const r = rows[0]
-  if (!r || r.revoked_at || !r.user_id) return null
-  return { id: r.user_id, name: r.name, email: r.email, revoked_at: r.revoked_at }
-}
-
 /**
  * What a reviewer is allowed to see: a video waiting on them, or one they have already marked
  * finished. `draft` and `revising` do not exist as far as they are concerned.
@@ -191,15 +174,21 @@ export async function allAssignments(): Promise<Assignment[]> {
   return rest<Assignment[]>('admin assignment list', 'video_reviewers?select=video_id,reviewer_id,verdict')
 }
 
-/** ⚠️ Keyed by `user_id`, because that is what an assignment points at now. A reviewer row with no
- *  account is dropped rather than listed: it cannot own an assignment, so it can never be the
- *  answer to "who is this assignment's reviewer". */
+/**
+ * Who an assignment can belong to, by `user_id`.
+ *
+ * ⚠️ READS `profiles`, NOT `reviewers`. An assignment points at a profile, so the profile is where
+ * the name has to come from — reading `reviewers` for it would answer from a table that no longer
+ * has any part in deciding anything, and would go blank for a reviewer created the new way (an
+ * account, no `reviewers` row). That is what made `review.reviewers` vestigial rather than merely
+ * token-free.
+ */
 export async function allReviewers(): Promise<Reviewer[]> {
-  const rows = await rest<{ user_id: string | null; name: string; email: string; revoked_at: string | null }[]>(
+  const rows = await rest<{ user_id: string; name: string }[]>(
     'admin reviewer list',
-    'reviewers?select=user_id,name,email,revoked_at&order=name.asc',
+    'profiles?select=user_id,name&order=name.asc',
   )
-  return rows.flatMap((r) => (r.user_id ? [{ id: r.user_id, name: r.name, email: r.email, revoked_at: r.revoked_at }] : []))
+  return rows.map((r) => ({ id: r.user_id, name: r.name, email: '', revoked_at: null }))
 }
 
 /**

@@ -1,10 +1,11 @@
 import { expect, test } from '@playwright/test'
-import { TOKENS } from './tokens'
+import { signIn } from './signIn'
 
 /** Done-means #1: a reviewer with a valid link can watch a video, leave a note at a timestamp,
  *  reload, and see it still there. */
 test('a note is attached to the second it was taken at, and survives a reload', async ({ page }) => {
-  await page.goto(`/r/${TOKENS.valid}`)
+  await signIn(page, 'dana')
+  await page.goto('/review')
   await page.getByText('Equals sign reel (final cut)').click()
 
   const player = page.getByTestId('player')

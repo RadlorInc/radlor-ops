@@ -23,14 +23,14 @@ export async function GET(req: Request) {
   }
 
   const q = new URL(req.url).searchParams
-  const reviewer = await reviewerIdentity(q.get('token') || null)
+  const reviewer = await reviewerIdentity()
   if (!reviewer) return NextResponse.json({ error: 'not_found' }, { status: 404 })
 
   if (overLimit(`videourl:reviewer:${reviewer.id}`, TOKEN_LIMIT, WINDOW_MS)) {
     return NextResponse.json({ error: 'rate_limited' }, { status: 429 })
   }
 
-  // Assignment-scoped, so a token cannot sign a URL for a video it was never given. This is the
+  // Assignment-scoped, so a reviewer cannot sign a URL for a video they were never given. This is the
   // route that hands out a bearer credential for the object itself, so it is the one that matters.
   const video = await reviewerVideoBySlug(q.get('slug') ?? '', reviewer.id)
   if (!video) return NextResponse.json({ error: 'not_found' }, { status: 404 })
