@@ -69,7 +69,8 @@ sharing no longer holds on its own terms. The original reasoning still stands in
 only this tool is still a receipt rather than a boundary. But "do both or neither" now has a real
 cost attached to "neither".
 
-**Rafi's call, made 2026-09-01: fix the waitlist route, NOT the review tool's separation.** The
+**Rafi's call, made 2026-09-01: fix the waitlist route, NOT the review tool's separation.** ⚠️ The
+waitlist route is now DONE (#5), which reopens the review tool's separation as a live question. The
 reasoning is the one this document already made — hardening the second door on a house whose first
 door has the same lock buys a written boundary and no real risk reduction. The review tool sits
 behind auth; the waitlist route sits behind nothing. See #5.
@@ -80,9 +81,31 @@ Not before.
 
 ---
 
-## 5. `radlor-site` waitlist route — half done, and it took the live form down for four minutes
+## 5. `radlor-site` waitlist route — CLOSED 2026-09-01
 
-**Partly done. Blocked on one env var.** 2026-09-01.
+**Done and verified live.** `/api/waitlist` no longer holds `service_role`.
+
+```
+POST /api/waitlist (real form, no JS) → 303 → /waitlist/thanks
+row landed: {"email":"<probe>","age_band":"6-8","source":"website"}
+check-waitlist-rls.mjs → exit 0
+  ok  POST as anon -> 201 (accepted — the form works, and the key is real)
+  ok  GET as anon -> 401, denied
+  ok  DELETE as anon -> 401 (denied)
+  ✅ anon may add a signup and nothing else
+```
+
+Verified by submitting the real form and then **reading the table with the service key**, not by
+trusting the 303 — which is the thing that would have caught the outage below in four minutes and
+is now what `/api/health` answers in one curl.
+
+⚠️ **The consequence for #1: the front door is now fixed, so the review tool's `service_role` is no
+longer the same lock as the front door — and the separation question there is worth re-asking.**
+The argument that declined it ("hardening the second door on a house whose first door has the same
+lock") no longer applies. Still Rafi's call, but it is now a real question rather than a rhetorical
+one.
+
+### It took the live form down for four minutes on the way
 
 **The database half is complete and verified.** `anon` now has a **column-level** `INSERT (email,
 age_band, source)` grant on `public.waitlist` and exactly one policy. It cannot SELECT, UPDATE or
