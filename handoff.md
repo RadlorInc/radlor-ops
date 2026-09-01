@@ -34,7 +34,7 @@ the first migration.
 |---|---|---|
 | **admin** | account, `/login` | `/admin` — costs, to-do, tester issues, videos, export |
 | **tester** | account, `/login` | `/tester` — file and read their own issues. `/admin` 404s |
-| **reviewer** | ⚠️ still a **token in a URL**, `/r/<token>` — no account | their video, notes, verdict |
+| **reviewer** | account, `/login` → `/review` | videos **assigned to them**, notes, verdict. `/admin` and `/tester` 404 |
 
 Accounts in production: `kuwari84@gmail.com` (admin), `kuwarirafi@gmail.com` (tester). Both real —
 **never delete either.** Throwaway accounts for checks use `@example.com` and are deleted against an
@@ -42,7 +42,7 @@ explicit allow-list, never "everything except the ones I remember".
 
 ## What is live
 
-- **Reviewer side** (phase 0): token link, player with watermark + `nodownload`, timestamped notes,
+- **Reviewer side** (phase 0): player with watermark + `nodownload`, timestamped notes,
   seven questions, **Approved / Needs changes** verdict. A note after a verdict clears it and
   reopens the review.
 - **Phase 1** — Supabase Auth, `review.profiles`, role gates, RLS. The `?k=<ADMIN_TOKEN>` gate is
@@ -54,7 +54,7 @@ explicit allow-list, never "everything except the ones I remember".
 **Both sheets are ARCHIVE, not maintained. There is no sync back and there must not be** — two
 places to edit one list ends with neither being right. If sync is asked for, say this first.
 
-## ⚠️ Waiting on Rafi — one left
+## ⚠️ Waiting on Rafi — nothing outstanding
 
 1. ~~**To-do categories.**~~ **Done 2026-09-01** — `scripts/set-todo-areas.mjs`, all 25 rows carry
    an `area`. Seven: Website, Marketing, Social, Legal, Testing, Ops, Product.
@@ -63,19 +63,18 @@ places to edit one list ends with neither being right. If sync is asked for, say
    `Business Case Validation` → Product. He asked for a call rather than a fourth question; the
    label is in the script's docblock, in its output and here, because a guess whose provenance is
    only in a chat log reads as fact by the next session. Correcting one is one word in `/admin`.
-2. **Reviewer accounts.** ⚠️ **Half of this is now BUILT, and the half that is built has to be
-   applied to the live database BEFORE the next push.** See "Multiple reviewers" below. What is
-   still not started is the auth swap itself: a third role, a login for reviewers, then deleting
-   the token path. Password delivery is **agreed and unchanged**: a single-use Supabase recovery
-   link, no force-change-on-first-login. ⚠️ **And the consequence stays written down in the docs
-   as it is: no SMTP means no self-serve reset, so a reviewer who loses their session needs a new
-   link from Rafi.** Do not soften that line — it is what makes someone ask for SMTP at the point
-   it starts costing them something.
+2. ~~**Reviewer accounts.**~~ **Done 2026-09-02.** Third role `reviewer`; `/review` is the signed-in
+   surface, scoped by assignment. `notes.reviewer_id` and `video_reviewers.reviewer_id` hold
+   `profiles.user_id`. **The token path is removed** — `/r/<token>`, `reviewerByToken()` and the
+   `reviewers.token` column are all gone, after Rafi signed in at `/review` and confirmed it.
+   ⚠️ **That confirmation was the gate, not a formality.** No SMTP means no self-serve reset, so a
+   reviewer who cannot get in has no way back without Rafi. Same order the `?k=` gate went in.
+   ⚠️ **And the no-SMTP consequence stays stated plainly in SETUP.md.** Do not soften it; it is what
+   makes someone ask for SMTP at the point it starts costing them.
 
-   ⚠️ **The migration has real data.** `review.reviewers` has rows and `notes.reviewer_id` points at
-   them, and now `video_reviewers.reviewer_id` does too. Repoint first, read the notes back
-   row-by-row (count, timestamps, bodies, author), and drop the token column in a **separate**
-   migration so a bad repoint cannot take the token path with it.
+   ⚠️ `review.reviewers` is now **vestigial** — nothing in `src/` reads it, names come from
+   `profiles`. Left standing for one release with `name`/`email`/`user_id`; dropping it is one line,
+   on its own, when nobody has wanted the old rows for a while.
 
 ## Multiple reviewers — built, applied and pushed 2026-09-02
 
@@ -165,7 +164,7 @@ again rather than rhetorical.
 ## Checks
 
 ```bash
-npm run test:e2e        # 53 Playwright, fully offline against test/fake-supabase.mjs
+npm run test:e2e        # 55 Playwright, fully offline against test/fake-supabase.mjs
 npm run test:verdict    # the break-check verdict logic
 npm run test:clearance  # when a video is cleared to post — every assigned reviewer approved
 node --test test/renewal.test.mjs
