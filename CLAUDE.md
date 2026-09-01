@@ -49,6 +49,23 @@ history at once.
 
 - ⚠️ **State the property the assertion actually checks, not the stronger one you believe is true.** A report that overstates a PASSING test is harder to catch than a failing one — nothing goes red and everything downstream reads as verified. `e2e/token-404.spec.ts` compares two 404 pages' `innerText`; it reached the reader as *"byte-identical bodies"*, which was never true (Next serialises the route param, so each 404 carries its own token). The test was right; the sentence about it was not. It surfaced only because a later run compared the raw bodies and disagreed with the passing test — when a claim and a test disagree, the claim is the likelier liar.
 - **A defect noticed in a neighbouring file gets written down before you return to the one you were in** — in that file, or in that repo's handoff. Two minutes, so it survives being busy. Both verification scripts here put a secret within one branch of their own output at some point; the second was *described* while the first was being fixed, and only got fixed because someone asked again. Noticing is not the deliverable; the note is.
+- ⚠️⚠️ **AN ENV VAR A ROUTE DEPENDS ON IS CONFIRMED PRESENT IN THE TARGET ENVIRONMENT *BEFORE* THE
+  DEPLOY THAT NEEDS IT — NEVER AFTER.** Not "I'll check if it breaks". Before.
+  On 2026-09-01 the radlor.com waitlist route was switched to `SUPABASE_ANON_KEY` and deployed
+  without confirming that variable existed in that project's Vercel environment. It did not. The
+  live public signup form was down for about four minutes, and **the risk had been identified out
+  loud before the push**. An unseen risk is a gap in knowledge; a seen-and-shipped one is a gap in
+  the moment between knowing and acting, and only the second is fixable by a rule — so this is a
+  rule. It is the same shape as the lockout sequencing (build auth → sign in → then remove the old
+  gate), which went right precisely because it was written down first.
+  ⚠️ And on Vercel, **setting the variable is not enough — it takes effect on the next deploy**, so
+  confirm it from the running deployment, not from the dashboard.
+- ⚠️ **A ROUTE THAT REFUSES TO TELL AN ATTACKER ANYTHING REFUSES TO TELL YOU ANYTHING EITHER.**
+  `/api/waitlist` answers `303` whether it succeeded or failed — the right design, and the reason a
+  completely broken endpoint looked healthy from outside for four minutes. The fix is not to weaken
+  the endpoint but to put the signal somewhere else: a health route reporting whether the
+  dependency is present, booleans only, named after the VARIABLE rather than the role so it cannot
+  become a hint about which key a public endpoint holds. `/api/health` does this in both repos.
 - ⚠️ **NEVER `source` AN ENV FILE — PARSE IT.** `set -a; . ./.env.local` runs the file as a shell
   script, so a value you did not choose is executed. On 2026-08-31 an `ADMIN_TOKEN` containing
   shell-special characters was partly evaluated and a fragment of it printed into a terminal — by

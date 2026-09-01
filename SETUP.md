@@ -301,6 +301,11 @@ does not let it be silent. The export puts the verdict in the heading:
 ## equals-reel — v1 — APPROVED
 ```
 
+**Credit balances are typed in, not fetched.** Automating them was declined deliberately — see
+[docs/security-findings.md](docs/security-findings.md) #6 — and revisited when there are four or
+more tools in the table, or when a balance has gone stale enough to mislead. Every number shows
+when it was last touched, and a typed one says *"you typed this"* rather than *"refreshed"*.
+
 ⚠️ Only the **current** version's heading carries it. `verdict` lives on the video row, so stamping
 it on a v1 heading for a video now at v2 would label an old round with a judgement never passed on
 it — the same trap `notes.video_version` exists for. Verdict history is not stored.

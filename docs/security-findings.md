@@ -48,9 +48,11 @@ Roughly half a day for that route alone.
 
 **This is no longer a decision about an empty table, and it is Rafi's to make again.**
 
-1. **`public.waitlist` has a row.** It held zero on 2026-08-31, and that emptiness was *the* reason
-   sharing the project was acceptable rather than spending 5–7 hours on a real boundary. It now
-   holds one real person's email address and a child's age-band.
+1. **`public.waitlist` has a row — since 2026-09-01.** It held zero on 2026-08-31, and that
+   emptiness was *the* reason sharing the project was acceptable rather than spending 5–7 hours on a
+   real boundary. **On 2026-09-01 it stopped being hypothetical**: it now holds one real person's
+   email address and a child's age-band. Record the date, because the argument that justified the
+   decision expired on it.
 2. **`review.subscriptions` exists and holds financial data.** Renewal dates, monthly costs and
    credit balances, in the same schema, reachable with the same key.
 
@@ -67,9 +69,97 @@ sharing no longer holds on its own terms. The original reasoning still stands in
 only this tool is still a receipt rather than a boundary. But "do both or neither" now has a real
 cost attached to "neither".
 
-**Still open. Still Rafi's call.** The fix is unchanged: a dedicated Postgres role over a direct
-connection for each app, plus a storage-only S3 key here. Costed at 5–7 hours for this tool and
-roughly half a day for the waitlist route.
+**Rafi's call, made 2026-09-01: fix the waitlist route, NOT the review tool's separation.** The
+reasoning is the one this document already made — hardening the second door on a house whose first
+door has the same lock buys a written boundary and no real risk reduction. The review tool sits
+behind auth; the waitlist route sits behind nothing. See #5.
+
+The review tool's own separation stays declined **until the waitlist route is done**, at which point
+its `service_role` stops being the same lock as the front door and the question is worth re-asking.
+Not before.
+
+---
+
+## 5. `radlor-site` waitlist route — half done, and it took the live form down for four minutes
+
+**Partly done. Blocked on one env var.** 2026-09-01.
+
+**The database half is complete and verified.** `anon` now has a **column-level** `INSERT (email,
+age_band, source)` grant on `public.waitlist` and exactly one policy. It cannot SELECT, UPDATE or
+DELETE — all three refused with `42501`. So a compromise of that endpoint writes a junk row instead
+of reading the database.
+
+**The route half is reverted**, because deploying it broke the live public signup form.
+
+### What went wrong, both halves
+
+The route was switched to `SUPABASE_ANON_KEY` and deployed **without confirming that variable
+existed in radlor-site's Vercel environment**. It did not. Every submission answered
+`/waitlist/problem` and no row landed, for about four minutes, on a form real people use.
+
+- **Mine:** the risk was identified out loud before the push and pushed anyway. An unseen risk is a
+  gap in knowledge; a seen-and-shipped one is a gap in the moment between knowing and acting. Now a
+  rule in both `CLAUDE.md`s: confirm the variable in the target environment *before* the deploy.
+- **The founder's, in his words:** he approved a production change to a form real people submit and
+  scoped it as half a day of work rather than as a deploy with a blast radius, and never said
+  "confirm the env var" or "try it on a preview deployment".
+
+### The finding worth keeping
+
+**The route answers `303` whether it succeeds or fails.** That is the no-oracle design working as
+intended — a distinct error would tell a bot what to fix and would leak whether an address is
+already on the list. **It is also why a completely broken endpoint looked healthy from outside.**
+
+A design that refuses to tell an attacker anything refuses to tell you anything either. The fix is
+not to weaken the endpoint but to move the signal off the public path: `radlor.com/api/health` now
+reports `anon_key_configured`, booleans only, named after the variable rather than the role so it
+cannot become a hint about which key a public endpoint is holding. "Is the form working" is one
+curl instead of a real submission and a database read.
+
+### The existing gate caught this, and that is the best outcome available
+
+`radlor-site/scripts/check-waitlist-rls.mjs` existed to assert `anon` could do nothing. Its comment
+predicted the exact scenario — *"an INSERT policy added in the dashboard at 11pm would make the list
+both harvestable and stuffable, and nothing in the repo would change. This is the only thing that
+would notice."* It went red at the right assertion.
+
+It has been rewritten for the intended posture rather than deleted, splitting that warning in two:
+
+- **STUFFABLE — yes, deliberately**, bounded by the per-IP rate limit, the honeypot, the unique index
+  on `email`, and the anon key being published nowhere in this project.
+- **HARVESTABLE — no, never. SELECT is still refused. That is the assertion that protects people's
+  email addresses, and it is the one that must never be "made to work".**
+
+Its success message also had to be fixed: it still read *"anon can neither insert, read nor delete"*
+while insert was now allowed — a green describing the wrong posture.
+
+### To finish
+
+Add `SUPABASE_ANON_KEY` to **radlor-site's** Vercel project and redeploy, confirm
+`anon_key_configured: true` at `/api/health`, swap the route's two constants back, redeploy, re-run
+`node scripts/check-waitlist-rls.mjs`.
+
+---
+
+## 6. Higgsfield balance automation — declined, with triggers
+
+**Closed by decision, 2026-09-01.** 912 credits from one provider is not worth a new credential in
+Vercel at a broader-than-needed scope. The hand-edited table already answers the two questions that
+matter — what lapses next, and what this costs a month — and it works for providers that expose
+nothing at all.
+
+The number is typed in monthly. It is stored with `credits_source: 'manual'`, which renders as
+*"you typed this 3d ago"* rather than as a refresh — **calling a typed number `typed` is the entire
+reason that column exists.**
+
+**Revisit when either is true:**
+1. **Four or more tools** are in `review.subscriptions` — typing four numbers monthly is the point
+   at which the automation starts paying for the credential.
+2. **A balance has gone stale enough to mislead someone** — if the freshness label is doing the work
+   the number should be doing, automate it.
+
+Same for the Supabase and Vercel infra numbers, which are the fourth of the founder's four things:
+**typed and honestly labelled beats automated and quietly wrong.**
 
 Cross-reference: [SETUP.md → Blast radius](../SETUP.md#blast-radius).
 
