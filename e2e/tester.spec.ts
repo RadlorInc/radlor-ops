@@ -77,10 +77,35 @@ test('"all chapters" is a scope, not a chapter', async ({ page, request }) => {
   await page.getByTestId('issue-submit').click()
   await expect(page.getByTestId('issue-list')).toContainText('Every heading uses')
 
-  // Newest all-chapters row: the seed has an imported one too, so order matters here.
-  const [row] = await rows(request, 'issues', '&all_chapters=eq.true&order=created_at.desc&limit=1')
+  /**
+   * ⚠️ THE NEWEST ISSUE, NOT "the newest row WHERE all_chapters IS TRUE".
+   * The first version filtered on `all_chapters=eq.true` — the very property under test — so when
+   * the flag was broken it simply selected the seed's imported all-chapters row instead and passed.
+   * A filter that can only return rows already satisfying the assertion is not a query, it is a
+   * way of not looking.
+   */
+  const [row] = await rows(request, 'issues', '&order=created_at.desc&limit=1')
   expect(row.all_chapters).toBe(true)
   expect(row.chapter).toBe(null)
+})
+
+test('the reporter comes from the session, never from the request body', async ({ page, request }) => {
+  await signIn(page, 'tester')
+  await page.goto('/tester')
+
+  // Post a reporter the client has no business naming. It must be ignored — and `issues_insert_own`
+  // would refuse it at the database anyway, which is the belt to this braces.
+  const res = await page.request.post('/api/tester/issue', {
+    data: {
+      description: 'filed with someone else in the reporter field',
+      reporter: '55555555-5555-4555-8555-555555555555', // the harness ADMIN's id
+    },
+  })
+  expect(res.status()).toBe(201)
+
+  const [row] = await rows(request, 'issues', '&order=created_at.desc&limit=1')
+  expect(row.description).toContain('someone else in the reporter field')
+  expect(row.reporter).toBe('66666666-6666-4666-8666-666666666666') // the harness TESTER's id
 })
 
 test('a TESTER cannot move a status; an ADMIN can — and the row proves it', async ({ page, browser, request }) => {
