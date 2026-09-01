@@ -229,6 +229,11 @@ built for one reason: **`radlor-site`'s own `/api/waitlist` is a public endpoint
 this same key over this same table.** Hardening this door while that one stands open is a receipt,
 not a boundary. If the exposure is worth closing, it is worth closing for both apps at once.
 
+⚠️⚠️ **BOTH REOPENING TRIGGERS HAVE FIRED (2026-09-01).** `public.waitlist` now holds a real row,
+and `review.subscriptions` now holds financial data. See
+[docs/security-findings.md](docs/security-findings.md) #1 — the decision below was made about an
+empty table and no longer rests on that.
+
 ⚠️ **AND THIS DECISION WAS MADE ABOUT AN EMPTY TABLE.** On 2026-08-31 `public.waitlist` held
 **zero rows**. It is a table of **email addresses and children's age-bands**, and the moment it has
 real people in it the calculation changes and **the separation question reopens** — the decision

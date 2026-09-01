@@ -44,14 +44,32 @@ A dedicated Postgres role with `INSERT` on `public.waitlist` and nothing else, r
 the project's JWT secret, and that same secret signs a `service_role` token, so it buys nothing.
 Roughly half a day for that route alone.
 
-### Two triggers that should force a revisit
+### ⚠️⚠️ BOTH TRIGGERS HAVE NOW FIRED — 2026-09-01
 
-1. **`public.waitlist` filling up.** It held **zero rows on 2026-08-31**, which is the only reason
-   this tool was allowed to share the project rather than spend 5–7 hours on a real boundary. The
-   moment it holds real people, both decisions reopen. `scripts/check-blast-radius.mjs` prints the
-   count and says so.
-2. **Fixing one app and not the other.** This tool holds the same key over the same table. Closing
-   one door while the other stands open is a receipt, not a boundary — do both or neither.
+**This is no longer a decision about an empty table, and it is Rafi's to make again.**
+
+1. **`public.waitlist` has a row.** It held zero on 2026-08-31, and that emptiness was *the* reason
+   sharing the project was acceptable rather than spending 5–7 hours on a real boundary. It now
+   holds one real person's email address and a child's age-band.
+2. **`review.subscriptions` exists and holds financial data.** Renewal dates, monthly costs and
+   credit balances, in the same schema, reachable with the same key.
+
+`scripts/check-blast-radius.mjs` reports both, by row count, on every run:
+
+```
+⚠️  1 waitlist row(s). The decision to share this project was made about an EMPTY table.
+⚠️  review.subscriptions exists and holds 1 row(s) — FINANCIAL DATA.
+```
+
+Nothing has broken and nothing is leaking. What has changed is that the *argument* which justified
+sharing no longer holds on its own terms. The original reasoning still stands in one respect —
+`radlor-site`'s public `/api/waitlist` route holds the same key over the same table, so hardening
+only this tool is still a receipt rather than a boundary. But "do both or neither" now has a real
+cost attached to "neither".
+
+**Still open. Still Rafi's call.** The fix is unchanged: a dedicated Postgres role over a direct
+connection for each app, plus a storage-only S3 key here. Costed at 5–7 hours for this tool and
+roughly half a day for the waitlist route.
 
 Cross-reference: [SETUP.md → Blast radius](../SETUP.md#blast-radius).
 
