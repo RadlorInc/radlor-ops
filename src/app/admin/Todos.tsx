@@ -142,13 +142,25 @@ export default function Todos({ initial }: { initial: Todo[] }) {
             )}
             {t.area && <span className="area">{t.area}</span>}
             <span style={{ marginLeft: 'auto', whiteSpace: 'nowrap' }}>
-              <button className="chip" onClick={() => move(t, 'up')} disabled={busy || i === 0} data-testid="todo-up">
+              {/* ⚠️ `iconbtn`, NOT `chip`. As chips they inherited `li[data-status='done'] .chip`
+                  and turned green on a finished row — a colour that means "done" painted onto a
+                  control with nothing to do with status. And an icon-only button needs a name:
+                  a screen reader otherwise announces these two as "up arrow" and "down arrow",
+                  which says what they look like rather than what they do. */}
+              <button
+                className="iconbtn"
+                onClick={() => move(t, 'up')}
+                disabled={busy || i === 0}
+                aria-label={`Move “${t.task}” up`}
+                data-testid="todo-up"
+              >
                 ↑
               </button>{' '}
               <button
-                className="chip"
+                className="iconbtn"
                 onClick={() => move(t, 'down')}
                 disabled={busy || i === items.length - 1}
+                aria-label={`Move “${t.task}” down`}
                 data-testid="todo-down"
               >
                 ↓

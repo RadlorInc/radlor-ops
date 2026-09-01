@@ -112,6 +112,7 @@ export default function Costs({ initial, today }: { initial: Subscription[]; tod
           answers what lapses next.
         </p>
       ) : (
+        <div className="tablewrap" tabIndex={0} role="region" aria-label="Subscriptions and renewals">
         <table style={{ marginTop: 10 }}>
           <thead>
             <tr>
@@ -160,6 +161,7 @@ export default function Costs({ initial, today }: { initial: Subscription[]; tod
             })}
           </tbody>
         </table>
+        </div>
       )}
 
       {adding || editing ? (

@@ -1,5 +1,6 @@
 'use client'
 
+import Link from 'next/link'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { QUESTIONS, formatT } from '@/lib/review'
 
@@ -141,7 +142,7 @@ export default function Review(props: {
     <main className="wrap">
       <h1>{title}</h1>
       <p className="muted small">
-        {slug} · v{version} · <a href="/review">all videos</a>
+        {slug} · v{version} · <Link href="/review">all videos</Link>
       </p>
 
       <div className="row" style={{ marginTop: 16 }}>
@@ -195,7 +196,9 @@ export default function Review(props: {
         </div>
 
         <div className="side">
-          <button onClick={startNote} data-testid="add-note">
+          {/* Secondary: it opens the composer, it does not commit anything. The two blue
+              buttons on this screen are the ones that write — Save note, and the verdict. */}
+          <button className="ghost" onClick={startNote} data-testid="add-note">
             Add note
           </button>
 

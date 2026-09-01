@@ -1,35 +1,118 @@
+/**
+ * Design system for the review tool. Plain CSS on purpose — there is no Tailwind here and adding a
+ * build-time CSS framework to a working 130-line stylesheet would be a dependency bought with a
+ * refactor. Everything below is tokens plus about a dozen components.
+ *
+ * The style is "data-dense dashboard": tight rows, tabular numbers, one accent, colour used to
+ * rank urgency rather than to decorate. ⚠️ Colour is never the ONLY signal — every pill, chip and
+ * verdict also says what it means in words, because roughly one man in twelve cannot separate the
+ * red pill from the green one.
+ *
+ * ⚠️ DARK ONLY, DELIBERATELY. `color-scheme: dark` is declared, so the browser paints form
+ * controls and scrollbars to match. This is a two-person internal tool used mostly at night; a
+ * light mode would be a second palette to keep at 4.5:1 and nobody has asked for one. If one is
+ * ever added it goes in as a `prefers-color-scheme` block over these same tokens, not as a second
+ * stylesheet.
+ */
+
 :root {
-  --bg: #12131a;
-  --panel: #1b1d27;
-  --line: #2d3040;
-  --text: #e7e8ee;
-  --muted: #9599ad;
+  /* Surfaces, darkest to lightest. */
+  --bg: #0f1016;
+  --panel: #171922;
+  --panel-2: #1e212c;
+  --line: #2b2f3d;
+  --line-strong: #3a3f52;
+
+  /* Text. ⚠️ --muted is #a5aac0, not the #9599ad it used to be: the old value fell under 4.5:1
+     against --panel-2, which is exactly where the pills and chips sit. Checked against the
+     lightest surface it is ever used on, not against --bg where everything passes. */
+  --text: #e8eaf2;
+  --muted: #a5aac0;
+
+  /* One accent for interaction, one for attention. Blue carries data, amber carries urgency —
+     they are never swapped, so "amber" always means "this needs you". */
   --accent: #7c9cff;
+  --accent-ink: #0c1020;
+  --attention: #f0b429;
+
+  /* Status, each with a matching ink that clears 4.5:1 on it. */
+  --ok-bg: #14251b;      --ok-line: #2b4635;   --ok-ink: #a8dcbd;
+  --warn-bg: #2a2114;    --warn-line: #4d3c1c; --warn-ink: #f0d9a8;
+  --bad-bg: #2d181a;     --bad-line: #6d2b2f;  --bad-ink: #ffb3b3;
+  --info-bg: #1a2135;    --info-line: #33405f; --info-ink: #c3d4f7;
+
+  --radius: 10px;
+  --radius-sm: 8px;
+  --shadow: 0 1px 2px rgb(0 0 0 / 0.4), 0 8px 24px -12px rgb(0 0 0 / 0.5);
+
+  /* One duration for every state change. Long enough to read, short enough not to wait on. */
+  --t: 160ms;
+
   color-scheme: dark;
 }
+
 * { box-sizing: border-box; }
 html, body { margin: 0; padding: 0; }
+
 body {
   background: var(--bg);
   color: var(--text);
-  font: 15px/1.55 ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  font-family: var(--font-sans, ui-sans-serif, system-ui, -apple-system, sans-serif);
+  /* 16px, not 15. Anything under 16 on iOS makes Safari zoom the page when a field is focused,
+     which then leaves the reviewer scrolled sideways inside their own note. */
+  font-size: 16px;
+  line-height: 1.55;
+  -webkit-text-size-adjust: 100%;
 }
-a { color: var(--accent); }
-h1 { font-size: 20px; margin: 0 0 4px; }
-h2 { font-size: 15px; margin: 0 0 8px; }
+
+/* Slugs, timestamps, ids, money — anything you compare down a column. */
+code, .mono, .tabular { font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace); }
+.tabular { font-variant-numeric: tabular-nums; }
+
+/**
+ * ⚠️ ONE FOCUS RULE FOR THE WHOLE APP, AND IT IS NOT OPTIONAL. Before this, nothing in here had a
+ * focus style at all: a keyboard user tabbing through /admin got whatever the browser defaulted to
+ * over a dark panel, which on several controls was nothing visible. `:focus-visible` so a mouse
+ * click does not leave a ring behind, and an offset so the ring never sits on top of the border it
+ * is meant to be distinguishable from.
+ */
+:where(a, button, input, textarea, select, summary, [tabindex]):focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: var(--radius-sm);
+}
+
+a { color: var(--accent); text-decoration-thickness: 1px; text-underline-offset: 2px; }
+a:hover { color: #a3b9ff; }
+
+h1 { font-size: 21px; line-height: 1.25; margin: 0 0 4px; letter-spacing: -0.01em; }
+h2 { font-size: 15px; margin: 0 0 8px; letter-spacing: 0.02em; text-transform: uppercase; color: var(--muted); }
+
 .wrap { max-width: 1100px; margin: 0 auto; padding: 24px 20px 64px; }
 .muted { color: var(--muted); }
 .small { font-size: 13px; }
+
+/* Prose that is read rather than scanned stays inside a comfortable measure. */
+.prose { max-width: 68ch; }
+
 .card {
   display: block; background: var(--panel); border: 1px solid var(--line);
-  border-radius: 10px; padding: 14px 16px; margin-bottom: 10px; text-decoration: none; color: inherit;
+  border-radius: var(--radius); padding: 14px 16px; margin-bottom: 10px;
+  text-decoration: none; color: inherit;
+  transition: border-color var(--t) ease, background-color var(--t) ease;
 }
-a.card:hover { border-color: var(--accent); }
+/* ⚠️ Colour and border only — no `transform: scale()`. A card that grows on hover nudges the
+   cards under it, and on a list you are pointing at that reads as the page flinching. */
+a.card:hover { border-color: var(--line-strong); background: var(--panel-2); }
+a.card:active { background: var(--panel); }
+
 .row { display: flex; gap: 24px; align-items: flex-start; flex-wrap: wrap; }
 .player { flex: 0 0 auto; width: min(360px, 100%); }
+
 /* The watermark is absolute against .frame, not .player, so it stays over the picture when the
    video is narrower than its column (which is what the phone rule below does). */
 .frame { position: relative; width: 100%; }
+
 /* ⚠️ `aspect-ratio` IS LOAD-BEARING, NOT COSMETIC. Without it the browser gives a <video> with no
    metadata yet its default 2:1, so the player renders 360x150 on first paint and jumps to 360x640
    when the signed URL's metadata arrives — shoving the notes panel down on every single load. It
@@ -38,97 +121,232 @@ a.card:hover { border-color: var(--accent); }
    rather than stretches. */
 .frame video {
   width: 100%; aspect-ratio: 9 / 16; object-fit: contain;
-  border-radius: 10px; background: #000; display: block;
+  border-radius: var(--radius); background: #000; display: block;
+  border: 1px solid var(--line);
 }
 .side { flex: 1 1 320px; min-width: 300px; }
+
+/**
+ * ⚠️ 44px MINIMUM, BUT ONLY WHERE A FINGER IS ACTUALLY USED. The 44x44 guideline is about touch;
+ * applying it to every chip on a dense dashboard would push the to-do list off the screen for a
+ * founder using a mouse. So the base sizes are comfortable-for-a-pointer, and `pointer: coarse`
+ * — the query that means "this input device is a finger" — raises every control to 44px at the
+ * bottom of this file. Both branches are real; neither is a compromise on the other.
+ */
 button {
-  font: inherit; background: var(--accent); color: #10131f; border: 0;
-  border-radius: 8px; padding: 8px 14px; cursor: pointer;
+  font: inherit; background: var(--accent); color: var(--accent-ink); border: 0;
+  border-radius: var(--radius-sm); padding: 9px 16px; min-height: 38px; cursor: pointer;
+  font-weight: 500;
+  transition: background-color var(--t) ease, border-color var(--t) ease, opacity var(--t) ease;
 }
+button:hover { background: #94aeff; }
 button.ghost { background: transparent; color: var(--text); border: 1px solid var(--line); }
-button:disabled { opacity: .5; cursor: default; }
-textarea {
-  width: 100%; font: inherit; color: var(--text); background: #0f1017;
-  border: 1px solid var(--line); border-radius: 8px; padding: 8px; resize: vertical;
+button.ghost:hover { background: var(--panel-2); border-color: var(--line-strong); }
+button:disabled { opacity: .5; cursor: not-allowed; }
+button:disabled:hover { background: var(--accent); }
+button.ghost:disabled:hover { background: transparent; }
+
+textarea, input[type='email'], input[type='password'],
+input[type='text'], input[type='number'], input[type='date'], select {
+  font: inherit; color: var(--text); background: #0b0c12;
+  border: 1px solid var(--line); border-radius: var(--radius-sm); padding: 9px 10px;
+  min-height: 38px;
+  transition: border-color var(--t) ease;
 }
+textarea:hover, input:hover, select:hover { border-color: var(--line-strong); }
+textarea { width: 100%; resize: vertical; }
+input[type='email'], input[type='password'] { width: 100%; margin-top: 4px; }
+/* ⚠️ #7c8199, measured at 5.07:1 on the field background — the first pick was #6f7488 and came
+   out at 4.21, which is the kind of miss you only catch by computing it. A placeholder is real
+   text: it is often the only label a compact field has. */
+::placeholder { color: #7c8199; }
+
 ol.notes { list-style: none; margin: 12px 0 0; padding: 0; }
 ol.notes li { border-top: 1px solid var(--line); padding: 8px 0; }
 ol.notes .t {
-  background: none; color: var(--accent); border: 0; padding: 0 8px 0 0;
+  background: none; color: var(--accent); border: 0; padding: 0 8px 0 0; min-height: 0;
+  font-family: var(--font-mono, ui-monospace, monospace);
   font-variant-numeric: tabular-nums; cursor: pointer;
 }
-details.questions { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 12px 16px; }
+ol.notes .t:hover { background: none; color: #a3b9ff; text-decoration: underline; }
+
+details.questions {
+  background: var(--panel); border: 1px solid var(--line);
+  border-radius: var(--radius); padding: 12px 16px;
+}
 details.questions ol { margin: 10px 0 0; padding-left: 20px; }
 details.questions li { margin-bottom: 6px; }
 summary { cursor: pointer; }
-table { border-collapse: collapse; width: 100%; }
-th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--line); }
-th { color: var(--muted); font-weight: 500; font-size: 13px; }
-code { background: #0f1017; padding: 1px 5px; border-radius: 4px; }
 
-/* Phone. A 9:16 video at full width is ~700px tall, which pushes "Add note" and every note the
-   reviewer is writing about off the screen — they would be scrolling away from the frame to type
-   about it. Cap the video so the player and the panel share the viewport. */
+/**
+ * ⚠️ TABLES SCROLL INSIDE THEMSELVES, THE PAGE DOES NOT SCROLL SIDEWAYS. The admin video table
+ * went from five columns to seven when per-reviewer verdicts arrived, which at 375px pushed the
+ * whole document sideways — every heading and every other section offset, for one wide element.
+ * `.tablewrap` is the container that absorbs it. `tabindex="0"` on it so a keyboard user can
+ * actually reach the scroll; a scrollable region that only a mouse can move is a trap.
+ */
+.tablewrap {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  /* ⚠️ A SHADOW THAT SAYS "THERE IS MORE THIS WAY". A region that scrolls with no hint that it
+     scrolls is a region nobody scrolls — on a phone the scrollbar is invisible, so the cut-off
+     column just looks like a cut-off column. Four layers: two opaque covers pinned to the ends
+     that hide the shadow when you are at that end, and two shadows on the scrolling content
+     itself. `background-attachment: local` on the shadows is what ties them to the scroll
+     position; no JS and nothing to keep in sync. */
+  background:
+    linear-gradient(to right, var(--bg) 30%, transparent) left center / 40px 100% no-repeat local,
+    linear-gradient(to left, var(--bg) 30%, transparent) right center / 40px 100% no-repeat local,
+    radial-gradient(farthest-side at 0 50%, rgb(0 0 0 / 0.5), transparent) left center / 18px 100% no-repeat scroll,
+    radial-gradient(farthest-side at 100% 50%, rgb(0 0 0 / 0.5), transparent) right center / 18px 100% no-repeat scroll;
+}
+/* Digits line up down a column even in the sans face — costs, versions, note counts. */
+table { border-collapse: collapse; width: 100%; font-variant-numeric: tabular-nums; }
+th, td { text-align: left; padding: 9px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+th {
+  color: var(--muted); font-weight: 500; font-size: 12px;
+  letter-spacing: 0.04em; text-transform: uppercase; white-space: nowrap;
+}
+tbody tr { transition: background-color var(--t) ease; }
+tbody tr:hover { background: var(--panel); }
+code { background: var(--panel-2); padding: 1px 5px; border-radius: 4px; font-size: 0.9em; }
+
+/* The reviewer's own completion state — a plain confirmation, not a banner. */
+.done {
+  margin: 14px 0 0; padding: 10px 12px; font-size: 14px; border-radius: var(--radius-sm);
+  background: var(--ok-bg); border: 1px solid var(--ok-line); color: var(--ok-ink);
+}
+.done.changes { background: var(--warn-bg); border-color: var(--warn-line); color: var(--warn-ink); }
+
+/* Something Rafi should see before uploading, without being blocked by it. A left bar rather than
+   a full colour wash: it reads as "look here" at a glance and still passes contrast as text. */
+.warn {
+  margin: 16px 0 0; padding: 11px 14px; font-size: 14px; border-radius: var(--radius-sm);
+  background: var(--warn-bg); border: 1px solid var(--warn-line);
+  border-left: 3px solid var(--attention); color: var(--warn-ink);
+}
+
+button.linky {
+  background: none; border: 0; color: var(--accent); padding: 0; min-height: 0;
+  font: inherit; cursor: pointer; text-decoration: underline; text-underline-offset: 2px;
+}
+button.linky:hover { background: none; color: #a3b9ff; }
+button.linky.small { font-size: 13px; }
+
+/* ── Admin dashboard ─────────────────────────────────────────────────────────────────────── */
+
+ol.todos { list-style: none; margin: 0; padding: 0; }
+ol.todos li {
+  display: flex; align-items: center; gap: 10px; padding: 7px 0;
+  border-top: 1px solid var(--line);
+}
+ol.todos .strike { color: var(--muted); text-decoration: line-through; }
+
+.chip {
+  background: var(--panel-2); color: var(--text); border: 1px solid var(--line);
+  border-radius: 999px; padding: 4px 11px; font-size: 12px; font-weight: 500;
+  cursor: pointer; white-space: nowrap;
+  transition: background-color var(--t) ease, border-color var(--t) ease;
+}
+.chip:hover { border-color: var(--line-strong); }
+li[data-status='done'] .chip { background: var(--ok-bg); border-color: var(--ok-line); color: var(--ok-ink); }
+li[data-status='in_progress'] .chip { background: var(--info-bg); border-color: var(--info-line); color: var(--info-ink); }
+
+.area {
+  font-size: 11px; color: var(--muted); border: 1px solid var(--line);
+  border-radius: 4px; padding: 2px 6px; white-space: nowrap;
+  font-family: var(--font-mono, ui-monospace, monospace);
+}
+
+/* Icon-only controls: square, quiet, and never coloured by the row's status. */
+.iconbtn {
+  background: var(--panel-2); color: var(--text); border: 1px solid var(--line);
+  border-radius: var(--radius-sm); min-height: 32px; min-width: 32px; padding: 0 8px;
+  font-size: 13px; line-height: 1; cursor: pointer;
+}
+.iconbtn:hover { background: var(--line); border-color: var(--line-strong); }
+.iconbtn:disabled { opacity: .35; }
+.iconbtn:disabled:hover { background: var(--panel-2); border-color: var(--line); }
+
+/* Renewal urgency. Four states, and each one says its own name next to the colour. */
+.pill { font-size: 12px; border-radius: 999px; padding: 3px 10px; white-space: nowrap; font-weight: 500; }
+.pill-ok { background: var(--ok-bg); color: var(--ok-ink); border: 1px solid var(--ok-line); }
+.pill-upcoming { background: var(--panel-2); color: var(--muted); border: 1px solid var(--line); }
+.pill-soon { background: var(--warn-bg); color: var(--warn-ink); border: 1px solid var(--warn-line); }
+.pill-lapsed { background: var(--bad-bg); color: var(--bad-ink); border: 1px solid var(--bad-line); }
+.pill-none { background: transparent; color: var(--muted); border: 1px solid transparent; }
+
+.addrow { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-top: 12px; }
+.addrow input { width: auto; min-width: 120px; }
+
+ol.issues { list-style: none; margin: 0; padding: 0; }
+ol.issues li { border-top: 1px solid var(--line); padding: 12px 0; }
+li[data-status='resolved'] > div > .chip { background: var(--ok-bg); border-color: var(--ok-line); color: var(--ok-ink); }
+li[data-status='ready_for_retest'] > div > .chip { background: var(--warn-bg); border-color: var(--warn-line); color: var(--warn-ink); }
+
+details.group { border-top: 1px solid var(--line); padding: 8px 0; }
+details.group > summary { padding: 6px 0; font-weight: 500; }
+details.group ol.issues li:first-child { border-top: 0; }
+
+/* Per-reviewer verdicts in the admin table: a plain list, no bullets stealing the width. */
+.verdicts { list-style: none; margin: 0; padding: 0; }
+.verdicts li { white-space: nowrap; font-size: 13px; padding: 1px 0; }
+/* ⚠️ A dot AND the word. The dot is what you scan a column with; the word is what makes the
+   column mean anything to someone who cannot tell this dot from the next one. */
+.verdicts li::before {
+  content: ''; display: inline-block; width: 7px; height: 7px; border-radius: 50%;
+  margin-right: 7px; vertical-align: 1px; background: var(--muted);
+}
+.verdicts li[data-verdict='approved']::before { background: #4ec98a; }
+.verdicts li[data-verdict='changes_needed']::before { background: var(--attention); }
+
+td[data-cleared='yes'] { color: var(--ok-ink); font-weight: 500; }
+td[data-cleared='no'] { color: var(--muted); }
+
+/* ── Phone ───────────────────────────────────────────────────────────────────────────────── */
+
+/* A 9:16 video at full width is ~700px tall, which pushes "Add note" and every note the reviewer
+   is writing about off the screen — they would be scrolling away from the frame to type about it.
+   Cap the video so the player and the panel share the viewport.
+   ⚠️ 48vh, down from 52vh, and the reason is the 44px touch targets below: the composer got
+   taller, so the frame gives the room back. e2e/phone.spec.ts asserts the outcome — the Save
+   button's bottom edge inside the viewport — rather than either number. */
 @media (max-width: 720px) {
   .wrap { padding: 16px 14px 48px; }
   .row { gap: 16px; }
   .player { width: 100%; display: flex; justify-content: center; }
   .frame { width: auto; }
-  .frame video { width: auto; height: 52vh; max-width: 100%; }
+  .frame video { width: auto; height: 48vh; max-width: 100%; }
   .side { flex: 1 1 100%; min-width: 0; }
-  h1 { font-size: 18px; }
+  h1 { font-size: 19px; }
 }
 
-/* The reviewer's own completion state — a plain confirmation, not a banner. */
-.done {
-  margin: 14px 0 0; padding: 10px 12px; font-size: 14px;
-  background: #16241c; border: 1px solid #2c4636; border-radius: 8px; color: #cfe8d8;
+/**
+ * ⚠️ THE TOUCH BRANCH. `pointer: coarse` is true when the primary input is a finger — a phone or a
+ * tablet — and false for a trackpad, so this raises hit areas for the people who need it without
+ * inflating the dashboard for the person who does not. Chips and inline links get real padding
+ * here because on a phone they are the controls, not decoration.
+ */
+@media (pointer: coarse) {
+  button, input, select, textarea { min-height: 44px; }
+  button.linky { min-height: 0; padding: 6px 0; }
+  .chip { padding: 10px 14px; font-size: 13px; }
+  .iconbtn { min-height: 44px; min-width: 44px; }
+  ol.notes .t { min-height: 0; padding: 6px 10px 6px 0; }
+  ol.todos li, ol.issues li { padding-top: 10px; padding-bottom: 10px; }
 }
-.done.changes { background: #2a2115; border-color: #4a3a1e; color: #ecdcc0; }
 
-/* Something Rafi should see before uploading, without being blocked by it. */
-.warn {
-  margin: 16px 0 0; padding: 10px 12px; font-size: 14px; border-radius: 8px;
-  background: #2a2115; border: 1px solid #4a3a1e; color: #ecdcc0;
+/**
+ * ⚠️ MOTION IS A PREFERENCE, NOT A DEFAULT. Every transition above is colour or opacity — nothing
+ * moves, nothing scales — but vestibular triggers are not only about big movement, and the setting
+ * exists to be honoured rather than judged. `0.01ms` instead of `none` so transition-end handlers
+ * still fire; `none` silently breaks code that waits for them.
+ */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }
-
-input[type='email'], input[type='password'] {
-  width: 100%; font: inherit; color: var(--text); background: #0f1017;
-  border: 1px solid var(--line); border-radius: 8px; padding: 8px; margin-top: 4px;
-}
-button.linky { background: none; border: 0; color: var(--accent); padding: 0; font: inherit; cursor: pointer; text-decoration: underline; }
-
-/* Admin dashboard */
-ol.todos { list-style: none; margin: 0; padding: 0; }
-ol.todos li { display: flex; align-items: center; gap: 10px; padding: 7px 0; border-top: 1px solid var(--line); }
-ol.todos .strike { color: var(--muted); text-decoration: line-through; }
-.chip { background: #22252f; color: var(--text); border: 1px solid var(--line); border-radius: 999px;
-        padding: 2px 10px; font-size: 12px; cursor: pointer; white-space: nowrap; }
-li[data-status='done'] .chip { background: #16241c; border-color: #2c4636; color: #cfe8d8; }
-li[data-status='in_progress'] .chip { background: #1d2436; border-color: #2f3d5c; color: #cddaf5; }
-.area { font-size: 11px; color: var(--muted); border: 1px solid var(--line); border-radius: 4px; padding: 1px 6px; }
-.pill { font-size: 12px; border-radius: 999px; padding: 2px 9px; white-space: nowrap; }
-.pill-ok { background: #1b2a20; color: #b9d9c4; }
-.pill-upcoming { background: #22252f; color: var(--muted); }
-.pill-soon { background: #2a2115; color: #ecd39a; border: 1px solid #6a5320; }
-.pill-lapsed { background: #33191b; color: #ffb4b4; border: 1px solid #7a2c30; }
-.pill-none { background: transparent; color: var(--muted); }
-.addrow { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-top: 12px; }
-.addrow input { width: auto; min-width: 120px; }
-input[type='text'], input[type='number'], input[type='date'] {
-  font: inherit; color: var(--text); background: #0f1017;
-  border: 1px solid var(--line); border-radius: 8px; padding: 6px 8px;
-}
-ol.issues { list-style: none; margin: 0; padding: 0; }
-ol.issues li { border-top: 1px solid var(--line); padding: 12px 0; }
-li[data-status='resolved'] > div > .chip { background: #16241c; border-color: #2c4636; color: #cfe8d8; }
-li[data-status='ready_for_retest'] > div > .chip { background: #2a2115; border-color: #4a3a1e; color: #ecd39a; }
-select { font: inherit; color: var(--text); background: #0f1017; border: 1px solid var(--line); border-radius: 8px; padding: 6px 8px; }
-button.linky.small { font-size: 12px; }
-details.group { border-top: 1px solid var(--line); padding: 8px 0; }
-details.group > summary { padding: 4px 0; font-weight: 500; }
-details.group ol.issues li:first-child { border-top: 0; }
-
-/* Per-reviewer verdicts in the admin table: a plain list, no bullets stealing the width. */
-.verdicts { list-style: none; margin: 0; padding: 0; }
-.verdicts li { white-space: nowrap; }

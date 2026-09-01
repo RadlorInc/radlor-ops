@@ -1,3 +1,4 @@
+import Link from 'next/link'
 import { allAssignments, allNotes, allReviewers, allVideos } from '@/lib/db'
 import { clearance, progressLabel } from '@/lib/clearance'
 import { listIssues, listSubscriptions, listTodos } from '@/lib/adminDb'
@@ -53,9 +54,9 @@ export default async function Admin() {
         {me.name} · <a href="/tester">Chapter testing</a> ·{' '}
         {/* Roles gate the surface; assignments decide what is on it. An admin with no assignments
             gets an empty list here, which is correct. */}
-        <a href="/review" data-testid="my-review-list">
+        <Link href="/review" data-testid="my-review-list">
           Videos assigned to me
-        </a>{' '}
+        </Link>{' '}
         ·{' '}
         <span data-testid="signout-inline">
           <form method="post" action="/api/auth/logout" style={{ display: 'inline' }}>
@@ -76,7 +77,11 @@ export default async function Admin() {
         <a href="/admin/export">Open notes as markdown →</a> ·{' '}
         <a href="/admin/export?all=1">including resolved</a>
       </p>
-      <table style={{ marginTop: 10 }}>
+      {/* ⚠️ Seven columns. At 375px this pushed the whole document sideways until it was given a
+          container of its own to scroll inside; `tabIndex` so the scroll is reachable by keyboard
+          and not only by a finger or a trackpad. */}
+      <div className="tablewrap" tabIndex={0} role="region" aria-label="Videos">
+        <table style={{ marginTop: 10 }}>
         <thead>
           <tr>
             <th>Slug</th>
@@ -123,8 +128,9 @@ export default async function Admin() {
               <td>{unread.get(v.id) ?? 0}</td>
             </tr>
           ))}
-        </tbody>
-      </table>
+          </tbody>
+        </table>
+      </div>
       {/* ⚠️ APPROVED WITH OPEN NOTES IS A REAL STATE, NOT A CONTRADICTION. The reviewers liked it
           and still left things worth reading. Not blocked — that is Rafi's call — but never
           silent, because the failure it guards against is uploading past feedback nobody read. */}

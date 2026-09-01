@@ -45,6 +45,14 @@ const nextConfig: NextConfig = {
               `script-src 'self' 'unsafe-inline'${DEV ? " 'unsafe-eval'" : ''}`,
               "style-src 'self' 'unsafe-inline'",
               "img-src 'self' data:",
+              /**
+               * ⚠️ EXPLICIT, THOUGH `default-src 'self'` ALREADY COVERS IT. The interface fonts are
+               * self-hosted by `next/font` — downloaded at build time and served from our own
+               * origin, so there is no request to fonts.googleapis.com and no third party learning
+               * who opened a review link. Named here so that tightening `default-src` later cannot
+               * silently drop the app back to system fonts, which is a change nothing would fail on.
+               */
+              "font-src 'self'",
               // The <video> src is a short-lived Supabase Storage signed URL.
               `media-src 'self' blob: ${mediaOrigin}`,
               // ws: in dev only — Turbopack's HMR socket.
