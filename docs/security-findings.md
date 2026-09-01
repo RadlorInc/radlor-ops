@@ -48,11 +48,12 @@ Roughly half a day for that route alone.
 
 **This is no longer a decision about an empty table, and it is Rafi's to make again.**
 
-1. **`public.waitlist` has a row — since 2026-09-01.** It held zero on 2026-08-31, and that
-   emptiness was *the* reason sharing the project was acceptable rather than spending 5–7 hours on a
-   real boundary. **On 2026-09-01 it stopped being hypothetical**: it now holds one real person's
-   email address and a child's age-band. Record the date, because the argument that justified the
-   decision expired on it.
+1. **`public.waitlist` has a row.** It held zero when this decision was made earlier on
+   2026-08-31, and that emptiness was *the* reason sharing the project was acceptable rather than
+   spending 5–7 hours on a real boundary. ⚠️ **The row was created `2026-08-31 23:34 UTC`** (read
+   off `created_at`, not inferred — an earlier draft of this line said "on 2026-09-01", which was
+   when it was *observed*, not when it arrived). It holds one real person's email address. Record
+   the date, because the argument that justified the decision expired on it.
 2. **`review.subscriptions` exists and holds financial data.** Renewal dates, monthly costs and
    credit balances, in the same schema, reachable with the same key.
 
@@ -69,8 +70,21 @@ sharing no longer holds on its own terms. The original reasoning still stands in
 only this tool is still a receipt rather than a boundary. But "do both or neither" now has a real
 cost attached to "neither".
 
-**Rafi's call, made 2026-09-01: fix the waitlist route, NOT the review tool's separation.** ⚠️ The
-waitlist route is now DONE (#5), which reopens the review tool's separation as a live question. The
+**Rafi's call, made 2026-09-01: fix the waitlist route, NOT the review tool's separation.** The
+waitlist route is now DONE (#5), so the argument that declined the separation — hardening the second
+door on a house whose first door has the same lock — no longer applies.
+
+⚠️ **THE SEPARATION STAYS OPEN AND DELIBERATELY NOT DONE. Two triggers, recorded instead of the
+argument, because the argument has already changed once:**
+
+1. **Milo starts taking real money.** Payment data raises the cost of a shared-project compromise
+   past what 5–7 hours of role plumbing costs.
+2. **`review` holds more than the handful of rows it has today.** Right now it is one video, a few
+   notes, one profile and a couple of subscriptions — the blast radius is real but the payload is
+   small.
+
+Until one of those fires, launch blockers are worth more than the role plumbing. This is not
+"declined"; it is scheduled against facts rather than against a feeling. The
 reasoning is the one this document already made — hardening the second door on a house whose first
 door has the same lock buys a written boundary and no real risk reduction. The review tool sits
 behind auth; the waitlist route sits behind nothing. See #5.
@@ -156,11 +170,14 @@ It has been rewritten for the intended posture rather than deleted, splitting th
 Its success message also had to be fixed: it still read *"anon can neither insert, read nor delete"*
 while insert was now allowed — a green describing the wrong posture.
 
-### To finish
+### The probe-address convention this leaves behind
 
-Add `SUPABASE_ANON_KEY` to **radlor-site's** Vercel project and redeploy, confirm
-`anon_key_configured: true` at `/api/health`, swap the route's two constants back, redeploy, re-run
-`node scripts/check-waitlist-rls.mjs`.
+`public.waitlist` now holds exactly ONE real person, so a test row that looks like a signup corrupts
+the only number the table exists to hold — the same reasoning that removed the fake review note.
+Any check that writes there uses an address that **cannot be mistaken for a person**
+(`…@example.com`, `…@radlor-test.invalid`) and deletes it **in the same run**, in a `finally` so a
+failure part-way cannot leave one behind. Verified on 2026-09-01 by reading the table: 1 row, 0
+probe rows, the real signup intact.
 
 ---
 
