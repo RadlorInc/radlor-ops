@@ -1,6 +1,6 @@
 import 'server-only'
-import { allAssignments } from './db'
-import { listIssues, listSubscriptions, listTodos } from './adminDb'
+import { allAssignments, type Assignment } from './db'
+import { listIssues, listSubscriptions, listTodos, type Issue, type Subscription, type Todo } from './adminDb'
 import { renewalState } from './renewal'
 
 /**
@@ -26,14 +26,31 @@ export type NavBadges = {
   review?: number
 }
 
-export async function navBadges(userId: string): Promise<NavBadges> {
-  const [subscriptions, todos, issues, assignments] = await Promise.all([
-    listSubscriptions(),
-    listTodos(),
-    listIssues(),
-    allAssignments(),
-  ])
-  const today = new Date()
+/**
+ * ⚠️ THE PURE HALF, AND THE REASON IT IS SPLIT OUT. `/admin` already loads all four of these lists
+ * for the page itself. Calling `navBadges()` there fetched them a SECOND time, and — because it
+ * was a separate `await` after the page's own `Promise.all` — it did so in a whole extra
+ * sequential round trip. On a page where one Supabase round trip is the unit of latency, that was
+ * a quarter of the wait, spent re-reading rows already in memory.
+ *
+ * So: pages that have the rows call this; pages that do not call `navBadges()` below, which
+ * fetches and then calls this. One definition of what a badge counts, two ways to feed it.
+ */
+export function badgesFrom({
+  subscriptions,
+  todos,
+  issues,
+  assignments,
+  userId,
+  today = new Date(),
+}: {
+  subscriptions: Subscription[]
+  todos: Todo[]
+  issues: Issue[]
+  assignments: Assignment[]
+  userId: string
+  today?: Date
+}): NavBadges {
 
   // Grouped by video so "not cleared" means the video, not each assignment on it.
   const byVideo = new Map<string, { assigned: number; approved: number }>()
@@ -57,4 +74,15 @@ export async function navBadges(userId: string): Promise<NavBadges> {
      */
     review: assignments.filter((a) => a.reviewer_id === userId && a.verdict === null).length,
   }
+}
+
+/** For the pages that do not already hold these rows — `/tester` and the reviewer list. */
+export async function navBadges(userId: string): Promise<NavBadges> {
+  const [subscriptions, todos, issues, assignments] = await Promise.all([
+    listSubscriptions(),
+    listTodos(),
+    listIssues(),
+    allAssignments(),
+  ])
+  return badgesFrom({ subscriptions, todos, issues, assignments, userId })
 }

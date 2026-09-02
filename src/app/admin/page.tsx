@@ -1,6 +1,6 @@
 import RoleNav from '../RoleNav'
 import Summary from './Summary'
-import { navBadges } from '@/lib/navBadges'
+import { badgesFrom } from '@/lib/navBadges'
 import { allAssignments, allNotes, allReviewers, allVideos } from '@/lib/db'
 import { clearance, progressLabel } from '@/lib/clearance'
 import { listIssues, listSubscriptions, listTodos } from '@/lib/adminDb'
@@ -69,16 +69,17 @@ export default async function Admin({
   const tab: TabKey = TABS.some((t) => t.key === raw) ? (raw as TabKey) : 'summary'
 
   /**
-   * ⚠️ THE SHARED HELPER, NOT A SECOND COMPUTATION HERE. This page has every row in hand and could
-   * count them itself in four lines — and then /tester and /review, which have to use the helper
-   * because they do not load this data, would be one edit away from showing a different number for
-   * the same thing. One badge, one implementation.
+   * ⚠️ THE SHARED RULE, FED FROM ROWS THIS PAGE ALREADY HAS. Counting them here in four lines
+   * would put /tester and /review one edit away from a different number for the same thing; the
+   * `navBadges()` variant, which FETCHES, would re-read four lists already in memory and — being
+   * a separate await after the Promise.all above — spend a whole extra sequential round trip
+   * doing it. `badgesFrom` is the rule; the fetch is the part that differs per page.
    *
    * ⚠️ THE COUNTS ARE "NEEDS SOMETHING", NOT "HOW MANY ROWS". A badge showing the total would sit
    * at 25 for ever and stop meaning anything; a tab with nothing waiting gets no badge at all
    * rather than a zero. The Dashboard tab never gets one: it is a summary OF the badges beside it.
    */
-  const badges = await navBadges(me.user_id)
+  const badges = badgesFrom({ subscriptions, todos, issues, assignments, userId: me.user_id })
 
   return (
     <main className="wrap">
