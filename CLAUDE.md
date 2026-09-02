@@ -131,9 +131,8 @@ which is most of a fetched schema left unread.
 
 ⚠️ It **fails closed** when the schema cannot be fetched or compiled, because "I could not check"
 must never read as "it is fine" — the exact failure this file exists to prevent. ⚠️ And Vercel's
-schema **declares draft-04 while using draft-07 constructs**, so the declaration is dropped and it
-is compiled as what it is; taking it at its word makes ajv reject the vendor's schema, not our
-file. It is in `npm run check`, which is the thing to run before pushing.
+schema declares a draft it is not — see *an artifact's self-description is a claim* below. It is in
+`npm run check`, which is the thing to run before pushing.
 
 ⚠️ And the explanation that went in that key was the cause, not an innocent bystander: the comment
 was worth writing, the file was the wrong place. **Prose about a config decision goes in the commit
@@ -171,6 +170,23 @@ pass offline. Deleting a check is sometimes the honest option; making it green n
 ## The rest of the standing rules for this repo
 
 - ⚠️ **State the property the assertion actually checks, not the stronger one you believe is true.** A report that overstates a PASSING test is harder to catch than a failing one — nothing goes red and everything downstream reads as verified. `e2e/token-404.spec.ts` compares two 404 pages' `innerText`; it reached the reader as *"byte-identical bodies"*, which was never true (Next serialises the route param, so each 404 carries its own token). The test was right; the sentence about it was not. It surfaced only because a later run compared the raw bodies and disagreed with the passing test — when a claim and a test disagree, the claim is the likelier liar.
+- ⚠️ **AN ARTIFACT'S SELF-DESCRIPTION IS A CLAIM, NOT A FACT.** Same class as the rule above, and it
+  bites hardest when the artifact belongs to somebody else. Vercel's `vercel.json` schema declares
+  `$schema: draft-04` and is not draft-04 — it uses a numeric `exclusiveMinimum` and an
+  object-valued `additionalProperties`, both draft-06+. Taking the declaration at its word and
+  registering the draft-04 meta-schema made `ajv` reject **the vendor's own schema** with sixteen
+  errors, not one of which was about our file. Anyone meeting that cold would spend an hour on it,
+  which is why `scripts/check-config.mjs` drops the declaration and compiles the schema as what its
+  contents are — and says so at the top. **Validate against what a thing IS, not what it says it
+  is**; a version header, a `Content-Type`, a `$schema`, a filename extension are all the same
+  shape.
+  *(This rule pairs with a `document.fonts.check()` example that lives in the OTHER repo. It is not
+  here, and nobody working in this one will read it — the same reason the tautology rule was copied
+  across rather than referenced. The example above has to carry the class on its own.)*
+- **A check that depends on an UNDECLARED package disappears silently.** `ajv` was sitting in
+  `node_modules` via eslint's tree and worked perfectly; it is now in `devDependencies`, because
+  the day somebody else's lockfile dedupes it away, `check:config` stops running and nothing says a
+  word — a green run and an absent run look identical from outside.
 - **A defect noticed in a neighbouring file gets written down before you return to the one you were in** — in that file, or in that repo's handoff. Two minutes, so it survives being busy. Both verification scripts here put a secret within one branch of their own output at some point; the second was *described* while the first was being fixed, and only got fixed because someone asked again. Noticing is not the deliverable; the note is.
 - ⚠️⚠️ **AN ENV VAR A ROUTE DEPENDS ON IS CONFIRMED PRESENT IN THE TARGET ENVIRONMENT *BEFORE* THE
   DEPLOY THAT NEEDS IT — NEVER AFTER.** Not "I'll check if it breaks". Before.
