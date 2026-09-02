@@ -112,6 +112,27 @@ own value without the code under test ever executing.
 > the assertion against a value the write CHANGES — asserting what is already on screen is
 > satisfied by the stale read you are trying to catch.
 
+### Config the PLATFORM parses is outside every check we have
+
+Added 2026-09-02. `vercel.json` was given a `"//"` key as a comment. JSON has no comments and
+Vercel validates the file with `additionalProperties: false`, so **the production build failed** —
+and `tsc`, eslint and 60 Playwright specs were all green while it did. Nothing in this repo reads
+that file; the first thing that noticed was a broken deploy.
+
+> **A file the platform parses at build time is invisible to every test we own. Validate it against
+> its own published schema, or it is unverified — the same word we use for authorization the
+> offline harness cannot see.**
+
+`npm run check:config` fetches the schema each file names in `$schema` and asserts its top-level
+keys are declared. ⚠️ It checks the KEYS, not the value types — `{"regions": 5}` still passes here
+and fails at Vercel — and it **fails closed** when the schema cannot be fetched, because "I could
+not check" must never read as "it is fine". It is in `npm run check`, which is the thing to run
+before pushing.
+
+⚠️ And the explanation that went in that key was the cause, not an innocent bystander: the comment
+was worth writing, the file was the wrong place. **Prose about a config decision goes in the commit
+message or the handoff.**
+
 ### The grants you DON'T write are load-bearing too
 
 Added 2026-09-02. `20260902090000_video_reviewers.sql` granted `select` and `update (verdict)` and

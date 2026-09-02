@@ -162,6 +162,28 @@ All four app paths are proven by break-check, each against a spec that drives it
 — see the two new CLAUDE.md sections, which exist because the first version of this work had the
 cache unwatched and then had break-check certify two checks that did not bind.
 
+## Why the function region is pdx1
+
+`vercel.json` pins Vercel functions to **pdx1**, which is **us-west-2** — the region the Supabase
+project `ghuvnqbthbcmqfxcrjrh` is in. Measured 2026-09-02 after a report of 1–2s between tab
+clicks: the functions were running in `iad1` (us-east), so every read crossed the United States,
+and a page render is three sequential waves of them.
+
+The database cannot move — it belongs to `radlor-site` and a project's region is fixed at creation
+— so the function moved to it.
+
+⚠️ **This does not make the app fast from India.** The floor is Mumbai to the US west coast, which
+no setting here removes; what this removes is the extra US crossing paid on every wave on top of
+it. Genuinely quick from India is a Supabase project in `ap-south`, which is a migration, not a
+config line.
+
+⚠️ **The explanation lives HERE and not in `vercel.json`.** The first version put it in the file as
+a `"//"` key — JSON has no comments, Vercel validates with `additionalProperties: false`, and the
+production build failed on it while every local check was green. See the CLAUDE.md section.
+
+⚠️ **Confirm the region from the running deployment**, never from the settings page:
+`curl -s https://video-reviewer-liard.vercel.app/api/health` reports it.
+
 ## Open findings and their triggers
 
 All in [docs/security-findings.md](docs/security-findings.md). The two that are scheduled rather
@@ -189,7 +211,9 @@ again rather than rhetorical.
 ## Checks
 
 ```bash
+npm run check           # everything below, in one go — run this before you push
 npm run test:e2e        # 60 Playwright, fully offline against test/fake-supabase.mjs
+npm run check:config    # vercel.json against Vercel's own published schema
 npm run test:verdict    # the break-check verdict logic
 npm run test:clearance  # when a video is cleared to post — every assigned reviewer approved
 node --test test/renewal.test.mjs

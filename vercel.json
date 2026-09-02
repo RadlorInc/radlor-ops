@@ -1,30 +1,6 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "regions": ["pdx1"],
-
-  "//": [
-    "⚠️ pdx1 IS us-west-2, WHICH IS WHERE THE DATABASE IS. Measured 2026-09-02, after a report of",
-    "1-2s between tab clicks: the Supabase project `ghuvnqbthbcmqfxcrjrh` is in us-west-2, and the",
-    "functions were running in iad1 (us-east) — so EVERY read crossed the United States. A page",
-    "render is three sequential waves (auth user, then the profile row, then one parallel wave of",
-    "table reads), and each wave was paying that crossing.",
-    "",
-    "The database cannot move: it belongs to radlor-site and a Supabase project's region is fixed",
-    "when it is created. So the function moves to it.",
-    "",
-    "⚠️ THIS DOES NOT MAKE THE APP FAST FOR SOMEONE IN INDIA, AND SAYING SO MATTERS. The floor is",
-    "the trip from Mumbai to the US west coast, which no setting here removes; what this removes is",
-    "the extra US crossing that was being paid three times on top of it. If the whole thing ever",
-    "needs to be genuinely quick from India, that is a Supabase project in ap-south — a migration,",
-    "not a config line.",
-    "",
-    "⚠️ AND IT TAKES EFFECT ON THE NEXT DEPLOY, not on save. Confirm it from the running deployment",
-    "(the `x-vercel-id` header names the region that served the request), never from the dashboard.",
-    "",
-    "⚠️ AND THE FIRST VERSION OF THIS FILE SHIPPED WITHOUT THE `regions` KEY AT ALL — it was lost",
-    "while this comment was being added to it, so the commit that says it moves the region moved",
-    "nothing. Eight minutes of polling `x-vercel-id` said iad1 and I reached for the plan's",
-    "limitations before reading my own file. The config that carries an explanation is exactly the",
-    "config where the setting can go missing behind it: check the parsed value, not the diff."
+  "regions": [
+    "pdx1"
   ]
 }
