@@ -263,14 +263,21 @@ test('a verdict written now is on the dashboard now — the `assignments` tag', 
 
 test('the video status a verdict derives is on the dashboard now — the `videos` tag', async ({ page }) => {
   await signIn(page, 'admin')
-  // Dana decided, Flood not: the video is not finished, so `status` is awaiting_review.
-  await verdictAs(page, 'dana', VID, 'changes_needed')
-  await noteAs(page, 'flood', VID, 'clearing my verdict so this test owns the state')
+  /**
+   * ⚠️ THE CLEARING NOTE IS DANA'S, NEVER FLOOD'S. `rate-limit.spec.ts` deliberately posts twelve
+   * notes as the flood reviewer to trip the ten-a-minute per-reviewer limit, and this file runs
+   * seconds later — a note as Flood here comes back 429 and the failure lands in a test about
+   * caching. The seed says as much: that reviewer exists so tripping the limit cannot lock other
+   * specs out, and it only works if nothing else posts as them.
+   */
+  await noteAs(page, 'dana', VID, 'clearing my verdict so this test owns the state')
+  await verdictAs(page, 'flood', VID, 'approved')
   await page.goto('/admin?tab=videos')
+  // Flood has decided, Dana has not, so the video is not finished: status is awaiting_review.
   await expect(adminRow(page)).toContainText('awaiting_review')
 
-  // Flood answering makes every assignee decided, which is the only thing that moves videos.status.
-  await verdictAs(page, 'flood', VID, 'approved')
+  // Dana answering makes every assignee decided, the only thing that moves videos.status.
+  await verdictAs(page, 'dana', VID, 'approved')
   await page.goto('/admin?tab=videos')
   await expect(adminRow(page)).toContainText('reviewed')
 })

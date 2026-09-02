@@ -137,6 +137,31 @@ the two sentences worth carrying:
 > CSS-chunk-hash deploy check said "not deployed" twice while the deploy was Ready, and on that
 > basis a write to production data was proposed for a system that was already fine.
 
+## The /admin cache, and what invalidates it
+
+`allVideos`, `allNotes`, `allAssignments`, `allReviewers` go through `unstable_cache`, tagged, TTL
+60s. ⚠️ **`src/lib/adminDb.ts` is deliberately NOT cached** — those reads go through `asUser()` and
+RLS decides, so the same query returns different rows to different people.
+
+Every write that touches the cached data, and whether it invalidates:
+
+| write | changes | route | invalidates |
+|---|---|---|---|
+| a note added | `allNotes` | `/api/notes` | ✅ `notes` |
+| a note that REOPENS a review | `allAssignments`, `allVideos` | `/api/notes` | ✅ both, conditionally |
+| a verdict set | `allAssignments` | `/api/review-done` | ✅ `assignments` |
+| the video status it derives | `allVideos` | `/api/review-done` | ✅ `videos` |
+| a video or an assignment added | `allVideos`, `allAssignments` | **SQL by hand** | ❌ TTL only |
+| a note marked resolved | `allNotes` | **SQL by hand** | ❌ TTL only |
+| a profile added or renamed | `allReviewers` | **SQL by hand** | ❌ TTL only |
+
+⚠️ **The bottom three are why the 60s TTL is not a nicety.** Assignment and video creation have no
+UI by design, and a statement typed into the Supabase editor cannot call `revalidateTag`.
+
+All four app paths are proven by break-check, each against a spec that drives its own precondition
+— see the two new CLAUDE.md sections, which exist because the first version of this work had the
+cache unwatched and then had break-check certify two checks that did not bind.
+
 ## Open findings and their triggers
 
 All in [docs/security-findings.md](docs/security-findings.md). The two that are scheduled rather
@@ -164,7 +189,7 @@ again rather than rhetorical.
 ## Checks
 
 ```bash
-npm run test:e2e        # 55 Playwright, fully offline against test/fake-supabase.mjs
+npm run test:e2e        # 60 Playwright, fully offline against test/fake-supabase.mjs
 npm run test:verdict    # the break-check verdict logic
 npm run test:clearance  # when a video is cleared to post — every assigned reviewer approved
 node --test test/renewal.test.mjs

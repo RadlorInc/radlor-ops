@@ -81,6 +81,37 @@ disagree, before the check could tell the two rules apart. **Pick the fixture th
 wrong; that is what makes the red mean something** — the same job the positive controls do in
 `check-anon-locked-out.mjs`.
 
+### The fifth face: a gap BETWEEN two passing tests
+
+Added 2026-09-02. `/admin` reads through a cache and the write routes invalidate it by tag.
+Deleting every `revalidateTag` call left the whole suite **green**. Two specs existed and both
+passed: one *read* a verdict off the dashboard — a SEEDED one — and one *wrote* a verdict and read
+it back **straight out of the database**. Neither was wrong. Nothing joined them, and the join was
+exactly where the cache sits.
+
+> **A gap between two passing tests is invisible in a way a failing test never is.** Coverage is
+> counted per test, so nobody notices that no single test crosses from the write to the read the
+> user actually looks at. Ask of any new layer: *which test goes all the way through it?* — and if
+> the answer is two tests that each go half way, the layer is unwatched.
+
+⚠️ **And "invalidation is tested" must not stand for one path out of five.** Enumerate the writes
+that touch the cached data and prove each one separately; the same shape as three-of-four reading
+as verified.
+
+### ⚠️ break-check certifies RED, not red-BECAUSE-OF-THE-BREAK
+
+Added 2026-09-02, from the same batch, and it is the sharper half. `scripts/break-check.sh` runs the
+named spec with `-g` on a broken tree and passes when it goes red **on its own `expect`**. That is
+not the same as failing *because of the break*. Four cache checks were written and break-check
+said all four bound. Run alone on a HEALTHY tree, two of them were red anyway — they inherited
+state from the tests above them, and `-g` runs them without it. A third passed against the seed's
+own value without the code under test ever executing.
+
+> **A test that depends on its neighbours cannot be break-checked, because break-check runs it
+> alone.** Before trusting a green ✓ from it, run the spec by itself on an unbroken tree. And write
+> the assertion against a value the write CHANGES — asserting what is already on screen is
+> satisfied by the stale read you are trying to catch.
+
 ### The grants you DON'T write are load-bearing too
 
 Added 2026-09-02. `20260902090000_video_reviewers.sql` granted `select` and `update (verdict)` and
