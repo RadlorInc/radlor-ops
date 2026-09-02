@@ -123,11 +123,17 @@ that file; the first thing that noticed was a broken deploy.
 > its own published schema, or it is unverified — the same word we use for authorization the
 > offline harness cannot see.**
 
-`npm run check:config` fetches the schema each file names in `$schema` and asserts its top-level
-keys are declared. ⚠️ It checks the KEYS, not the value types — `{"regions": 5}` still passes here
-and fails at Vercel — and it **fails closed** when the schema cannot be fetched, because "I could
-not check" must never read as "it is fine". It is in `npm run check`, which is the thing to run
-before pushing.
+`npm run check:config` fetches the schema each file names in `$schema` and validates the **whole
+document** against it with ajv — types, item types, `minItems`, unknown keys, nested values. Proven
+against five broken files, including the one that actually failed the deploy and the
+`{"regions": 5}` the first version let through: that version compared only top-level key names,
+which is most of a fetched schema left unread.
+
+⚠️ It **fails closed** when the schema cannot be fetched or compiled, because "I could not check"
+must never read as "it is fine" — the exact failure this file exists to prevent. ⚠️ And Vercel's
+schema **declares draft-04 while using draft-07 constructs**, so the declaration is dropped and it
+is compiled as what it is; taking it at its word makes ajv reject the vendor's schema, not our
+file. It is in `npm run check`, which is the thing to run before pushing.
 
 ⚠️ And the explanation that went in that key was the cause, not an innocent bystander: the comment
 was worth writing, the file was the wrong place. **Prose about a config decision goes in the commit

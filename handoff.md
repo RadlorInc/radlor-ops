@@ -213,7 +213,7 @@ again rather than rhetorical.
 ```bash
 npm run check           # everything below, in one go — run this before you push
 npm run test:e2e        # 60 Playwright, fully offline against test/fake-supabase.mjs
-npm run check:config    # vercel.json against Vercel's own published schema
+npm run check:config    # vercel.json validated in full against Vercel's published schema
 npm run test:verdict    # the break-check verdict logic
 npm run test:clearance  # when a video is cleared to post — every assigned reviewer approved
 node --test test/renewal.test.mjs
