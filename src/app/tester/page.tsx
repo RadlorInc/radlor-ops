@@ -1,7 +1,8 @@
-import { listIssues, listProfiles, listSessions } from '@/lib/adminDb'
+import { listIssues, listProfiles, listSessions, listSubscriptions, listTodos, type Subscription, type Todo } from '@/lib/adminDb'
+import { allAssignments, type Assignment } from '@/lib/db'
 import { requireRole } from '@/lib/session'
 import RoleNav from '../RoleNav'
-import { navBadges } from '@/lib/navBadges'
+import { badgesFrom } from '@/lib/navBadges'
 import Issues from './Issues'
 
 export const dynamic = 'force-dynamic'
@@ -16,13 +17,32 @@ export default async function Tester() {
   const profile = await requireRole('tester', 'admin')
   // ⚠️ No `reporter` filter on either call — `issues_read_own` and `sessions_own` decide what comes
   // back. A tester gets their own; an admin gets everyone's. Same query, two answers.
-  const [issues, sessions, people] = await Promise.all([
+  /**
+   * ⚠️ ONE WAVE, NOT TWO. The badge counts used to come from `navBadges()`, which fetches — and
+   * being a separate `await` after this list, it spent a whole extra sequential round trip. Every
+   * Supabase read from the function crosses to us-west-2, so a wave is the unit of latency here,
+   * not a query. Everything this page needs now goes in one `Promise.all` and `badgesFrom()` does
+   * the counting.
+   *
+   * ⚠️ A TESTER FETCHES ALMOST NONE OF IT. The four badge lists exist only to label an ADMIN's
+   * tabs; a tester has a single tab and no use for them, so those slots resolve to empty arrays
+   * without a request. The strip they cannot see costs them nothing.
+   */
+  const admin = profile.role === 'admin'
+  const none = <T,>(): Promise<T[]> => Promise.resolve([])
+  const [issues, sessions, people, subscriptions, todos, assignments] = await Promise.all([
     listIssues(),
     listSessions(),
     // Only a triager needs to know whose issue it is; a tester reads their own name back otherwise.
-    profile.role === 'admin' ? listProfiles() : Promise.resolve([]),
+    admin ? listProfiles() : none<{ user_id: string; name: string }>(),
+    admin ? listSubscriptions() : none<Subscription>(),
+    admin ? listTodos() : none<Todo>(),
+    admin ? allAssignments() : none<Assignment>(),
   ])
   const names = Object.fromEntries(people.map((p) => [p.user_id, p.name]))
+  const badges = admin
+    ? badgesFrom({ subscriptions, todos, issues, assignments, userId: profile.user_id })
+    : undefined
 
   return (
     <main className="wrap">
@@ -33,7 +53,7 @@ export default async function Tester() {
         /* ⚠️ An admin's strip now carries the dashboard's sections, and a MISSING badge reads as
            "nothing waiting" — so this page has to supply them even though none of them are about
            chapter testing. A tester never sees those tabs, so it never pays for them. */
-        badges={profile.role === 'admin' ? await navBadges(profile.user_id) : undefined}
+        badges={badges}
       />
       <h1 data-testid="tester-greeting">Chapter testing</h1>
 
