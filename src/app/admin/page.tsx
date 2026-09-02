@@ -1,9 +1,8 @@
-import Link from 'next/link'
 import RoleNav from '../RoleNav'
 import Summary from './Summary'
+import { navBadges } from '@/lib/navBadges'
 import { allAssignments, allNotes, allReviewers, allVideos } from '@/lib/db'
 import { clearance, progressLabel } from '@/lib/clearance'
-import { renewalState } from '@/lib/renewal'
 import { listIssues, listSubscriptions, listTodos } from '@/lib/adminDb'
 import { listProfiles } from '@/lib/adminDb'
 import { requireRole } from '@/lib/session'
@@ -75,37 +74,28 @@ export default async function Admin({
   const tab: TabKey = TABS.some((t) => t.key === raw) ? (raw as TabKey) : 'summary'
 
   /**
-   * What each tab is holding, so a closed tab still says whether it is worth opening.
+   * ⚠️ THE SHARED HELPER, NOT A SECOND COMPUTATION HERE. This page has every row in hand and could
+   * count them itself in four lines — and then /tester and /review, which have to use the helper
+   * because they do not load this data, would be one edit away from showing a different number for
+   * the same thing. One badge, one implementation.
    *
-   * ⚠️ THESE ARE "NEEDS SOMETHING", NOT "HOW MANY ROWS". A badge showing the total would sit at 25
-   * for ever and stop meaning anything; the number that changes is the number that is waiting. A
-   * tab with nothing waiting gets no badge at all rather than a zero.
+   * ⚠️ THE COUNTS ARE "NEEDS SOMETHING", NOT "HOW MANY ROWS". A badge showing the total would sit
+   * at 25 for ever and stop meaning anything; a tab with nothing waiting gets no badge at all
+   * rather than a zero. The Dashboard tab never gets one: it is a summary OF the badges beside it.
    */
-  const openIssues = issues.filter((i) => i.status !== 'resolved').length
-  const myUnfinished = assignments.filter((a) => a.reviewer_id === me.user_id && a.verdict === null).length
-  const COUNTS: Record<TabKey, number> = {
-    // ⚠️ The Dashboard tab gets no badge. It is a summary OF the badges beside it; a number here
-    // would either double-count them or invent a fifth meaning for the same data.
-    summary: 0,
-    costs: subscriptions.filter((sub) => renewalState(sub.renewal_date, new Date()) === 'soon'
-      || renewalState(sub.renewal_date, new Date()) === 'lapsed').length,
-    todo: todos.filter((t) => t.status !== 'done').length,
-    issues: openIssues,
-    videos: rows.filter((r) => !r.c.cleared && r.c.assigned > 0).length,
-  }
+  const badges = await navBadges(me.user_id)
 
   return (
     <main className="wrap">
       <RoleNav
         role={me.role}
-        current="/admin"
+        current={tab === 'summary' ? '/admin' : `/admin?tab=${tab}`}
         name={me.name}
-        badges={{ tester: openIssues, review: myUnfinished }}
+        badges={badges}
       />
-      {/* ⚠️ The role tab above already says "Dashboard" and so does the section tab below it.
-          Printing it a third time as the only visible h1 is the repetition this page was asked to
-          lose — but a page with no h1 has no name in a screen reader's landmark list, so it moves
-          rather than goes. Same reasoning as the section headings. */}
+      {/* ⚠️ The tab strip above already names this page. Printing it again as the only visible h1
+          is repetition — but a page with no h1 has no name in a screen reader's landmark list, so
+          it moves rather than goes. Same reasoning as the section headings. */}
       <h1 className="sr-only">Dashboard</h1>
 
       {/* ⚠️ THE WARNINGS LIVE ABOVE THE TABS AND SHOW ON EVERY ONE OF THEM. Putting sections
@@ -139,30 +129,6 @@ export default async function Admin({
         </div>
       )}
 
-
-      <nav className="sectiontabs" aria-label="Dashboard sections">
-        {TABS.map((t) => (
-          <Link
-            key={t.key}
-            href={`/admin?tab=${t.key}`}
-            className="tab"
-            // See RoleNav: a prefetched tab link rotates the session's refresh token.
-            prefetch={false}
-            aria-current={t.key === tab ? 'page' : undefined}
-            data-testid={`tab-${t.key}`}
-          >
-            {t.label}
-            {/* ⚠️ EVERY TAB SAYS WHAT IS WAITING INSIDE IT. A tab with a hidden count is a tab you
-                have to open to find out whether it was worth opening — which is the cost tabs are
-                supposed to save. */}
-            {COUNTS[t.key] > 0 && (
-              <span className="badge" aria-label={`${COUNTS[t.key]} needing attention`}>
-                {COUNTS[t.key]}
-              </span>
-            )}
-          </Link>
-        ))}
-      </nav>
 
       {tab === 'summary' && (
         <Summary

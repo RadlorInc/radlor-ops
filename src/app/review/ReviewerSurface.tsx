@@ -4,6 +4,7 @@ import { myAssignment, notesFor, reviewerVideoBySlug, videosForReviewer } from '
 import type { ReviewerIdentity } from '@/lib/reviewerIdentity'
 import type { Role } from '@/lib/session'
 import RoleNav from '../RoleNav'
+import { navBadges } from '@/lib/navBadges'
 import Review from './Review'
 
 /**
@@ -19,7 +20,16 @@ export async function ReviewerList({ identity, role }: { identity: ReviewerIdent
 
   return (
     <main className="wrap">
-      <RoleNav role={role} current="/review" name={identity.name} badges={{ review: unfinished }} />
+      <RoleNav
+        role={role}
+        current="/review"
+        name={identity.name}
+        /* Same reason as /tester: an admin's strip has tabs this page knows nothing about, and an
+           absent badge is a claim that they are clear. A reviewer's strip has one tab and pays for
+           nothing. ⚠️ Note this is the LIST page — /review/<slug> renders no nav, so a reviewer
+           watching a video never waits on these reads. */
+        badges={role === 'admin' ? await navBadges(identity.id) : { review: unfinished }}
+      />
       <h1>Videos to review</h1>
       <p className="muted small" data-testid="signout-inline">
         {videos.length === 0

@@ -270,9 +270,9 @@ button.linky.small { font-size: 13px; }
 }
 .tab[aria-current='page'] .badge { background: var(--panel-2); border-color: var(--line-strong); color: var(--text); }
 
-/* Section tabs inside the dashboard. Same component, one level quieter. */
-.sectiontabs { display: flex; gap: 4px; flex-wrap: wrap; border-bottom: 1px solid var(--line); margin: 0 0 20px; }
-.sectiontabs .tab { font-size: 13px; padding: 7px 11px; margin-bottom: -1px; }
+/* ⚠️ The second strip is gone. `.sectiontabs` held the dashboard's own tabs under the role tabs;
+   both levels are now one strip, because "Costs" was never a different KIND of destination from
+   "Chapter testing" and nesting them said it was. */
 
 /**
  * ⚠️ HIDDEN FROM EYES, NOT FROM ASSISTIVE TECHNOLOGY. `display: none` and `visibility: hidden`
@@ -452,6 +452,12 @@ td[data-cleared='no'] { color: var(--muted); }
   .frame video { width: auto; height: 48vh; max-width: 100%; }
   .side { flex: 1 1 100%; min-width: 0; }
   h1 { font-size: 19px; }
+  /* ⚠️ Seven tabs WRAP on a phone rather than scroll sideways, and the tighter padding is what
+     keeps that to two rows instead of three. A horizontally scrolling strip would keep the header
+     short and hide the active tab off-screen whenever it is one of the last ones — which is
+     exactly when you most need to see where you are. Two rows of visible tabs beats one row of
+     hidden ones. */
+  .tab { font-size: 13px; padding: 7px 9px; }
 }
 
 /**

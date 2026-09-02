@@ -1,6 +1,7 @@
 import { listIssues, listSessions } from '@/lib/adminDb'
 import { requireRole } from '@/lib/session'
 import RoleNav from '../RoleNav'
+import { navBadges } from '@/lib/navBadges'
 import Issues from './Issues'
 
 export const dynamic = 'force-dynamic'
@@ -19,7 +20,15 @@ export default async function Tester() {
 
   return (
     <main className="wrap">
-      <RoleNav role={profile.role} current="/tester" name={`${profile.name} (${profile.role})`} />
+      <RoleNav
+        role={profile.role}
+        current="/tester"
+        name={`${profile.name} (${profile.role})`}
+        /* ⚠️ An admin's strip now carries the dashboard's sections, and a MISSING badge reads as
+           "nothing waiting" — so this page has to supply them even though none of them are about
+           chapter testing. A tester never sees those tabs, so it never pays for them. */
+        badges={profile.role === 'admin' ? await navBadges(profile.user_id) : undefined}
+      />
       <h1 data-testid="tester-greeting">Chapter testing</h1>
 
       {sessions.length > 0 && (
