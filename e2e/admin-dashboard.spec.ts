@@ -171,37 +171,38 @@ test('editing a subscription updates the row rather than adding a second one', a
   expect((await rows(request, 'subscriptions')).length).toBe(before)
 })
 
-test('tester issues appear on the dashboard, action-needed first, with null reporters named as imported', async ({ page }) => {
+/**
+ * ⚠️ THE "ISSUES APPEAR ON THE DASHBOARD, ACTION-NEEDED FIRST" SPEC IS DELETED, NOT MOVED. Its
+ * subject was the admin Issues tab's collapsible status groups — open and ready-for-retest
+ * expanded, resolved shut — and that tab is gone: it was `/tester` under a second name. `/tester`
+ * has never had groups; it filters. Rewriting the assertion to fit the filter chips would have
+ * been a new test wearing an old test's name and its record of having once caught something.
+ *
+ * The one half that survived the page is kept below, because it survived for a reason: an issue
+ * with no reporter says so, and a triager needs to know whose issue they are moving.
+ */
+test('an admin triages from the issue list, and the row it names is the row that moves', async ({ page, request }) => {
   await signIn(page, 'admin')
-  await page.goto('/admin?tab=issues')
-  await expect(page.getByTestId('issues-count')).toContainText('needing something')
+  await page.goto('/tester')
 
-  /**
-   * ⚠️ UNCONDITIONAL. The first version wrapped each of these in `if (await group.count())` — and
-   * the seed had no RESOLVED issue, so the one assertion that mattered never ran and the check
-   * passed against a build where every group started expanded. A guard that can skip the assertion
-   * is the same disease as a filter that can only match rows already satisfying it.
-   */
-  const openState = async (status: string) =>
-    page.getByTestId(`issue-group-${status}`).evaluate((e: HTMLDetailsElement) => e.open)
-  expect(await openState('open')).toBe(true)
-  expect(await openState('ready_for_retest')).toBe(true)
-  expect(await openState('resolved')).toBe(false)   // the two that need action are not buried under it
-
-  // The absence is the fact, rendered as such.
-  await expect(page.getByTestId('issue-reporter').filter({ hasText: 'imported from the sheet' }).first()).toBeVisible()
-})
-
-test('an admin can move an issue to resolved from the dashboard, and the row moves too', async ({ page, request }) => {
-  await signIn(page, 'admin')
-  await page.goto('/admin?tab=issues')
+  // ⚠️ THE UI PATH, NOT THE API. tester.spec.ts already proves the ROUTE lets an admin move a
+  // status and refuses a tester. Neither of those would notice a <select> that is rendered and
+  // wired to nothing, which is the whole of this control on the page it now lives on.
   const [target] = await rows(request, 'issues', '&status=eq.open&limit=1')
-  const row = page.getByTestId('admin-issue').filter({ has: page.locator(`text=${String(target.description).slice(0, 24)}`) })
-  await row.getByTestId('admin-issue-status').selectOption('resolved')
+  const row = page
+    .getByTestId('issue-item')
+    .filter({ has: page.locator(`text=${String(target.description).slice(0, 24)}`) })
+  await row.getByTestId('issue-status').selectOption('resolved')
 
   await expect
     .poll(async () => (await rows(request, 'issues', `&id=eq.${target.id}`))[0]?.status)
     .toBe('resolved')
+
+  // The absence of a reporter is a fact, rendered as such — these rows came from the sheet and
+  // will never have one.
+  await expect(
+    page.getByTestId('issue-reporter').filter({ hasText: 'imported from the sheet' }).first(),
+  ).toBeVisible()
 })
 
 /**
@@ -261,9 +262,16 @@ test('the Dashboard cards agree with the tabs they summarise', async ({ page }) 
   const todoTab = await page.getByTestId('todo-open-count').innerText()
   expect(todoCard.match(/\d+/g)).toEqual(todoTab.match(/\d+/g))
 
-  await page.goto('/admin?tab=issues')
-  const issuesTab = await page.getByTestId('issues-count').innerText()
-  expect(issuesCard.match(/\d+/g)).toEqual(issuesTab.match(/\d+/g))
+  /**
+   * ⚠️ COUNTED OFF THE LIST, NOT READ OFF A SECOND CAPTION. The admin Issues tab had an
+   * "N needing something of M" line to compare against; it was deleted with the tab. Counting the
+   * rendered rows is the stronger comparison anyway — the card now has to agree with the issues
+   * themselves rather than with another sentence that could be wrong in the same way.
+   */
+  await page.goto('/tester')
+  const all = await page.getByTestId('issue-item').count()
+  const resolved = await page.locator('[data-testid="issue-item"][data-status="resolved"]').count()
+  expect(issuesCard.match(/\d+/g)).toEqual([String(all - resolved), String(all)])
 
   // The card names the NEXT renewal; the tab's row for that tool must carry the same urgency.
   await page.goto('/admin?tab=costs')

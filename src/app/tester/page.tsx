@@ -1,4 +1,4 @@
-import { listIssues, listSessions } from '@/lib/adminDb'
+import { listIssues, listProfiles, listSessions } from '@/lib/adminDb'
 import { requireRole } from '@/lib/session'
 import RoleNav from '../RoleNav'
 import { navBadges } from '@/lib/navBadges'
@@ -16,7 +16,13 @@ export default async function Tester() {
   const profile = await requireRole('tester', 'admin')
   // ⚠️ No `reporter` filter on either call — `issues_read_own` and `sessions_own` decide what comes
   // back. A tester gets their own; an admin gets everyone's. Same query, two answers.
-  const [issues, sessions] = await Promise.all([listIssues(), listSessions()])
+  const [issues, sessions, people] = await Promise.all([
+    listIssues(),
+    listSessions(),
+    // Only a triager needs to know whose issue it is; a tester reads their own name back otherwise.
+    profile.role === 'admin' ? listProfiles() : Promise.resolve([]),
+  ])
+  const names = Object.fromEntries(people.map((p) => [p.user_id, p.name]))
 
   return (
     <main className="wrap">
@@ -39,7 +45,7 @@ export default async function Tester() {
         </p>
       )}
 
-      <Issues initial={issues} canTriage={profile.role === 'admin'} />
+      <Issues initial={issues} canTriage={profile.role === 'admin'} names={names} />
     </main>
   )
 }

@@ -84,7 +84,9 @@ export default function Summary({
         </span>
       </Link>
 
-      <Link prefetch={false} className="card sumcard" href="/admin?tab=issues">
+      <Link prefetch={false} className="card sumcard" href="/tester">
+        {/* Links to /tester, because that is where issues are now read and triaged — the admin
+            Issues tab was the same list under a second name and has been removed. */}
         <h2>Tester issues</h2>
         <p className="bignum" data-testid="summary-issues">
           {openIssues} <span className="unit">needing something of {issues.length}</span>

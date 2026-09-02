@@ -4,9 +4,7 @@ import { navBadges } from '@/lib/navBadges'
 import { allAssignments, allNotes, allReviewers, allVideos } from '@/lib/db'
 import { clearance, progressLabel } from '@/lib/clearance'
 import { listIssues, listSubscriptions, listTodos } from '@/lib/adminDb'
-import { listProfiles } from '@/lib/adminDb'
 import { requireRole } from '@/lib/session'
-import AdminIssues from './AdminIssues'
 import Costs from './Costs'
 import Todos from './Todos'
 
@@ -16,7 +14,6 @@ const TABS = [
   { key: 'summary', label: 'Dashboard' },
   { key: 'costs', label: 'Costs' },
   { key: 'todo', label: 'To-do' },
-  { key: 'issues', label: 'Issues' },
   { key: 'videos', label: 'Videos' },
 ] as const
 type TabKey = (typeof TABS)[number]['key']
@@ -30,7 +27,7 @@ export default async function Admin({
 
   // ⚠️ The two admin tables are read AS THE USER (RLS decides); videos and notes still go through
   // the service key, because reviewers have no account for a policy to be written against.
-  const [videos, notes, assignments, reviewers, subscriptions, todos, issues, people] = await Promise.all([
+  const [videos, notes, assignments, reviewers, subscriptions, todos, issues] = await Promise.all([
     allVideos(),
     allNotes(),
     allAssignments(),
@@ -38,9 +35,7 @@ export default async function Admin({
     listSubscriptions(),
     listTodos(),
     listIssues(),
-    listProfiles(),
   ])
-  const names = Object.fromEntries(people.map((p) => [p.user_id, p.name]))
 
   // Unread = not yet acted on. `resolved_at` is the only thing that clears it.
   const unread = new Map<string, number>()
@@ -63,7 +58,7 @@ export default async function Admin({
   const split = rows.filter((r) => r.c.disagreement)
 
   /**
-   * ⚠️ THE TAB IS IN THE URL, NOT IN CLIENT STATE. `/admin?tab=issues` is a link Rafi can send
+   * ⚠️ THE TAB IS IN THE URL, NOT IN CLIENT STATE. `/admin?tab=videos` is a link Rafi can send
    * himself, a bookmark, and a back button that works. It also means the server renders one
    * section instead of four, so the page a tab shows is the page it built.
    *
@@ -142,7 +137,6 @@ export default async function Admin({
       )}
       {tab === 'costs' && <Costs initial={subscriptions} today={new Date().toISOString()} />}
       {tab === 'todo' && <Todos initial={todos} />}
-      {tab === 'issues' && <AdminIssues initial={issues} names={names} />}
       {tab === 'videos' && (
         <section>
       {/* ⚠️ VISUALLY HIDDEN, NOT DELETED. The tab above already says "Videos", so printing it

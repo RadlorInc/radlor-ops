@@ -21,7 +21,17 @@ const BLANK = { description: '', area: '', type: '', chapter: '', all_chapters: 
  * ⚠️ SO IS THE HOURS FIELD. `Working Record` was empty from the day it was made — filing an issue
  * opens and extends a session by itself.
  */
-export default function Issues({ initial, canTriage }: { initial: Issue[]; canTriage: boolean }) {
+export default function Issues({
+  initial,
+  canTriage,
+  names = {},
+}: {
+  initial: Issue[]
+  canTriage: boolean
+  /** user_id → name, for the triager. A tester only ever sees their own issues, so they would be
+   *  reading their own name back on every row. */
+  names?: Record<string, string>
+}) {
   const [items, setItems] = useState(initial)
   const [form, setForm] = useState(BLANK)
   const [busy, setBusy] = useState(false)
@@ -172,9 +182,15 @@ export default function Issues({ initial, canTriage }: { initial: Issue[]; canTr
                 {i.type && <span className="area">type: {i.type}</span>}
                 <span className="area">{i.all_chapters ? 'all chapters' : i.chapter ? `ch ${i.chapter}` : 'no chapter'}</span>
                 {i.age_band && <span className="area">{i.age_band}</span>}
-                <span className="muted small" style={{ marginLeft: 'auto' }}>
+                {/* ⚠️ WHO FILED IT — carried over from the admin Issues tab when that page was
+                    deleted as a duplicate of this one. It was the ONE thing that page had and this
+                    one did not, and it is not decoration: triaging somebody else's issue without
+                    knowing whose it is means you cannot go and ask them. `imported from the sheet`
+                    is a real answer too — those rows have no reporter and never will. */}
+                <span className="muted small" style={{ marginLeft: 'auto' }} data-testid="issue-reporter">
+                  {canTriage && (i.reporter ? `${names[i.reporter] ?? 'a tester'} · ` : 'imported from the sheet · ')}
                   {i.created_at.slice(0, 10)}
-                  {i.imported_from && ' · from the sheet'}
+                  {!canTriage && i.imported_from && ' · from the sheet'}
                 </span>
               </div>
               <p style={{ margin: '6px 0 0' }}>{i.description}</p>

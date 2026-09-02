@@ -50,12 +50,10 @@ export async function navBadges(userId: string): Promise<NavBadges> {
     issues: issues.filter((i) => i.status !== 'resolved').length,
     videos: [...byVideo.values()].filter((v) => v.approved !== v.assigned).length,
     /**
-     * ⚠️ NO BADGE ON CHAPTER TESTING, ON PURPOSE. It had one, and it was the open-issue count —
-     * the identical number already sitting on the Issues tab two places to its left. Two tabs
-     * showing the same figure do not tell you twice; they make you work out whether they mean the
-     * same thing, and the moment one of them drifts neither is trusted. `/tester` is where issues
-     * are FILED and `/admin?tab=issues` is where they are worked, so the count belongs on the one
-     * you act from.
+     * ⚠️ `issues` NOW BADGES CHAPTER TESTING, WHICH IS THE ONLY PLACE ISSUES LIVE. It briefly sat
+     * on an admin "Issues" tab as well, and having the same figure on two tabs did not tell you
+     * twice — it made you work out whether they meant the same thing. They did, which is why that
+     * tab is gone: it was `/tester` again under another name.
      */
     review: assignments.filter((a) => a.reviewer_id === userId && a.verdict === null).length,
   }
