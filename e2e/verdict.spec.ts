@@ -209,114 +209,102 @@ test('an older version does not borrow the current verdict', async ({ page }) =>
 })
 
 /**
- * ⚠️ WRITTEN BECAUSE A BREAK-CHECK PROVED NOTHING WAS WATCHING. `/admin` reads videos, notes,
- * assignments and reviewers through a cache, and the write routes invalidate it by tag. Deleting
- * those `revalidateTag` calls left the whole suite GREEN: every spec that reads a verdict off
- * /admin reads a SEEDED one, and every spec that writes one reads it back out of the database
- * directly. Nothing joined the two, which is exactly the join the cache sits in.
+ * ── The cache checks ────────────────────────────────────────────────────────────────────────
  *
- * The failure it now catches is the one that makes somebody stop trusting a tool rather than
- * report a bug: you save something, the dashboard says the old thing, and nothing is obviously
- * broken.
+ * `/admin` reads videos, notes, assignments and reviewers through a cache; the write routes
+ * invalidate it by tag. These four prove that each tag is actually invalidated by each write that
+ * changes it.
  *
- * ⚠️ `equals-reel-final`, and LAST in the file on purpose. It is undecided in the seed and nothing
- * after this point reads it — a spec that mutates a row an earlier spec asserts on reports test
- * order rather than behaviour, which this file has already been caught doing once.
+ * ⚠️ EVERY ONE OF THEM DRIVES ITS OWN PRECONDITION, AND THAT IS NOT TIDINESS. The first version
+ * inherited state from the test above it, and break-check CERTIFIED TWO OF THEM ANYWAY: it
+ * verifies that the named spec went red on an `expect`, which cannot tell "red because of the
+ * break" from "red standalone for an unrelated reason". Run alone, two of the four were failing
+ * whatever the code did, and a third passed against the seed's own `not finished` without the
+ * reopen ever happening. A test that needs its neighbours cannot be break-checked, because
+ * break-check runs it with `-g`.
+ *
+ * ⚠️ AND EACH ONE WRITES THE VALUE THE DASHBOARD IS NOT ALREADY SHOWING. Asserting a value that
+ * happens to equal what was there proves nothing about a cache — a stale read would satisfy it.
  */
-test('a verdict written now is on the dashboard now, not after the cache expires', async ({ page }) => {
+const api = async (page: import('@playwright/test').Page, who: 'dana' | 'flood') => {
+  const ctx = await page.context().browser()!.newContext()
+  const p = await ctx.newPage()
+  await signIn(p, who)
+  return { request: p.request, close: () => ctx.close() }
+}
+
+async function verdictAs(page: import('@playwright/test').Page, who: 'dana' | 'flood', slug: string, verdict: string) {
+  const a = await api(page, who)
+  expect((await a.request.post('/api/review-done', { data: { slug, verdict } })).status()).toBe(200)
+  await a.close()
+}
+
+async function noteAs(page: import('@playwright/test').Page, who: 'dana' | 'flood', slug: string, body: string) {
+  const a = await api(page, who)
+  expect((await a.request.post('/api/notes', { data: { slug, t_seconds: 1, body } })).status()).toBe(201)
+  await a.close()
+}
+
+const VID = 'equals-reel-final'
+const adminRow = (page: import('@playwright/test').Page) =>
+  page.getByTestId('admin-row').filter({ hasText: VID })
+
+test('a verdict written now is on the dashboard now — the `assignments` tag', async ({ page }) => {
   await signIn(page, 'admin')
-  // Warm the cache the way a person would: look at the dashboard before the change.
-  await page.goto('/admin?tab=videos')
-  const row = page.getByTestId('admin-row').filter({ hasText: 'equals-reel-final' })
-  await expect(row.getByTestId('reviewer-verdicts')).toContainText('Dana Reviewer — not finished')
+  await verdictAs(page, 'dana', VID, 'approved')
+  await page.goto('/admin?tab=videos')   // warms the cache with "approved"
+  await expect(adminRow(page).getByTestId('reviewer-verdicts')).toContainText('Dana Reviewer — approved')
 
-  const dana = await page.context().browser()!.newContext()
-  const danaPage = await dana.newPage()
-  await signIn(danaPage, 'dana')
-  const res = await danaPage.request.post('/api/review-done', {
-    data: { slug: 'equals-reel-final', verdict: 'changes_needed' },
-  })
-  expect(res.status()).toBe(200)
-  await dana.close()
-
+  // The OTHER value, so a stale read cannot satisfy the assertion by accident.
+  await verdictAs(page, 'dana', VID, 'changes_needed')
   await page.goto('/admin?tab=videos')
-  await expect(row.getByTestId('reviewer-verdicts')).toContainText('Dana Reviewer — changes needed')
+  await expect(adminRow(page).getByTestId('reviewer-verdicts')).toContainText('Dana Reviewer — changes needed')
 })
 
-/**
- * ⚠️ ONE CHECK PER TAG PER ROUTE, BECAUSE ONE PROVEN PATH IS NOT A PROVEN CACHE. The invalidation
- * was written for four paths and only the verdict one had anything watching it — and a break-check
- * on that one path would have read as "cache invalidation is tested", which is the same shape as
- * three-of-four reading as verified.
- *
- * The four, each with the tag it binds:
- *   1. a verdict written           → `assignments`   (via /api/review-done)   ← already covered
- *   2. the video's derived status  → `videos`        (via /api/review-done)
- *   3. a note that REOPENS         → `assignments` + `videos` (via /api/notes)
- *   4. a note that does not        → `notes`         (via /api/notes)
- *
- * They run in this order on `equals-reel-final` on purpose: each one leaves the state the next one
- * needs, and nothing after them reads that video.
- */
-test('the video status a verdict derives is on the dashboard now', async ({ page }) => {
+test('the video status a verdict derives is on the dashboard now — the `videos` tag', async ({ page }) => {
   await signIn(page, 'admin')
-  const row = () => page.getByTestId('admin-row').filter({ hasText: 'equals-reel-final' })
-
+  // Dana decided, Flood not: the video is not finished, so `status` is awaiting_review.
+  await verdictAs(page, 'dana', VID, 'changes_needed')
+  await noteAs(page, 'flood', VID, 'clearing my verdict so this test owns the state')
   await page.goto('/admin?tab=videos')
-  await expect(row()).toContainText('awaiting_review')
+  await expect(adminRow(page)).toContainText('awaiting_review')
 
-  // Dana already said changes_needed above; Flood answering makes every assignee decided, which is
-  // what moves `videos.status`. That column comes from allVideos, so only the `videos` tag can
-  // carry it.
-  const flood = await page.context().browser()!.newContext()
-  const fp = await flood.newPage()
-  await signIn(fp, 'flood')
-  expect((await fp.request.post('/api/review-done', {
-    data: { slug: 'equals-reel-final', verdict: 'approved' },
-  })).status()).toBe(200)
-  await flood.close()
-
+  // Flood answering makes every assignee decided, which is the only thing that moves videos.status.
+  await verdictAs(page, 'flood', VID, 'approved')
   await page.goto('/admin?tab=videos')
-  await expect(row()).toContainText('reviewed')
+  await expect(adminRow(page)).toContainText('reviewed')
 })
 
-test('a note that reopens a review clears the verdict AND the status on the dashboard now', async ({ page }) => {
+test('a note that reopens clears the verdict AND the status on the dashboard now — via /api/notes', async ({ page }) => {
   await signIn(page, 'admin')
-  const row = () => page.getByTestId('admin-row').filter({ hasText: 'equals-reel-final' })
-
-  const dana = await page.context().browser()!.newContext()
-  const dp = await dana.newPage()
-  await signIn(dp, 'dana')
-  // Dana holds a verdict from the spec above, so this note reopens HER review: /api/notes writes
-  // through setOutcome, which touches both the assignment and the derived status.
-  expect((await dp.request.post('/api/notes', {
-    data: { slug: 'equals-reel-final', t_seconds: 2, body: 'one more thing after finishing' },
-  })).status()).toBe(201)
-  await dana.close()
-
+  await verdictAs(page, 'dana', VID, 'approved')
+  await verdictAs(page, 'flood', VID, 'approved')
   await page.goto('/admin?tab=videos')
-  await expect(row().getByTestId('reviewer-verdicts')).toContainText('Dana Reviewer — not finished')
-  await expect(row()).toContainText('awaiting_review')
+  await expect(adminRow(page).getByTestId('reviewer-verdicts')).toContainText('Dana Reviewer — approved')
+  await expect(adminRow(page)).toContainText('reviewed')
+
+  // Dana holds a verdict, so THIS note reopens her review: /api/notes writes through setOutcome,
+  // touching the assignment and the derived status — a different route from the two tests above.
+  await noteAs(page, 'dana', VID, 'one more thing after finishing')
+  await page.goto('/admin?tab=videos')
+  await expect(adminRow(page).getByTestId('reviewer-verdicts')).toContainText('Dana Reviewer — not finished')
+  await expect(adminRow(page)).toContainText('awaiting_review')
 })
 
-test('a note that changes no verdict is still counted on the dashboard now', async ({ page }) => {
+test('a note that changes no verdict is still counted on the dashboard now — the `notes` tag', async ({ page }) => {
   await signIn(page, 'admin')
   const unread = async () => {
     await page.goto('/admin?tab=videos')
-    const cells = await page.getByTestId('admin-row').filter({ hasText: 'equals-reel-final' }).locator('td').allInnerTexts()
+    const cells = await adminRow(page).locator('td').allInnerTexts()
     return Number(cells[cells.length - 1].trim())
   }
+
+  // Make sure Dana holds NO verdict, so the note below reopens nothing and `notes` is the only tag
+  // that can carry it. Two writes, because clearing a verdict is itself a note.
+  await verdictAs(page, 'dana', VID, 'approved')
+  await noteAs(page, 'dana', VID, 'clearing my own verdict first')
   const before = await unread()
 
-  // Dana has no verdict now, so this note reopens nothing — `notes` is the ONLY tag that can carry
-  // it, which is what makes this the check for that tag rather than a second copy of the one above.
-  const dana = await page.context().browser()!.newContext()
-  const dp = await dana.newPage()
-  await signIn(dp, 'dana')
-  expect((await dp.request.post('/api/notes', {
-    data: { slug: 'equals-reel-final', t_seconds: 3, body: 'and another, with no verdict standing' },
-  })).status()).toBe(201)
-  await dana.close()
-
+  await noteAs(page, 'dana', VID, 'and another, with no verdict standing')
   expect(await unread()).toBe(before + 1)
 })
