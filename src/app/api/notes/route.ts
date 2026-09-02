@@ -1,7 +1,20 @@
 import { NextResponse } from 'next/server'
+import { revalidateTag } from 'next/cache'
+
+/**
+ * ⚠️ `{ expire: 0 }`, NOT THE RECOMMENDED `"max"`. Next's default advice is stale-while-revalidate:
+ * the next request is served the OLD data while the refresh runs behind it. That is right for a
+ * blog and wrong here — it means a reviewer presses "Needs changes", Rafi loads the dashboard, and
+ * it still says approved. Correctness over speed at exactly this point: the next read blocks on
+ * the refresh, once, and is right.
+ *
+ * Everything else keeps the cache: this is a per-tag decision about one write, not a way of
+ * turning the cache off.
+ */
+const NOW = { expire: 0 } as const
 import { callerKey, overLimit } from '../_rateLimit'
 import { reviewerIdentity } from '@/lib/reviewerIdentity'
-import { insertNote, myAssignment, reviewerVideoBySlug, setOutcome } from '@/lib/db'
+import { TAGS, insertNote, myAssignment, reviewerVideoBySlug, setOutcome } from '@/lib/db'
 
 /**
  * Create one timestamped note.
@@ -70,6 +83,23 @@ export async function POST(req: Request) {
   const mine = await myAssignment(video.id, reviewer.id)
   const reopened = mine?.verdict != null
   if (reopened) await setOutcome(video.id, reviewer.id, null)
+
+
+  /**
+   * ⚠️ INVALIDATE WHAT THIS WRITE ACTUALLY CHANGED, BY NAME. `/admin` and the markdown export read
+   * these four lists through a cache; without this, a note or a verdict would sit invisible behind
+   * it for up to the TTL — and "I saved it and the dashboard still says the old thing" is the one
+   * failure that makes somebody stop trusting the tool rather than report a bug.
+   *
+   * Named tags rather than one blanket flush: a note does not change the video list, and throwing
+   * it away teaches the cache to be worthless.
+   */
+  revalidateTag(TAGS.notes, NOW)
+  // `setOutcome` moves the reviewer's verdict AND the video's derived status, so both when reopened.
+  if (reopened) {
+    revalidateTag(TAGS.assignments, NOW)
+    revalidateTag(TAGS.videos, NOW)
+  }
 
   return NextResponse.json(
     { note: { id: note.id, t_seconds: note.t_seconds, body: note.body }, reopened },

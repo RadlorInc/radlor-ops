@@ -1,7 +1,20 @@
 import { NextResponse } from 'next/server'
+import { revalidateTag } from 'next/cache'
+
+/**
+ * ⚠️ `{ expire: 0 }`, NOT THE RECOMMENDED `"max"`. Next's default advice is stale-while-revalidate:
+ * the next request is served the OLD data while the refresh runs behind it. That is right for a
+ * blog and wrong here — it means a reviewer presses "Needs changes", Rafi loads the dashboard, and
+ * it still says approved. Correctness over speed at exactly this point: the next read blocks on
+ * the refresh, once, and is right.
+ *
+ * Everything else keeps the cache: this is a per-tag decision about one write, not a way of
+ * turning the cache off.
+ */
+const NOW = { expire: 0 } as const
 import { callerKey, overLimit } from '../_rateLimit'
 import { reviewerIdentity } from '@/lib/reviewerIdentity'
-import { reviewerVideoBySlug, setOutcome } from '@/lib/db'
+import { TAGS, reviewerVideoBySlug, setOutcome } from '@/lib/db'
 
 /**
  * "I'm finished with this one, and here's what I think." Records THIS reviewer's VERDICT —
@@ -53,6 +66,11 @@ export async function POST(req: Request) {
   // Idempotent, and re-pressable: changing your mind from approved to changes-needed is a normal
   // thing to do and must not require a note in between. It writes THIS reviewer's row only.
   await setOutcome(video.id, reviewer.id, verdict)
+
+  // Their verdict, and the video's derived status, are both behind the /admin cache. See the note
+  // in ../notes/route.ts: a verdict the dashboard cannot see yet is worse than a slow dashboard.
+  revalidateTag(TAGS.assignments, NOW)
+  revalidateTag(TAGS.videos, NOW)
 
   // The caller's own verdict, which is the only one it is entitled to know.
   return NextResponse.json({ verdict })

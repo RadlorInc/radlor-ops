@@ -1,11 +1,13 @@
 import 'server-only'
+import { unstable_cache } from 'next/cache'
 
 /**
  * Server-only data access, straight over PostgREST with `fetch` — the same shape the Milo repo's
  * `/api/lead` route uses, and for the same reason: it is the whole client this app needs, so there
  * is nothing to import.
  *
- * ⚠️ THIS MODULE HOLDS THE SERVICE ROLE KEY, WHICH BYPASSES RLS. `import 'server-only'` above turns
+ * ⚠️ THIS MODULE HOLDS THE SERVICE ROLE KEY, WHICH BYPASSES RLS. `import 'server-only'
+import { unstable_cache } from 'next/cache'` above turns
  * "don't import this from a client component" from a review comment into a build error.
  *
  * ⚠️ EVERY REQUEST CARRIES A PROFILE HEADER. These tables live in the `review` schema of a SHARED
@@ -170,7 +172,7 @@ export async function assignmentsForVideo(videoId: string): Promise<Assignment[]
 
 /** ponytail: all assignments in one read, grouped in JS — same call the note list makes, same
  *  ceiling (a founder, a handful of videos), and it keeps the harness speaking plain PostgREST. */
-export async function allAssignments(): Promise<Assignment[]> {
+async function allAssignmentsUncached(): Promise<Assignment[]> {
   return rest<Assignment[]>('admin assignment list', 'video_reviewers?select=video_id,reviewer_id,verdict')
 }
 
@@ -183,7 +185,7 @@ export async function allAssignments(): Promise<Assignment[]> {
  * account, no `reviewers` row). That is what made `review.reviewers` vestigial rather than merely
  * token-free.
  */
-export async function allReviewers(): Promise<Reviewer[]> {
+async function allReviewersUncached(): Promise<Reviewer[]> {
   const rows = await rest<{ user_id: string; name: string }[]>(
     'admin reviewer list',
     'profiles?select=user_id,name&order=name.asc',
@@ -254,7 +256,34 @@ export async function insertNote(n: {
   return rows[0]
 }
 
-export async function allVideos(): Promise<Video[]> {
+/**
+ * ⚠️ ONLY THE SERVICE-KEY READS ARE CACHED, AND THE LINE IS NOT A STYLE CHOICE. Everything in this
+ * module reads with the service key and takes no user input, so every caller gets the same rows by
+ * construction — a cache entry cannot leak across people because there is nothing about a person
+ * in it.
+ *
+ * ⚠️ `src/lib/adminDb.ts` IS DELIBERATELY NOT CACHED. Those reads go through `asUser()` with the
+ * caller's own JWT and RLS decides what comes back, so the SAME query returns different rows to
+ * different people. A shared cache entry would hand one person another's rows. Keying it per user
+ * does not rescue it either: `unstable_cache` puts every argument into the cache key, so the token
+ * would become part of a key — and a token in a key is the same family of mistake as a token in a
+ * URL, which this file exists to avoid. The honest answer is that those reads stay uncached.
+ *
+ * ⚠️ AND THE `revalidate` IS NOT A NICETY, IT IS THE ONLY WAY SOME WRITES EVER APPEAR. The app
+ * invalidates its own writes by tag. But videos and assignments are added by SQL Rafi runs by hand
+ * — by design, there is no UI for either — and a statement typed into the Supabase editor cannot
+ * call `revalidateTag`. Without a TTL a video added that way would never show up. Sixty seconds is
+ * the longest anyone should wonder whether the tool is broken.
+ */
+const TTL = 60
+
+function cached<A extends unknown[], T>(fn: (...a: A) => Promise<T>, tag: string, key: string) {
+  return unstable_cache(fn, [key], { tags: [tag], revalidate: TTL })
+}
+
+export const TAGS = { videos: 'videos', notes: 'notes', assignments: 'assignments', reviewers: 'reviewers' } as const
+
+async function allVideosUncached(): Promise<Video[]> {
   return rest<Video[]>(
     'admin video list',
     `videos?select=${VIDEO_COLS}&order=sort_order.asc,created_at.asc`,
@@ -265,9 +294,14 @@ export async function allVideos(): Promise<Video[]> {
  *  ceiling is one founder, a handful of videos and a few hundred notes — if this ever pages, swap
  *  it for an embedded `notes(count)` select. Keeping it flat is also what lets the offline test
  *  harness speak plain PostgREST. */
-export async function allNotes(): Promise<(Note & { reviewer_id: string })[]> {
+async function allNotesUncached(): Promise<(Note & { reviewer_id: string })[]> {
   return rest<(Note & { reviewer_id: string })[]>(
     'admin note list',
     'notes?select=id,video_id,reviewer_id,t_seconds,body,video_version,resolved_at,created_at&order=t_seconds.asc,created_at.asc',
   )
 }
+
+export const allVideos = cached(allVideosUncached, TAGS.videos, 'all-videos')
+export const allNotes = cached(allNotesUncached, TAGS.notes, 'all-notes')
+export const allAssignments = cached(allAssignmentsUncached, TAGS.assignments, 'all-assignments')
+export const allReviewers = cached(allReviewersUncached, TAGS.reviewers, 'all-reviewers')

@@ -207,3 +207,38 @@ test('an older version does not borrow the current verdict', async ({ page }) =>
   expect(md).not.toContain('## hook-test-b — v1 — CLEARED')
   expect(md).toContain('## hook-test-b — v2 — CLEARED TO POST')
 })
+
+/**
+ * ⚠️ WRITTEN BECAUSE A BREAK-CHECK PROVED NOTHING WAS WATCHING. `/admin` reads videos, notes,
+ * assignments and reviewers through a cache, and the write routes invalidate it by tag. Deleting
+ * those `revalidateTag` calls left the whole suite GREEN: every spec that reads a verdict off
+ * /admin reads a SEEDED one, and every spec that writes one reads it back out of the database
+ * directly. Nothing joined the two, which is exactly the join the cache sits in.
+ *
+ * The failure it now catches is the one that makes somebody stop trusting a tool rather than
+ * report a bug: you save something, the dashboard says the old thing, and nothing is obviously
+ * broken.
+ *
+ * ⚠️ `equals-reel-final`, and LAST in the file on purpose. It is undecided in the seed and nothing
+ * after this point reads it — a spec that mutates a row an earlier spec asserts on reports test
+ * order rather than behaviour, which this file has already been caught doing once.
+ */
+test('a verdict written now is on the dashboard now, not after the cache expires', async ({ page }) => {
+  await signIn(page, 'admin')
+  // Warm the cache the way a person would: look at the dashboard before the change.
+  await page.goto('/admin?tab=videos')
+  const row = page.getByTestId('admin-row').filter({ hasText: 'equals-reel-final' })
+  await expect(row.getByTestId('reviewer-verdicts')).toContainText('Dana Reviewer — not finished')
+
+  const dana = await page.context().browser()!.newContext()
+  const danaPage = await dana.newPage()
+  await signIn(danaPage, 'dana')
+  const res = await danaPage.request.post('/api/review-done', {
+    data: { slug: 'equals-reel-final', verdict: 'changes_needed' },
+  })
+  expect(res.status()).toBe(200)
+  await dana.close()
+
+  await page.goto('/admin?tab=videos')
+  await expect(row.getByTestId('reviewer-verdicts')).toContainText('Dana Reviewer — changes needed')
+})
