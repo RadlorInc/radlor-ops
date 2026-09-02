@@ -1,5 +1,6 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
+  "regions": ["pdx1"],
 
   "//": [
     "⚠️ pdx1 IS us-west-2, WHICH IS WHERE THE DATABASE IS. Measured 2026-09-02, after a report of",
@@ -18,6 +19,12 @@
     "not a config line.",
     "",
     "⚠️ AND IT TAKES EFFECT ON THE NEXT DEPLOY, not on save. Confirm it from the running deployment",
-    "(the `x-vercel-id` header names the region that served the request), never from the dashboard."
+    "(the `x-vercel-id` header names the region that served the request), never from the dashboard.",
+    "",
+    "⚠️ AND THE FIRST VERSION OF THIS FILE SHIPPED WITHOUT THE `regions` KEY AT ALL — it was lost",
+    "while this comment was being added to it, so the commit that says it moves the region moved",
+    "nothing. Eight minutes of polling `x-vercel-id` said iad1 and I reached for the plan's",
+    "limitations before reading my own file. The config that carries an explanation is exactly the",
+    "config where the setting can go missing behind it: check the parsed value, not the diff."
   ]
 }
