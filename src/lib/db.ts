@@ -307,7 +307,12 @@ export const allAssignments = cached(allAssignmentsUncached, TAGS.assignments, '
 export const allReviewers = cached(allReviewersUncached, TAGS.reviewers, 'all-reviewers')
 
 /**
- * The `area` and `type` values people have already used, for the filing form's suggestions.
+ * The `type` values people have already used, for the filing form's suggestions.
+ *
+ * ⚠️ IT USED TO RETURN `area` TOO, AND NARROWING IT NARROWED THE EXPOSURE. Rafi decided on
+ * 2026-09-03 that `area` gets no list — see `src/app/tester/Issues.tsx` — so reading every area
+ * across everyone's issues would be a widening with nothing left to justify it. A read that has
+ * outlived its reason is not harmless just because it already existed.
  *
  * ⚠️ THIS DELIBERATELY WIDENS WHAT A TESTER CAN SEE, AND THE WIDENING IS THE POINT. Everywhere else
  * a tester reads issues through `asUser()`, where `issues_read_own` gives them only their own — so
@@ -315,10 +320,10 @@ export const allReviewers = cached(allReviewersUncached, TAGS.reviewers, 'all-re
  * their own spelling and never see anyone else's. That is the entire failure this is meant to
  * prevent, so the list is read with the service key across ALL issues.
  *
- * ⚠️ WHAT IT EXPOSES, EXACTLY: the distinct strings in two columns. Not who wrote them, not when,
- * not how many, not the description, not the chapter, not the age band, not an id — the select
- * names two columns and the rest never leaves the database. What a tester learns is the vocabulary
- * other people type into a dropdown, which is what a shared dropdown IS.
+ * ⚠️ WHAT IT EXPOSES, EXACTLY: the distinct strings in ONE column. Not who wrote them, not when,
+ * not how many, not the description, not the area, not the chapter, not the age band, not an id —
+ * the select names one column and the rest never leaves the database. What a tester learns is the
+ * vocabulary other people type into a dropdown, which is what a shared dropdown IS.
  *
  * ⚠️ AND THE APP IS DOING THE AUTHORISING HERE, NOT RLS — the one place in this schema where that
  * is true on purpose. The database-enforced version is a column-level `grant select (area, type)`
@@ -329,14 +334,10 @@ export const allReviewers = cached(allReviewersUncached, TAGS.reviewers, 'all-re
  * dropdown or the convergence never happens; it is one more query in a wave that already runs in
  * parallel, so it costs nothing to keep it fresh.
  */
-export async function issueVocabulary(): Promise<{ areas: string[]; types: string[] }> {
-  const rows = await rest<{ area: string | null; type: string | null }[]>(
-    'issue vocabulary',
-    'issues?select=area,type',
+export async function issueVocabulary(): Promise<{ types: string[] }> {
+  const rows = await rest<{ type: string | null }[]>('issue vocabulary', 'issues?select=type')
+  const types = [...new Set(rows.map((r) => r.type?.trim()).filter((v): v is string => !!v))].sort(
+    (a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }),
   )
-  const distinct = (pick: (r: (typeof rows)[number]) => string | null) =>
-    [...new Set(rows.map(pick).map((v) => v?.trim()).filter((v): v is string => !!v))].sort((a, b) =>
-      a.localeCompare(b, undefined, { sensitivity: 'base' }),
-    )
-  return { areas: distinct((r) => r.area), types: distinct((r) => r.type) }
+  return { types }
 }

@@ -25,22 +25,22 @@ export default function Issues({
   initial,
   canTriage,
   names = {},
-  vocabulary = { areas: [], types: [] },
+  vocabulary = { types: [] },
 }: {
   initial: Issue[]
   canTriage: boolean
   /**
-   * ⚠️ SUGGESTIONS, NOT A WHITELIST. `<datalist>` shows what people have already typed and still
-   * accepts anything — which is the whole ask: make the existing value the EASY choice, not the
-   * only one. A `<select>` here would be a restriction, and the first person with a genuinely new
-   * area would be stuck or would put it in the description where nothing can group it.
+   * ⚠️ `type` ONLY — `area` deliberately has no list. See the comment on the area input.
    *
-   * ⚠️ AND NOTHING REWRITES WHAT WAS TYPED. `measurrement` stays `measurrement` if somebody types
-   * it past the suggestion; silently correcting a person's data teaches them the tool edits what
-   * they wrote, which is a worse property than a typo. The list is how it stops happening, not a
-   * cleanup that runs after it does.
+   * ⚠️ SUGGESTIONS, NOT A WHITELIST. `<datalist>` shows what people have already typed and still
+   * accepts anything: the existing value is the EASY choice, not the only one. A `<select>` would
+   * be a restriction, and the first person with a genuinely new type would be stuck or would put
+   * it in the description where nothing can group it.
+   *
+   * ⚠️ AND NOTHING REWRITES WHAT WAS TYPED. A misspelling stays as typed; silently correcting
+   * somebody's data teaches them the tool edits what they wrote, which is worse than a typo.
    */
-  vocabulary?: { areas: string[]; types: string[] }
+  vocabulary?: { types: string[] }
   /** user_id → name, for the triager. A tester only ever sees their own issues, so they would be
    *  reading their own name back on every row. */
   names?: Record<string, string>
@@ -97,20 +97,20 @@ export default function Issues({
           data-testid="issue-description"
         />
         <div className="addrow">
+          {/* ⚠️ NO SUGGESTION LIST ON `area`, AND THAT IS A DECISION, NOT AN OVERSIGHT. It had one
+              for a day. Rafi's call on 2026-09-03: an area is whatever part of the app the person
+              was looking at, and offering a list makes the listed answers feel like the allowed
+              ones — people reach for the nearest option instead of naming what they actually saw.
+              The cost is accepted: `measurement` and `Measurement` will both exist and grouping by
+              area will be approximate. Do not put it back citing convergence; that trade was made
+              with the split in front of him. */}
           <input
             type="text"
-            list="area-options"
-            autoComplete="off"
-            placeholder={vocabulary.areas.length ? 'area — pick or type' : 'area (e.g. Nest game)'}
+            placeholder="area (e.g. Nest game)"
             value={form.area}
             onChange={(e) => setForm({ ...form, area: e.target.value })}
             data-testid="issue-area"
           />
-          <datalist id="area-options" data-testid="area-options">
-            {vocabulary.areas.map((v) => (
-              <option key={v} value={v} />
-            ))}
-          </datalist>
           <input
             type="text"
             list="type-options"

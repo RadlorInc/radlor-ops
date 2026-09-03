@@ -156,48 +156,55 @@ test('a TESTER cannot move a status; an ADMIN can — and the row proves it', as
 
 /**
  * ⚠️ BOTH HALVES, BECAUSE EITHER ONE ALONE IS THE WRONG FEATURE. A list that suggests nothing is
- * the free-text field we are replacing; a list that only ACCEPTS its own options is a restriction
- * nobody asked for, and the first person with a genuinely new area either gets stuck or hides it
- * in the description where nothing can group it.
+ * the free-text field it replaced; a list that only ACCEPTS its own options is a restriction nobody
+ * asked for, and the first person with a genuinely new type either gets stuck or hides it in the
+ * description where nothing can group it.
+ *
+ * ⚠️ AND `area` HAVING NO LIST IS ASSERTED, NOT ASSUMED. It had one for a day and Rafi removed it:
+ * an area is whatever part of the app the person was looking at, and offering options makes the
+ * listed ones feel like the allowed ones. That is a decision, so it gets a check — otherwise the
+ * next person reading "suggestions help convergence" puts it back and nothing goes red.
  *
  * ⚠️ THE PROPERTY THAT MATTERS MOST IS NOT ASSERTED HERE, AND CANNOT BE. "The suggestions include
  * values from rows this tester cannot read" is the whole reason the list is built with the service
  * key — and PGlite runs as one superuser with no policies, so offline the tester sees every issue
  * anyway and a list of everyone's values is indistinguishable from a list of their own. An
  * assertion here would go green on a build where the vocabulary was scoped to the caller, which is
- * the exact bug. It is in the handoff's unverified list, where the other RLS-shaped facts live.
+ * the exact bug. It is in the handoff's unverified list.
  */
-test('the area field suggests what other people already typed, and still takes a new value', async ({ page, request }) => {
+test('type suggests what people already typed and still takes a new value; area suggests nothing', async ({ page, request }) => {
   await signIn(page, 'tester')
   await page.goto('/tester')
 
   /**
-   * ⚠️ ASKED OF THE INPUT, NOT OF THE `<datalist>`. Reading `#area-options option` directly passed
+   * ⚠️ ASKED OF THE INPUT, NOT OF THE `<datalist>`. Reading `#type-options option` directly passed
    * with `list=` deleted from the input — a list rendered on the page and attached to nothing,
    * which is a suggestion no user is ever offered. `HTMLInputElement.list` is the BROWSER
    * resolving the association, so a null here is the wiring being gone rather than the markup
-   * being different from what I expected.
+   * being different from what I expected. It is also what makes the `area` assertion mean
+   * "nothing is offered" rather than "no element with that id".
    */
-  const areaOptions = () =>
-    page.getByTestId('issue-area').evaluate((el) => {
+  const listOf = (testid: string) =>
+    page.getByTestId(testid).evaluate((el) => {
       const dl = (el as HTMLInputElement).list
       return dl ? [...dl.options].map((o) => o.value) : null
     })
-  expect(await areaOptions()).toContain('Smallest first game')
 
-  // ⚠️ And a value that is in no list still files. This is the half that stops the fix becoming a
-  // cage: `type` gets one nobody has used.
+  expect(await listOf('issue-area')).toBeNull()
+  expect(await listOf('issue-type')).toContain('Titles')
+
+  // A value that is in no list still files — the half that stops the suggestion becoming a cage.
   await page.getByTestId('issue-description').fill('a brand new kind of problem')
   await page.getByTestId('issue-area').fill('Weighing scales')
-  await page.getByTestId('issue-type').fill('measurement')
+  await page.getByTestId('issue-type').fill('calibration')
   await page.getByTestId('issue-submit').click()
   await expect(page.getByTestId('issue-list')).toContainText('a brand new kind of problem')
 
   const [row] = await rows(request, 'issues', '&description=eq.a%20brand%20new%20kind%20of%20problem')
   expect(row.area).toBe('Weighing scales')
-  expect(row.type).toBe('measurement')
+  expect(row.type).toBe('calibration')
 
-  // And the new value joins the list for whoever files next — that is the convergence working.
+  // And the new type joins the list for whoever files next — that is the convergence working.
   await page.reload()
-  expect(await areaOptions()).toContain('Weighing scales')
+  expect(await listOf('issue-type')).toContain('calibration')
 })

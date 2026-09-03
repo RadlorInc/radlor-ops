@@ -184,25 +184,23 @@ production build failed on it while every local check was green. See the CLAUDE.
 ⚠️ **Confirm the region from the running deployment**, never from the settings page:
 `curl -s https://video-reviewer-liard.vercel.app/api/health` reports it.
 
-## ⚠️ The first spelling of anything becomes everyone's spelling
+## The issue form: `area` is free text, `type` suggests
 
-`area` and `type` on `/tester` suggest what people have already typed (`issueVocabulary()`, read
-with the service key across all issues — see the widening note in `src/lib/db.ts`). That is the
-point: it makes the existing value the easy choice instead of the fourth variant of it.
+⚠️ **`area` has NO suggestion list, and that is a decision made with the alternative in front of
+him.** It had one for a day. Rafi's call on 2026-09-03: an area is whatever part of the app the
+person was looking at, and offering a list makes the listed answers feel like the allowed ones —
+people reach for the nearest option instead of naming what they actually saw. **Do not put it back
+citing convergence.** The cost was accepted knowingly: `measurement` and `Measurement` will both
+exist and grouping by area is approximate. `e2e/tester.spec.ts` asserts the absence, so re-adding it
+goes red rather than passing quietly as an improvement.
 
-**The consequence, which is a standing property and not a one-off:** whatever is typed FIRST becomes
-the value everybody after is offered. On 2026-09-03 the first real issue was filed with
-`area = measurrement`, and until it was corrected every tester arriving would have been offered the
-typo as the obvious choice — and picking it is the RIGHT behaviour for them, which is what makes it
-spread.
+`type` keeps its `<datalist>`: a small, closed-ish vocabulary (`Titles`, `Wording`, `scale`) where
+the same thing really does have one name. Suggestions, never a whitelist — a `<select>` would leave
+the first person with a genuinely new type stuck or hiding it in the description.
 
-⚠️ **So look at the vocabulary after the first few issues in any new area, and fix spellings while
-exactly one row has them.** It is one statement now and a list of rows plus other people's habits
-in a week.
-
-⚠️ **Nothing auto-corrects on write, and it must not start.** Silently rewriting what somebody typed
-teaches them the tool edits their words, which is worse than a typo. The suggestion list PREVENTS;
-it does not clean up afterwards. Cleaning up is a deliberate human act, by SQL:
+⚠️ **Nothing auto-corrects on write, anywhere, and it must not start.** Silently rewriting what
+somebody typed teaches them the tool edits their words, which is worse than a typo. Cleaning up is
+a deliberate human act, by SQL — there is no edit control, the same as assignments and videos:
 
 ```sql
 -- Filter on the id AND the old value: if anything already changed it, this matches nothing rather
@@ -211,13 +209,13 @@ update review.issues set area = 'measurement'
  where id = '…' and area = 'measurrement';
 ```
 
-There is no edit control for this by design, the same as assignments and videos. ⚠️ And the
-Supabase MCP's `execute_sql` is **read-only** — this was done with a `PATCH` through PostgREST
-using the service key, which does hold `update` on `review.issues`.
+⚠️ The Supabase MCP's `execute_sql` is **read-only**; a data fix goes through PostgREST with the
+service key, which does hold `update` on `review.issues`.
 
-**The vocabulary as of 2026-09-03** — 12 areas, 3 types. `measurement` and `Measurement Name` are
-both in it and are genuinely different things; `Wording` and the placeholder's `wording` are not,
-and are the next candidate if a second one shows up.
+⚠️ **`issueVocabulary()` reads `type` only, and narrowing it narrowed the exposure.** It returned
+`area` too while the area list existed; a read that has outlived its reason is not harmless just
+because it was already there. What it exposes now is one column's distinct strings, read with the
+service key across everyone's issues — the widening is deliberate and documented at the function.
 
 ## Open findings and their triggers
 
@@ -323,7 +321,7 @@ after that**, and the assertion stops depending on a control to be meaningful.
 
   It needs `ADMIN_EMAIL` / `ADMIN_PASSWORD` / `TESTER_EMAIL` / `TESTER_PASSWORD` in `.env.local`;
   they are not there, so this has not been run since the upgrade.
-- **That the `area` / `type` suggestions include values from rows the caller cannot read.** It is
+- **That the `type` suggestions include values from rows the caller cannot read.** It is
   the whole reason `issueVocabulary()` uses the service key, and the offline harness cannot see it:
   PGlite has one superuser and no policies, so a tester sees every issue there anyway and a list of
   everyone's values is indistinguishable from a list of their own. An assertion would go green on a
