@@ -71,8 +71,13 @@ on its own, but "usually" is not a check: open *Project → Settings → Git* an
 `RadlorInc/radlor-ops`. A stale connection does not error — it just quietly stops deploying, and
 the first symptom is a push that changes nothing.
 
-⚠️⚠️ **THAT IS NO LONGER A WARNING — IT HAPPENED. Checked 2026-09-04 01:03 IST:** production still
-serves `<title>Radlor video review</title>`, twenty minutes after `7c30c24` (which changes exactly
+⚠️⚠️ **THAT IS NO LONGER A WARNING — IT HAPPENED, AND IS NOW FIXED.** Reconnected by hand in
+*Settings → Git* on 2026-09-04; the next push (`3ea7959`) built, and production's title is
+**Radlor Ops**, with `/login`'s copy, `/api/health` and the `/join/<junk>` 404 all still right.
+Kept below because the failure mode is the reusable part, not the outage.
+
+**What it looked like. Checked 2026-09-04 01:03 IST:** production still served
+`<title>Radlor video review</title>`, twenty minutes after `7c30c24` (which changes exactly
 that string) was pushed. `13c7a24`'s login copy — *"New here? Use the link you were given."* — IS
 live, so the pipeline was working and stopped somewhere after it. Earlier deploys in this project
 landed in under two minutes, so this is not slowness. **`7c30c24` is on GitHub and is not in
