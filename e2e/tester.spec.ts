@@ -171,8 +171,18 @@ test('the area field suggests what other people already typed, and still takes a
   await signIn(page, 'tester')
   await page.goto('/tester')
 
+  /**
+   * ⚠️ ASKED OF THE INPUT, NOT OF THE `<datalist>`. Reading `#area-options option` directly passed
+   * with `list=` deleted from the input — a list rendered on the page and attached to nothing,
+   * which is a suggestion no user is ever offered. `HTMLInputElement.list` is the BROWSER
+   * resolving the association, so a null here is the wiring being gone rather than the markup
+   * being different from what I expected.
+   */
   const areaOptions = () =>
-    page.locator('#area-options option').evaluateAll((os) => os.map((o) => (o as HTMLOptionElement).value))
+    page.getByTestId('issue-area').evaluate((el) => {
+      const dl = (el as HTMLInputElement).list
+      return dl ? [...dl.options].map((o) => o.value) : null
+    })
   expect(await areaOptions()).toContain('Smallest first game')
 
   // ⚠️ And a value that is in no list still files. This is the half that stops the fix becoming a
