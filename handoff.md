@@ -88,7 +88,12 @@ deployment for a value the change moves**, not the dashboard, not git.
 project at all: `get_project` 404s on the id in `.vercel/project.json` and `list_deployments`
 answers 403, so it lives outside whatever that token is scoped to):
 
-1. *Settings → Git* — reconnect to `RadlorInc/radlor-ops`.
+1. *Settings → Git* — reconnect to `RadlorInc/radlor-ops`. ⚠️ **Reconnecting does not deploy
+   anything by itself**, and the dashboard's *Redeploy* button does not test it either: Redeploy
+   builds the commit you point it at, through a path that never touches the webhook. **Only a
+   fresh push tests the hook.** So after reconnecting, push something real and watch for the
+   value it changes — if you press Redeploy instead, you get the code AND you still do not know
+   whether the next push will build.
 2. *Settings → General → Project Name* → `radlor-ops`. ⚠️ The domain changes here; do it before
    any real link goes out, not after.
 3. *Deployments → latest → Redeploy*, so `7c30c24` actually builds.
