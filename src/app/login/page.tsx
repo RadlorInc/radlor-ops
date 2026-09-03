@@ -44,7 +44,11 @@ export default async function Login({
           <p className="small error" data-testid="login-error">
             {error === 'rate'
               ? 'Too many attempts. Wait a minute and try again.'
-              : 'That email and password did not match.'}
+              : error === 'link'
+                ? 'That link has expired or was already used. Ask for a new one.'
+                : error === 'norole'
+                  ? 'Your account is not set up yet. Ask Rafi to add you.'
+                  : 'That email and password did not match.'}
           </p>
         )}
 
@@ -52,6 +56,9 @@ export default async function Login({
             Sign in
           </button>
         </form>
+        <p className="small" style={{ marginTop: 16 }}>
+          <a href="/forgot" data-testid="forgot-link">Forgot your password?</a>
+        </p>
       </section>
     </main>
   )

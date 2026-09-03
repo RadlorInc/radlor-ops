@@ -186,6 +186,6 @@ export function listSessions(testerId?: string): Promise<
 }
 
 /** Names for the reporter column. An admin can read every profile — `profiles_read_all_if_admin`. */
-export function listProfiles(): Promise<{ user_id: string; name: string }[]> {
-  return asUser('profiles', 'profiles?select=user_id,name')
+export function listProfiles(): Promise<{ user_id: string; name: string; role: string }[]> {
+  return asUser('profiles', 'profiles?select=user_id,name,role&order=name.asc')
 }

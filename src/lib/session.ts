@@ -2,6 +2,7 @@ import 'server-only'
 import { cookies } from 'next/headers'
 import { notFound, redirect } from 'next/navigation'
 import { SCHEMA } from './db'
+import type { NextResponse } from 'next/server'
 
 /**
  * Account sessions for admin, tester and reviewer.
@@ -40,6 +41,24 @@ export const RT_COOKIE = 'rvr_rt'
  * because a `video_reviewers` row says so, not because of anything in his profile.
  */
 export type Role = 'admin' | 'tester' | 'reviewer'
+export const HOME: Record<Role, string> = { admin: '/admin', tester: '/tester', reviewer: '/review' }
+
+/**
+ * Writes the two session cookies. One writer, three callers — the login form, the emailed link
+ * and the proxy's refresh — so the flags cannot drift: a `secure` that one path forgot is a
+ * session cookie on plain http for exactly the people who arrived by that path.
+ */
+export function setSessionCookies(
+  out: NextResponse,
+  req: Request,
+  t: { access_token: string; refresh_token: string; expires_in?: number },
+): void {
+  const secure = req.headers.get('x-forwarded-proto') === 'https' || new URL(req.url).protocol === 'https:'
+  const opts = { httpOnly: true, sameSite: 'lax' as const, path: '/', secure }
+  out.cookies.set(AT_COOKIE, t.access_token, { ...opts, maxAge: t.expires_in ?? 3600 })
+  // The refresh token outlives the access token; that is what stops an hourly re-login.
+  out.cookies.set(RT_COOKIE, t.refresh_token, { ...opts, maxAge: 60 * 60 * 24 * 30 })
+}
 export type Profile = { user_id: string; role: Role; name: string }
 
 function config(): { url: string; anon: string } {

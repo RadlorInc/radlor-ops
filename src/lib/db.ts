@@ -305,3 +305,41 @@ export const allVideos = cached(allVideosUncached, TAGS.videos, 'all-videos')
 export const allNotes = cached(allNotesUncached, TAGS.notes, 'all-notes')
 export const allAssignments = cached(allAssignmentsUncached, TAGS.assignments, 'all-assignments')
 export const allReviewers = cached(allReviewersUncached, TAGS.reviewers, 'all-reviewers')
+
+/**
+ * Creates the Supabase Auth user and has Supabase email them the invite link. Service key only —
+ * `/auth/v1/invite` is the admin API, and `name` / `role` ride along as user metadata so the
+ * email template can greet them. ⚠️ The profile row is NOT written here; `insertProfile` is a
+ * separate call so a caller can tell "the user exists but has no role" from "nothing happened".
+ *
+ * ⚠️ WHETHER THE EMAIL ARRIVES IS NOT SOMETHING THIS CALL CAN SEE. Supabase answers 200 when the
+ * user is created; delivery depends on the project's SMTP settings, which no API here can read.
+ * On the built-in mailer only addresses on the Supabase team receive anything.
+ */
+export async function inviteUser(email: string, data: { name: string; role: string }): Promise<{ id: string }> {
+  const { url, key } = assertConfigured()
+  const res = await fetch(`${url}/auth/v1/invite`, {
+    method: 'POST',
+    cache: 'no-store',
+    headers: { apikey: key, Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email, data }),
+  })
+  if (res.status === 422) throw new Error('exists')
+  if (!res.ok) {
+    const detail = (await res.text().catch(() => '')).slice(0, 300)
+    throw new Error(`invite failed ${res.status}: ${detail}`)
+  }
+  const u = (await res.json()) as { id?: string }
+  if (!u.id) throw new Error('invite returned no user id')
+  return { id: u.id }
+}
+
+/** The role row. Service key: `profiles` is insertable by `service_role` only, on purpose — an
+ *  admin's own session cannot hand out roles, only this route running on the server can. */
+export function insertProfile(row: { user_id: string; role: 'admin' | 'tester' | 'reviewer'; name: string }): Promise<null> {
+  return rest<null>('profile insert', 'profiles', {
+    method: 'POST',
+    headers: { Prefer: 'return=minimal' },
+    body: JSON.stringify(row),
+  })
+}

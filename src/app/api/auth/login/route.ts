@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { callerKey, overLimit } from '../../_rateLimit'
 import { SCHEMA } from '@/lib/db'
-import { AT_COOKIE, RT_COOKIE } from '@/lib/session'
+import { HOME, setSessionCookies } from '@/lib/session'
 
 /**
  * Email + password sign-in, server-side.
@@ -107,14 +107,9 @@ export async function POST(req: Request) {
    * They are authenticated and can do nothing until a human fixes their profile row, and saying so
    * is better than a 404 that looks like a broken deploy.
    */
-  const HOME: Record<string, string> = { admin: '/admin', tester: '/tester', reviewer: '/review' }
-  const home = HOME[me?.[0]?.role as string] ?? '/login?error=norole'
+  const home = HOME[me?.[0]?.role as keyof typeof HOME] ?? '/login?error=norole'
 
   const out = seeOther(home)
-  const secure = req.headers.get('x-forwarded-proto') === 'https' || new URL(req.url).protocol === 'https:'
-  const opts = { httpOnly: true, sameSite: 'lax' as const, path: '/', secure }
-  out.cookies.set(AT_COOKIE, access_token, { ...opts, maxAge: expires_in ?? 3600 })
-  // The refresh token outlives the access token; that is what stops an hourly re-login.
-  out.cookies.set(RT_COOKIE, refresh_token, { ...opts, maxAge: 60 * 60 * 24 * 30 })
+  setSessionCookies(out, req, { access_token, refresh_token, expires_in })
   return out
 }

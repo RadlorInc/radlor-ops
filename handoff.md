@@ -13,8 +13,10 @@ Three people, three screens, one Next.js app on Vercel:
 - **reviewer** — `/review`: watches the video assigned to them, leaves timestamped notes, says
   **Approved** or **Needs changes**.
 
-Everyone signs in at `/login`. There are no links-with-tokens any more and no sign-up: accounts are
-made by hand. **An admin can open all three surfaces**; a tester and a reviewer see only their own.
+Everyone signs in at `/login`. There is no sign-up: **an admin invites people** from the *People*
+tab. Supabase emails them a link; opening it confirms the address and lands on *Choose a password*.
+*Forgot your password?* on the sign-in page sends the same kind of link. **An admin can open all
+three surfaces**; a tester and a reviewer see only their own.
 
 **The one rule the whole tool exists for:** a video is cleared to post only when **every** assigned
 reviewer has approved. One "needs changes" is not cleared, however many approvals sit beside it.
@@ -51,10 +53,32 @@ until a human edits *API → Exposed schemas*, which no migration can reach.
 — **never delete either.** Throwaway accounts for checks use `@example.com` and are deleted against
 an explicit allow-list, never "everything except the ones I remember".
 
-## ⚠️ Waiting on Rafi — one thing
+## ⚠️ Waiting on Rafi — two things
 
-**Run the tester-vs-admin RLS check.** It is the only authorization property with a gap right now,
-and it finally has the data it needs (see *Verified nowhere*).
+**1. The invite and reset emails do not go anywhere until the Supabase project is told how to send
+them.** The code is done and proven offline (`e2e/auth.spec.ts`); delivery is dashboard config the
+repo cannot reach, and the invite route answers 200 whether or not a mail leaves — it cannot see.
+In the `radlor-site` project, *Authentication*:
+
+- **SMTP settings → Enable custom SMTP.** The built-in mailer only delivers to addresses on the
+  Supabase team, a few an hour. Any provider with an SMTP endpoint works; Resend and Brevo have
+  free tiers. The sender address has to be one the provider has verified for you.
+- **URL configuration → Site URL** = `https://video-reviewer-liard.vercel.app`, and the same
+  origin under *Redirect URLs*.
+- **Email templates → "Invite user"** and **"Reset password"**: replace the link with
+  `{{ .SiteURL }}/auth/confirm?token_hash={{ .TokenHash }}&type=invite` (and `type=recovery` in
+  the reset one). ⚠️ This is load-bearing, not cosmetic: the default `{{ .ConfirmationURL }}`
+  hands the session back in a URL *fragment*, which a server never sees, and this app has no
+  browser-side Supabase to catch it. `/auth/confirm` trades the hash for a session over the back
+  channel instead.
+- Then invite a throwaway `@example.com`-style address you can read, open the link, choose a
+  password, sign out, and use *Forgot your password?* once. That is the whole flow, end to end,
+  on the live project — the only place it can be seen to work.
+
+**2. Run the tester-vs-admin RLS check.**
+
+It is the only authorization property with a gap right now, and it finally has the data it needs
+(see *Verified nowhere*).
 
 ```bash
 node --env-file=.env.local scripts/check-tester-cannot-read-admin.mjs

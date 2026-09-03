@@ -205,6 +205,16 @@ const ACCOUNTS = {
 const ACCESS_TTL = Number(process.env.FAKE_ACCESS_TTL || 3600)
 const refreshTokens = new Map()
 
+/** Harness-only: the mailer's outbox and the one-time links it would have sent. */
+const SERVICE_KEY = 'fake-service-role-key-for-the-offline-harness'
+const pendingLinks = new Map()
+const outbox = []
+function mintLink(id, email, type) {
+  const hash = `th_${Math.random().toString(36).slice(2)}${Math.random().toString(36).slice(2)}`
+  pendingLinks.set(hash, { id, email, type })
+  outbox.push({ to: email, type, link: `/auth/confirm?token_hash=${hash}&type=${type}` })
+}
+
 /** ⚠️ `jti` is not decoration. Without it two tokens minted in the same SECOND are byte-identical,
  *  because `exp` has second resolution and nothing else varies — so a test asserting "the token
  *  changed after a refresh" cannot tell a successful refresh from no refresh at all. It failed
@@ -256,6 +266,50 @@ const server = createServer(async (req, res) => {
       if (!p) return json(res, 401, { message: 'invalid or expired token' })
       return json(res, 200, { id: p.sub, email: p.email })
     }
+
+    // ---- Auth: invite, reset, the emailed link, set password -----------------------------
+    // The stand-in for Supabase's mailer is `outbox`: every link it would have emailed is pushed
+    // there, and `GET /_outbox` (harness only, never in src/) lets a spec read it. The link is a
+    // PATH — the spec opens it against the app's own baseURL, the way a person would.
+    if (url.pathname === '/auth/v1/invite' && req.method === 'POST') {
+      // ⚠️ The service key, or nothing. Real GoTrue refuses an invite from the anon key, and the
+      // route under test must be holding the right key for the mailer to have anyone to write to.
+      if ((req.headers.authorization || '') !== `Bearer ${SERVICE_KEY}`) return json(res, 401, { message: 'service role required' })
+      const body = await readBody(req)
+      const email = String(body.email || '').toLowerCase()
+      if (!email) return json(res, 422, { msg: 'email required' })
+      if (ACCOUNTS[email]) return json(res, 422, { msg: 'A user with this email address has already been registered' })
+      const id = globalThis.crypto.randomUUID()
+      ACCOUNTS[email] = { password: null, id } // no password until the link is opened and one is chosen
+      await db.query('insert into auth.users (id, email) values ($1, $2)', [id, email])
+      mintLink(id, email, 'invite')
+      return json(res, 200, { id, email, user_metadata: body.data ?? {} })
+    }
+    if (url.pathname === '/auth/v1/recover' && req.method === 'POST') {
+      const body = await readBody(req)
+      const email = String(body.email || '').toLowerCase()
+      const acct = ACCOUNTS[email]
+      if (acct) mintLink(acct.id, email, 'recovery')
+      return json(res, 200, {}) // same answer for an unknown address, like the real thing
+    }
+    if (url.pathname === '/auth/v1/verify' && req.method === 'POST') {
+      const body = await readBody(req)
+      const p = pendingLinks.get(String(body.token_hash))
+      if (!p || p.type !== body.type) return json(res, 403, { error: 'access_denied', error_description: 'Email link is invalid or has expired' })
+      pendingLinks.delete(String(body.token_hash)) // single use
+      return json(res, 200, issue(p.id, p.email))
+    }
+    if (url.pathname === '/auth/v1/user' && req.method === 'PUT') {
+      const p = readAccess((req.headers.authorization || '').replace(/^Bearer /, ''))
+      if (!p) return json(res, 401, { message: 'invalid or expired token' })
+      const body = await readBody(req)
+      const acct = ACCOUNTS[p.email]
+      if (!acct) return json(res, 404, { message: 'no such user' })
+      if (typeof body.password !== 'string' || body.password.length < 6) return json(res, 422, { msg: 'Password should be at least 6 characters' })
+      acct.password = body.password
+      return json(res, 200, { id: p.sub, email: p.email })
+    }
+    if (url.pathname === '/_outbox' && req.method === 'GET') return json(res, 200, outbox)
 
     // ---- Storage: mint a signed URL -------------------------------------------------
     let m = url.pathname.match(/^\/storage\/v1\/object\/sign\/([^/]+)\/(.+)$/)

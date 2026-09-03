@@ -3,10 +3,11 @@ import Summary from './Summary'
 import { badgesFrom } from '@/lib/navBadges'
 import { allAssignments, allNotes, allReviewers, allVideos } from '@/lib/db'
 import { clearance, progressLabel } from '@/lib/clearance'
-import { listIssues, listSubscriptions, listTodos } from '@/lib/adminDb'
+import { listIssues, listSubscriptions, listTodos, listProfiles } from '@/lib/adminDb'
 import { requireRole } from '@/lib/session'
 import Costs from './Costs'
 import Todos from './Todos'
+import People from './People'
 
 export const dynamic = 'force-dynamic'
 
@@ -15,6 +16,7 @@ const TABS = [
   { key: 'costs', label: 'Costs' },
   { key: 'todo', label: 'To-do' },
   { key: 'videos', label: 'Videos' },
+  { key: 'people', label: 'People' },
 ] as const
 type TabKey = (typeof TABS)[number]['key']
 
@@ -27,7 +29,7 @@ export default async function Admin({
 
   // ⚠️ The two admin tables are read AS THE USER (RLS decides); videos and notes still go through
   // the service key, because reviewers have no account for a policy to be written against.
-  const [videos, notes, assignments, reviewers, subscriptions, todos, issues] = await Promise.all([
+  const [videos, notes, assignments, reviewers, subscriptions, todos, issues, people] = await Promise.all([
     allVideos(),
     allNotes(),
     allAssignments(),
@@ -35,6 +37,7 @@ export default async function Admin({
     listSubscriptions(),
     listTodos(),
     listIssues(),
+    listProfiles(),
   ])
 
   // Unread = not yet acted on. `resolved_at` is the only thing that clears it.
@@ -138,6 +141,7 @@ export default async function Admin({
       )}
       {tab === 'costs' && <Costs initial={subscriptions} today={new Date().toISOString()} />}
       {tab === 'todo' && <Todos initial={todos} />}
+      {tab === 'people' && <People initial={people} />}
       {tab === 'videos' && (
         <section>
       {/* ⚠️ VISUALLY HIDDEN, NOT DELETED. The tab above already says "Videos", so printing it
