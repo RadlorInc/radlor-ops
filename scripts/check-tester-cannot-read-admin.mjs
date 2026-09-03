@@ -132,12 +132,44 @@ if (adminIssues.length === 0) {
   console.log('       Import the sheet or file one, then run this again.')
   process.exit(1)
 }
+/**
+ * ⚠️ THE STRONG FORM, WHICH ONLY BECAME AVAILABLE ON 2026-09-03. Until a tester owned a row, this
+ * comparison was "the tester sees zero" — and zero satisfies "saw only its own" VACUOUSLY. It
+ * meant anything at all only because CONTROL B above proved the same token could read something.
+ * A tester who owns rows and sees exactly those rows is meaningful on its own: it separates
+ * `issues_read_own` from a policy that returns nothing to anybody, which zero cannot.
+ *
+ * So a tester owning nothing is now a FAIL, not a pass. Running this against a throwaway account
+ * that has filed nothing gives you the weak form back without saying so, which is the shape this
+ * repo keeps getting caught by.
+ */
+if (testerIssues.length === 0) {
+  console.log('\nFAIL — the tester owns no issues, so "saw only its own" is vacuously true and')
+  console.log('       proves nothing. File one as that account and run this again, or run it as')
+  console.log('       the account that actually owns rows.')
+  process.exit(1)
+}
 const testerSawSomeoneElses = testerIssues.some((i) => i.reporter !== tester.id)
 if (testerSawSomeoneElses) {
   console.log("\nFAIL — a tester can read issues they did not file. `issues_read_own` is not holding.")
   process.exit(1)
 }
-console.log(`           tester saw only its own     → yes ✔`)
+// The admin's view must CONTAIN the tester's and be strictly larger, or "the tester sees fewer" is
+// consistent with two policies that disagree about which rows exist at all.
+const adminIds = new Set(adminIssues.map((i) => i.id))
+const missingFromAdmin = testerIssues.filter((i) => !adminIds.has(i.id))
+if (missingFromAdmin.length) {
+  console.log(`\nFAIL — the admin cannot see ${missingFromAdmin.length} row(s) the tester can.`)
+  console.log('       These are meant to be the same table seen through one policy, not two views.')
+  process.exit(1)
+}
+if (adminIssues.length <= testerIssues.length) {
+  console.log('\nFAIL — the admin sees no more than the tester, so the policy is not distinguishing')
+  console.log('       them at all. Expected the admin to see everyone\'s rows.')
+  process.exit(1)
+}
+console.log(`           tester saw only its own     → yes ✔ (${testerIssues.length}, all reporter=tester)`)
+console.log(`           admin's view contains it    → yes ✔ (${adminIssues.length} ⊃ ${testerIssues.length})`)
 
 console.log('\nPASS — both controls green, the tester is limited to their own rows by policy,')
 console.log('       at the database, with a token the database accepted.')

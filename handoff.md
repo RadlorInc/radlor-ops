@@ -276,8 +276,23 @@ after that**, and the assertion stops depending on a control to be meaningful.
 
 - **Nobody has used `/tester` or `/admin` as themselves.** Both are proven to render real data live,
   driven by throwaway accounts; Rafi driving them by hand is outstanding.
-- **The stronger issues RLS comparison** — pending a real tester issue, then a re-run of
-  `check-tester-cannot-read-admin`. Detail above; do not let the 4-of-4 line absorb it.
+- ⚠️ **The stronger issues RLS comparison — NOW AVAILABLE AND NOT YET RUN.** Rafi filed a real
+  issue through `/tester` in production on 2026-09-03, so a tester finally owns a row. The script
+  has been upgraded to the strong form and **a tester owning nothing is now a FAIL**: zero
+  satisfied "saw only its own" vacuously and meant something only because of CONTROL B. It also now
+  requires the admin's view to CONTAIN the tester's and be strictly larger. Run it:
+
+  ```bash
+  node --env-file=.env.local scripts/check-tester-cannot-read-admin.mjs
+  ```
+
+  It needs `ADMIN_EMAIL` / `ADMIN_PASSWORD` / `TESTER_EMAIL` / `TESTER_PASSWORD` in `.env.local`;
+  they are not there, so this has not been run since the upgrade.
+- **That the `area` / `type` suggestions include values from rows the caller cannot read.** It is
+  the whole reason `issueVocabulary()` uses the service key, and the offline harness cannot see it:
+  PGlite has one superuser and no policies, so a tester sees every issue there anyway and a list of
+  everyone's values is indistinguishable from a list of their own. An assertion would go green on a
+  build where the vocabulary was scoped to the caller — the exact bug.
 - **That the multi-reviewer build is actually DEPLOYED.** The database half is applied and read
   back; the app half is pushed and unconfirmed — see step 5 above. Nothing is broken either way,
   because the migration only added.
