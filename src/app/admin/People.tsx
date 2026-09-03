@@ -3,10 +3,28 @@
 import { useRouter } from 'next/navigation'
 import { useState } from 'react'
 
-type Person = { user_id: string; name: string; role: string }
+type Person = {
+  user_id: string
+  name: string
+  role: string
+  /** `waiting` = a link is out and unopened · `expired` = it ran out · `null` = joined, or made
+   *  by hand with no link at all. Computed on the server in `page.tsx`, where the link table is
+   *  readable — the browser has no way to see it and must not be given one. */
+  join?: 'waiting' | 'expired' | null
+  expiresInDays?: number
+}
 type Made = { email: string; path: string }
 type Skipped = { email: string; why: string }
 const ROLE_LABEL: Record<string, string> = { admin: 'Admin', tester: 'Tester', reviewer: 'Reviewer' }
+
+/** Days, in words. "expires in 0 days" is what a bare number gives you on the last day, which is
+ *  both wrong-sounding and the day it matters most. */
+function expiry(days?: number): string {
+  if (days === undefined) return 'link expires soon'
+  if (days <= 1) return 'link expires today'
+  if (days === 2) return 'link expires tomorrow'
+  return `link expires in ${days - 1} days`
+}
 
 /**
  * Who has access, and how they get it: paste the addresses, send the links.
@@ -139,6 +157,19 @@ export default function People({ initial }: { initial: Person[] }) {
           <li key={p.user_id} data-testid="person">
             <span className="chip" data-testid="person-role">{ROLE_LABEL[p.role] ?? p.role}</span>
             <span>{p.name}</span>
+            {/* ⚠️ THE LIST IS "ACCOUNTS MADE", NOT "PEOPLE WHO JOINED" — the row appears the moment
+                the link is made, days before anybody opens it. Without this chip a rollout of
+                twenty looks identical whether nineteen are stuck or none are. */}
+            {p.join === 'waiting' && (
+              <span className="chip waiting" data-testid="person-join">
+                Not joined yet · {expiry(p.expiresInDays)}
+              </span>
+            )}
+            {p.join === 'expired' && (
+              <span className="chip waiting" data-testid="person-join">
+                Link expired · make a new one
+              </span>
+            )}
             {/* Forgot their password? There is no email to send, so the answer is a new link — and
                 making it kills any older one they were still holding. */}
             <button className="linky" onClick={() => post({ user_id: p.user_id })} disabled={busy} data-testid="person-newlink">

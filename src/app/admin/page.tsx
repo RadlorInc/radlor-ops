@@ -1,7 +1,7 @@
 import RoleNav from '../RoleNav'
 import Summary from './Summary'
 import { badgesFrom } from '@/lib/navBadges'
-import { allAssignments, allNotes, allReviewers, allVideos } from '@/lib/db'
+import { allAssignments, allNotes, allReviewers, allVideos, inviteLinkStates } from '@/lib/db'
 import { clearance, progressLabel } from '@/lib/clearance'
 import { listIssues, listSubscriptions, listTodos, listProfiles } from '@/lib/adminDb'
 import { requireRole } from '@/lib/session'
@@ -20,6 +20,36 @@ const TABS = [
 ] as const
 type TabKey = (typeof TABS)[number]['key']
 
+type LinkState = { user_id: string; used_at: string | null; expires_at: string }
+
+/**
+ * Whose link is still outstanding, for the *People* list's chip.
+ *
+ * ⚠️ NEWEST LINK PER PERSON ONLY, and it has to be: making a new link marks the old ones used, so
+ * "has any used link" would call somebody joined the moment their FIRST link was superseded —
+ * which is precisely the person who has not joined and has just been sent a fresh one. `links`
+ * arrives newest first, so the first row for a user wins.
+ *
+ * ⚠️ NO LINK ROWS AT ALL IS NOT "NOT JOINED". The admin account was made by hand in the Supabase
+ * dashboard and never had a link; a chip driven off the ABSENCE of a link brands the one row the
+ * admin is certain about — their own — as never having joined. Those get no chip.
+ *
+ * ⚠️ A module-level function, not inline in the component: `Date.now()` inside a component body is
+ * an impure call and the React Compiler's lint says so. It is also genuinely clearer here, where
+ * the two rules above are the whole content.
+ */
+function withJoinState<T extends { user_id: string }>(people: T[], links: LinkState[]) {
+  const newest = new Map<string, LinkState>()
+  for (const l of links) if (!newest.has(l.user_id)) newest.set(l.user_id, l)
+  const now = Date.now()
+  return people.map((p) => {
+    const l = newest.get(p.user_id)
+    if (!l || l.used_at) return { ...p, join: null }
+    const left = Date.parse(l.expires_at) - now
+    return { ...p, join: left <= 0 ? ('expired' as const) : ('waiting' as const), expiresInDays: Math.ceil(left / 86_400_000) }
+  })
+}
+
 export default async function Admin({
   searchParams,
 }: {
@@ -29,7 +59,7 @@ export default async function Admin({
 
   // ⚠️ The two admin tables are read AS THE USER (RLS decides); videos and notes still go through
   // the service key, because reviewers have no account for a policy to be written against.
-  const [videos, notes, assignments, reviewers, subscriptions, todos, issues, people] = await Promise.all([
+  const [videos, notes, assignments, reviewers, subscriptions, todos, issues, people, links] = await Promise.all([
     allVideos(),
     allNotes(),
     allAssignments(),
@@ -38,7 +68,10 @@ export default async function Admin({
     listTodos(),
     listIssues(),
     listProfiles(),
+    inviteLinkStates(),
   ])
+
+  const peopleWithJoin = withJoinState(people, links)
 
   // Unread = not yet acted on. `resolved_at` is the only thing that clears it.
   const unread = new Map<string, number>()
@@ -141,7 +174,7 @@ export default async function Admin({
       )}
       {tab === 'costs' && <Costs initial={subscriptions} today={new Date().toISOString()} />}
       {tab === 'todo' && <Todos initial={todos} />}
-      {tab === 'people' && <People initial={people} />}
+      {tab === 'people' && <People initial={peopleWithJoin} />}
       {tab === 'videos' && (
         <section>
       {/* ⚠️ VISUALLY HIDDEN, NOT DELETED. The tab above already says "Videos", so printing it

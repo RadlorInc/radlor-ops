@@ -419,6 +419,26 @@ export function spendInviteLink(id: string): Promise<null> {
   })
 }
 
+/**
+ * Every link's state, newest first — for the *People* list's "not joined yet" chip.
+ *
+ * ⚠️ SERVICE KEY, BECAUSE THE ADMIN'S OWN TOKEN CANNOT READ THIS TABLE. `invite_links` has RLS on
+ * and no policies at all, deliberately, so `adminDb`'s read-as-the-user pattern would return zero
+ * rows here and the chip would say "not joined yet" about everybody, for ever. This is the same
+ * reason videos and notes go through the service key.
+ *
+ * ⚠️ AND IT IS NOT CACHED. The `unstable_cache` reads beside it have a 60-second TTL, which is
+ * fine for a video list and wrong for this: the admin makes a link and looks straight at the row
+ * to check it worked. A minute of the page insisting nothing happened is indistinguishable from
+ * the button being broken.
+ */
+export function inviteLinkStates(): Promise<{ user_id: string; used_at: string | null; expires_at: string }[]> {
+  return rest<{ user_id: string; used_at: string | null; expires_at: string }[]>(
+    'link states',
+    'invite_links?select=user_id,used_at,expires_at&order=created_at.desc',
+  )
+}
+
 /** The address a link belongs to, so the join page can say whose account it is setting up. */
 export async function userEmail(userId: string): Promise<string> {
   const { url, key } = assertConfigured()

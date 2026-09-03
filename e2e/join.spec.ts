@@ -137,3 +137,36 @@ test('a tester cannot make links; a known address is refused in words without lo
   const nobody = await (await browser.newContext()).newPage()
   expect((await nobody.goto('/join/not-a-real-token'))?.status()).toBe(404)
 })
+
+test('the People list says who has not opened their link yet, and stops saying it once they have', async ({ page, browser }) => {
+  await signIn(page, 'admin')
+  const links = await makeLinks(page, ['newjoin@example.com'], 'tester')
+
+  const theirRow = page.getByTestId('person').filter({ hasText: 'newjoin' })
+  await expect(theirRow.getByTestId('person-join')).toContainText('Not joined yet')
+  // The expiry is part of the chip, not a separate thing to go stale on its own.
+  await expect(theirRow.getByTestId('person-join')).toContainText('link expires')
+
+  /**
+   * ⚠️ THE FIXTURE THE NAIVE VERSION GETS WRONG. The admin account was made by hand and has no
+   * link row at all. "No used link" and "has not joined" are the same condition for anybody who
+   * arrived some other way, so a chip driven off the absence of a link would brand the one row the
+   * admin is certain about — their own — as never having joined.
+   */
+  await expect(page.getByTestId('person').filter({ hasText: 'Harness Admin' }).getByTestId('person-join')).toHaveCount(0)
+
+  const { ctx, page: them } = await stranger(browser)
+  await them.goto(links.get('newjoin@example.com')!)
+  await them.getByTestId('new-password').fill('a-long-enough-password')
+  await them.getByTestId('confirm-password').fill('a-long-enough-password')
+  await them.getByTestId('save-password').click()
+  await expect(them).toHaveURL(/\/tester$/)
+  await ctx.close()
+
+  // ⚠️ ASSERTED AFTER A RELOAD, on the surface the admin actually looks at. The chip is server
+  // rendered, so a check against the page still open from before the join would pass on a build
+  // where `used_at` is never written.
+  await page.goto('/admin?tab=people')
+  await expect(page.getByTestId('person').filter({ hasText: 'newjoin' })).toBeVisible()
+  await expect(page.getByTestId('person').filter({ hasText: 'newjoin' }).getByTestId('person-join')).toHaveCount(0)
+})

@@ -418,6 +418,16 @@ ol.todos .strike { color: var(--muted); text-decoration: line-through; }
 li[data-status='done'] .chip { background: var(--ok-bg); border-color: var(--ok-line); color: var(--ok-ink); }
 li[data-status='in_progress'] .chip { background: var(--info-bg); border-color: var(--info-line); color: var(--info-ink); }
 
+/* "Not joined yet" / "Link expired" in the People list. ⚠️ `cursor: default` because this one is a
+   <span>, not a button — `.chip` sets `cursor: pointer` for the filter chips, and a pointer on
+   text that does nothing reads as a control somebody is failing to click. Warn, not error: an
+   unopened link is a normal state on the day you send twenty of them, not a fault. */
+.chip.waiting {
+  background: var(--warn-bg); border-color: var(--warn-line); color: var(--warn-ink);
+  cursor: default; font-weight: 500;
+}
+.chip.waiting:hover { background: var(--warn-bg); border-color: var(--warn-line); }
+
 .area {
   font-size: 13px; color: var(--text); background: var(--panel-2); border: 1px solid transparent;
   border-radius: 999px; padding: 3px 10px; white-space: nowrap;
