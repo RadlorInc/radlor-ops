@@ -184,6 +184,41 @@ production build failed on it while every local check was green. See the CLAUDE.
 ⚠️ **Confirm the region from the running deployment**, never from the settings page:
 `curl -s https://video-reviewer-liard.vercel.app/api/health` reports it.
 
+## ⚠️ The first spelling of anything becomes everyone's spelling
+
+`area` and `type` on `/tester` suggest what people have already typed (`issueVocabulary()`, read
+with the service key across all issues — see the widening note in `src/lib/db.ts`). That is the
+point: it makes the existing value the easy choice instead of the fourth variant of it.
+
+**The consequence, which is a standing property and not a one-off:** whatever is typed FIRST becomes
+the value everybody after is offered. On 2026-09-03 the first real issue was filed with
+`area = measurrement`, and until it was corrected every tester arriving would have been offered the
+typo as the obvious choice — and picking it is the RIGHT behaviour for them, which is what makes it
+spread.
+
+⚠️ **So look at the vocabulary after the first few issues in any new area, and fix spellings while
+exactly one row has them.** It is one statement now and a list of rows plus other people's habits
+in a week.
+
+⚠️ **Nothing auto-corrects on write, and it must not start.** Silently rewriting what somebody typed
+teaches them the tool edits their words, which is worse than a typo. The suggestion list PREVENTS;
+it does not clean up afterwards. Cleaning up is a deliberate human act, by SQL:
+
+```sql
+-- Filter on the id AND the old value: if anything already changed it, this matches nothing rather
+-- than overwriting whatever somebody else set.
+update review.issues set area = 'measurement'
+ where id = '…' and area = 'measurrement';
+```
+
+There is no edit control for this by design, the same as assignments and videos. ⚠️ And the
+Supabase MCP's `execute_sql` is **read-only** — this was done with a `PATCH` through PostgREST
+using the service key, which does hold `update` on `review.issues`.
+
+**The vocabulary as of 2026-09-03** — 12 areas, 3 types. `measurement` and `Measurement Name` are
+both in it and are genuinely different things; `Wording` and the placeholder's `wording` are not,
+and are the next candidate if a second one shows up.
+
 ## Open findings and their triggers
 
 All in [docs/security-findings.md](docs/security-findings.md). The two that are scheduled rather
