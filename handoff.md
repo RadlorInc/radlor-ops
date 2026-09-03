@@ -221,10 +221,30 @@ The original list, kept because the order is the reusable part:
 4. Delete the Supabase *Invite user* / *Reset password* template edits if any were made. There is
    no mailer in this design.
 
-## ⚠️ Waiting on Rafi — one thing
+## ✔ Waiting on Rafi — nothing
 
-**Run the tester-vs-admin RLS check.** It is the only authorization property with a gap right now,
-and it finally has the data it needs (see *Verified nowhere*).
+**The tester-vs-admin RLS check RAN AND PASSED, 2026-09-04**, against the live project:
+
+```
+CONTROL A  admin reads profiles      → HTTP 200  2 row(s)
+CONTROL B  tester reads profiles     → HTTP 200  1 row(s)
+CHECK      tester sees the admin row  → no ✔      tester sees only itself → yes ✔
+ISSUES     admin 15 ⊃ tester 1        → yes ✔      all reporter=tester    → yes ✔
+```
+
+**What that proves, stated no wider than it is:** with a token the DATABASE accepted, one tester is
+limited to their own rows **by policy, at the database** — not by the app choosing what to ask for.
+Both controls are green, so a denial is not being confused with an unreachable address, and the
+tester owns a row, so *"saw only its own"* is not satisfied vacuously by an empty set. This is the
+class the offline harness cannot see at all (PGlite is one superuser), so it was the last open
+authorization gap and it is now closed.
+
+**What it does NOT prove**, and neither should any summary of it:
+
+- Only ONE tester was compared against the admin. That a *second* tester cannot read the first
+  one's rows follows from the policy being on `reporter`, but it follows — it was not measured.
+- Nothing about `type` suggestions, which still come from `issueVocabulary()` on the service key
+  and can include values off rows the caller cannot read. Separate item, still open below.
 
 ```bash
 node --env-file=.env.local scripts/check-tester-cannot-read-admin.mjs
@@ -233,6 +253,11 @@ node --env-file=.env.local scripts/check-tester-cannot-read-admin.mjs
 It needs `ADMIN_EMAIL` / `ADMIN_PASSWORD` / `TESTER_EMAIL` / `TESTER_PASSWORD` **in `.env.local`** —
 not inline in front of the binary, which puts both passwords into shell history; and this repo does
 not `source` env files (CLAUDE.md). `.env.local` is gitignored (`.gitignore:8`).
+
+⚠️ **Re-running it needs a tester whose password you are allowed to hold** — see the note in
+*Verified nowhere*. If a throwaway `@example.com` tester was made for this run, **delete it and
+clear its credentials out of `.env.local`**; a live account whose password sits in a file is a
+worse thing than the gap the check closed.
 
 ## The screens, and what changed on 2026-09-03
 
