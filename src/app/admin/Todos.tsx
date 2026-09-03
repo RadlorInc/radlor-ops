@@ -136,22 +136,24 @@ export default function Todos({ initial }: { initial: Todo[] }) {
         </div>
       )}
 
-      <div style={{ display: 'flex', gap: 8, margin: '10px 0 14px' }}>
-        <input
-          type="text"
-          value={task}
-          maxLength={300}
-          placeholder="Add an item"
-          onChange={(e) => setTask(e.target.value)}
-          onKeyDown={(e) => e.key === 'Enter' && add()}
-          data-testid="todo-new"
-          style={{ flex: 1 }}
-        />
+      <div style={{ display: 'flex', gap: 8, margin: '10px 0 14px', alignItems: 'flex-end' }}>
+        <label className="field" style={{ flex: 1 }}>
+          <span className="fieldname">Add something to the list</span>
+          <input
+            type="text"
+            value={task}
+            maxLength={300}
+            placeholder="e.g. Register the domain"
+            onChange={(e) => setTask(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && add()}
+            data-testid="todo-new"
+          />
+        </label>
         <button onClick={add} disabled={busy || !task.trim()} data-testid="todo-add">
           Add
         </button>
       </div>
-      {error && <p className="small" style={{ color: '#ff9d9d' }} data-testid="todo-error">{error}</p>}
+      {error && <p className="small error" data-testid="todo-error">{error}</p>}
 
       <ol className="todos" data-testid="todo-list">
         {items.map((t, i) => (

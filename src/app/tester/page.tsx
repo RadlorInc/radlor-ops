@@ -1,5 +1,5 @@
 import { listIssues, listProfiles, listSessions, listSubscriptions, listTodos, type Subscription, type Todo } from '@/lib/adminDb'
-import { allAssignments, issueVocabulary, type Assignment } from '@/lib/db'
+import { allAssignments, type Assignment } from '@/lib/db'
 import { requireRole } from '@/lib/session'
 import RoleNav from '../RoleNav'
 import { badgesFrom } from '@/lib/navBadges'
@@ -30,7 +30,7 @@ export default async function Tester() {
    */
   const admin = profile.role === 'admin'
   const none = <T,>(): Promise<T[]> => Promise.resolve([])
-  const [issues, sessions, people, subscriptions, todos, assignments, vocabulary] = await Promise.all([
+  const [issues, sessions, people, subscriptions, todos, assignments] = await Promise.all([
     listIssues(),
     listSessions(),
     // Only a triager needs to know whose issue it is; a tester reads their own name back otherwise.
@@ -38,13 +38,6 @@ export default async function Tester() {
     admin ? listSubscriptions() : none<Subscription>(),
     admin ? listTodos() : none<Todo>(),
     admin ? allAssignments() : none<Assignment>(),
-    /**
-     * ⚠️ EVERY FILER GETS THE WHOLE VOCABULARY, TESTER OR ADMIN. Read with the service key across
-     * all issues on purpose — see `issueVocabulary()`. A tester suggested only their OWN previous
-     * areas would converge on their own spelling and never meet anybody else's, which is the exact
-     * `measurement` / `measurrement` / `Measurement` split this is here to stop.
-     */
-    issueVocabulary(),
   ])
   const names = Object.fromEntries(people.map((p) => [p.user_id, p.name]))
   const badges = admin
@@ -72,7 +65,7 @@ export default async function Tester() {
         </p>
       )}
 
-      <Issues initial={issues} canTriage={admin} names={names} vocabulary={vocabulary} />
+      <Issues initial={issues} canTriage={admin} names={names} />
     </main>
   )
 }

@@ -1,5 +1,5 @@
 import type { Metadata } from 'next'
-import { Fira_Code, Fira_Sans } from 'next/font/google'
+import { Fira_Code, Nunito_Sans } from 'next/font/google'
 import './globals.css'
 
 /**
@@ -11,9 +11,11 @@ import './globals.css'
  * Fira Sans for the interface, Fira Code wherever a column is meant to be compared down rather
  * than read across: slugs, ids, timestamps, money, renewal dates.
  */
-const sans = Fira_Sans({
+// Nunito Sans, not Fira: rounded and soft on purpose. The people reading these pages are
+// reviewers and testers, not developers, and the face is the first thing that says which.
+const sans = Nunito_Sans({
   subsets: ['latin'],
-  weight: ['400', '500', '600'],
+  weight: ['400', '600', '700'],
   variable: '--font-sans',
   display: 'swap',
   fallback: ['ui-sans-serif', 'system-ui', '-apple-system', 'Segoe UI', 'Roboto', 'sans-serif'],

@@ -142,7 +142,7 @@ export default function Review(props: {
     <main className="wrap">
       <h1>{title}</h1>
       <p className="muted small">
-        {slug} · v{version} · <Link href="/review">all videos</Link>
+        Version {version} · <Link href="/review">← Back to all videos</Link>
       </p>
 
       <div className="row" style={{ marginTop: 16 }}>
@@ -198,24 +198,39 @@ export default function Review(props: {
         <div className="side">
           {/* Secondary: it opens the composer, it does not commit anything. The two blue
               buttons on this screen are the ones that write — Save note, and the verdict. */}
+          {/* The whole method in three sentences, above the first button. Somebody who has never
+              used this should not have to work out what "note" and "verdict" mean here. */}
+          {/* ⚠️ Hidden while the composer is open. On a phone the video takes 48vh and the three
+              lines here were what pushed the Save button off the bottom of the screen — the state
+              e2e/phone.spec.ts measures. Once "Add a note" has been pressed, the sentence telling
+              you to press it has done its job. */}
+          {draftAt === null && (
+            <p className="help" style={{ marginBottom: 10 }}>
+              Play the video. When you spot something, press <strong>Add a note</strong> — it
+              remembers the moment you were at. When you&apos;re done, choose one of the two buttons
+              at the bottom.
+            </p>
+          )}
           <button className="ghost" onClick={startNote} data-testid="add-note">
-            Add note
+            Add a note
           </button>
 
           {draftAt !== null && (
             <div style={{ marginTop: 12 }}>
-              <p className="small muted" style={{ margin: '0 0 6px' }}>
-                Note at <strong data-testid="draft-time">{formatT(draftAt)}</strong>
-              </p>
-              <textarea
-                ref={bodyRef}
-                rows={3}
-                value={body}
-                maxLength={4000}
-                onChange={(e) => setBody(e.target.value)}
-                data-testid="note-body"
-                placeholder="What happened here?"
-              />
+              <label className="field">
+                <span className="fieldname">
+                  Your note at <strong data-testid="draft-time">{formatT(draftAt)}</strong>
+                </span>
+                <textarea
+                  ref={bodyRef}
+                  rows={3}
+                  value={body}
+                  maxLength={4000}
+                  onChange={(e) => setBody(e.target.value)}
+                  data-testid="note-body"
+                  placeholder="What did you notice here?"
+                />
+              </label>
               <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
                 <button onClick={save} disabled={saving || !body.trim()} data-testid="save-note">
                   {saving ? 'Saving…' : 'Save note'}
@@ -232,7 +247,7 @@ export default function Review(props: {
                 </button>
               </div>
               {error && (
-                <p className="small" style={{ color: '#ff9d9d' }} data-testid="note-error">
+                <p className="small error" data-testid="note-error">
                   {error}
                 </p>
               )}
@@ -274,6 +289,7 @@ export default function Review(props: {
 
           {!verdict && (
             <div style={{ marginTop: 20, paddingTop: 14, borderTop: '1px solid var(--line)' }}>
+              <p className="fieldname" style={{ margin: '0 0 8px' }}>When you&apos;re done, tell us what you think</p>
               <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                 <button onClick={() => finish('approved')} disabled={finishing} data-testid="verdict-approved">
                   Approved — good to post
@@ -283,8 +299,7 @@ export default function Review(props: {
                 </button>
               </div>
               <p className="muted small" style={{ margin: '8px 0 0' }}>
-                Tells Rafi what you concluded. You can still add notes afterwards — that clears the
-                verdict and puts this back as still being reviewed.
+                This goes to Rafi. You can still add a note afterwards — that reopens it.
               </p>
             </div>
           )}
@@ -292,7 +307,7 @@ export default function Review(props: {
       </div>
 
       <details className="questions" style={{ marginTop: 28 }}>
-        <summary>The seven questions</summary>
+        <summary>Seven things to look for while you watch</summary>
         <ol>
           {QUESTIONS.map((q) => (
             <li key={q}>{q}</li>

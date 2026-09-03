@@ -27,7 +27,7 @@ test('the form has no date field and no hours field, and filing sets both itself
   const before = await rows(request, 'testing_sessions')
   await page.getByTestId('issue-description').fill('The repeat button is missing on the nest game')
   await page.getByTestId('issue-area').fill('Nest game')
-  await page.getByTestId('issue-type').fill('missing control')
+  await page.getByTestId('issue-type').selectOption('Something missing')
   await page.getByTestId('issue-chapter').fill('1')
   await page.getByTestId('issue-age').selectOption('3-5')
   await page.getByTestId('issue-submit').click()
@@ -35,7 +35,7 @@ test('the form has no date field and no hours field, and filing sets both itself
 
   const [filed] = await rows(request, 'issues', '&area=eq.Nest%20game')
   expect(filed).toBeTruthy()
-  expect(filed.type).toBe('missing control')   // the two columns are separately populated
+  expect(filed.type).toBe('Something missing')   // the two columns are separately populated
   expect(filed.chapter).toBe('1')
   expect(filed.all_chapters).toBe(false)
   expect(filed.age_band).toBe('3-5')
@@ -168,57 +168,60 @@ test('a TESTER cannot move a status; an ADMIN can — and the row proves it', as
  * the route refuses their PATCH with a 404 while an admin's succeeds.
  */
 
-/**
- * ⚠️ BOTH HALVES, BECAUSE EITHER ONE ALONE IS THE WRONG FEATURE. A list that suggests nothing is
- * the free-text field it replaced; a list that only ACCEPTS its own options is a restriction nobody
- * asked for, and the first person with a genuinely new type either gets stuck or hides it in the
- * description where nothing can group it.
- *
- * ⚠️ AND `area` HAVING NO LIST IS ASSERTED, NOT ASSUMED. It had one for a day and Rafi removed it:
- * an area is whatever part of the app the person was looking at, and offering options makes the
- * listed ones feel like the allowed ones. That is a decision, so it gets a check — otherwise the
- * next person reading "suggestions help convergence" puts it back and nothing goes red.
- *
- * ⚠️ THE PROPERTY THAT MATTERS MOST IS NOT ASSERTED HERE, AND CANNOT BE. "The suggestions include
- * values from rows this tester cannot read" is the whole reason the list is built with the service
- * key — and PGlite runs as one superuser with no policies, so offline the tester sees every issue
- * anyway and a list of everyone's values is indistinguishable from a list of their own. An
- * assertion here would go green on a build where the vocabulary was scoped to the caller, which is
- * the exact bug. It is in the handoff's unverified list.
- */
-test('type suggests what people already typed and still takes a new value; area suggests nothing', async ({ page, request }) => {
+test('the kind of problem is a fixed list, and "Other…" takes whatever is typed', async ({ page, request }) => {
   await signIn(page, 'tester')
   await page.goto('/tester')
 
   /**
-   * ⚠️ ASKED OF THE INPUT, NOT OF THE `<datalist>`. Reading `#type-options option` directly passed
-   * with `list=` deleted from the input — a list rendered on the page and attached to nothing,
-   * which is a suggestion no user is ever offered. `HTMLInputElement.list` is the BROWSER
-   * resolving the association, so a null here is the wiring being gone rather than the markup
-   * being different from what I expected. It is also what makes the `area` assertion mean
-   * "nothing is offered" rather than "no element with that id".
+   * ⚠️ THE LIST IS WRITTEN OUT HERE, NOT IMPORTED. Rafi's call on 2026-09-03: a tester picks from
+   * the kinds of thing that actually go wrong in a children's app, and "Other…" opens a box for
+   * the case the list forgot. Changing an option takes an edit here too; the red in between is the
+   * reminder that the words are a decision. This replaced a field that suggested whatever anybody
+   * had typed before — which read as a half-built dropdown with nothing to pick.
    */
-  const listOf = (testid: string) =>
-    page.getByTestId(testid).evaluate((el) => {
-      const dl = (el as HTMLInputElement).list
-      return dl ? [...dl.options].map((o) => o.value) : null
-    })
+  const options = await page
+    .getByTestId('issue-type')
+    .evaluate((el) => [...(el as HTMLSelectElement).options].map((o) => o.textContent))
+  expect(options).toEqual([
+    'choose…',
+    'Wording',
+    'Wrong answer marked',
+    'Too hard for the age',
+    'Too easy for the age',
+    'Sound or voice',
+    'Pictures or layout',
+    'Button does not work',
+    'Slow or freezes',
+    'App crashed',
+    'Progress not saved',
+    'Something missing',
+    'Other…',
+  ])
 
-  expect(await listOf('issue-area')).toBeNull()
-  expect(await listOf('issue-type')).toContain('Titles')
+  // `area` offers nothing — `HTMLInputElement.list` is the browser resolving the association, so a
+  // null here means no suggestion is wired, not merely that an element with some id is absent.
+  expect(await page.getByTestId('issue-area').evaluate((el) => (el as HTMLInputElement).list)).toBeNull()
 
-  // A value that is in no list still files — the half that stops the suggestion becoming a cage.
+  // The free-text box exists only once "Other…" is chosen — the state the defect would live in.
+  await expect(page.getByTestId('issue-type-other')).toHaveCount(0)
   await page.getByTestId('issue-description').fill('a brand new kind of problem')
   await page.getByTestId('issue-area').fill('Weighing scales')
-  await page.getByTestId('issue-type').fill('calibration')
+  await page.getByTestId('issue-type').selectOption('other')
+  await page.getByTestId('issue-type-other').fill('calibration')
   await page.getByTestId('issue-submit').click()
   await expect(page.getByTestId('issue-list')).toContainText('a brand new kind of problem')
 
+  // ⚠️ The row by its description, then the property — never `?type=eq.calibration`.
   const [row] = await rows(request, 'issues', '&description=eq.a%20brand%20new%20kind%20of%20problem')
   expect(row.area).toBe('Weighing scales')
   expect(row.type).toBe('calibration')
 
-  // And the new type joins the list for whoever files next — that is the convergence working.
-  await page.reload()
-  expect(await listOf('issue-type')).toContain('calibration')
+  // And a listed kind files as its own words, not as "other".
+  await page.getByTestId('issue-description').fill('the narrator cuts out on the second screen')
+  await page.getByTestId('issue-type').selectOption('Sound or voice')
+  await expect(page.getByTestId('issue-type-other')).toHaveCount(0)
+  await page.getByTestId('issue-submit').click()
+  await expect(page.getByTestId('issue-list')).toContainText('narrator cuts out')
+  const [second] = await rows(request, 'issues', '&description=eq.the%20narrator%20cuts%20out%20on%20the%20second%20screen')
+  expect(second.type).toBe('Sound or voice')
 })

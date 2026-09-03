@@ -15,6 +15,8 @@ const SERIES = ['#3987e5', '#d95926', '#199e70', '#c98500', '#d55181', '#008300'
 const OTHER = '#5a6076'
 
 const BLANK = { tool: '', plan: '', renewal_date: '', monthly_cost: '', credits_remaining: '' }
+const FIELD_LABEL = { tool: 'Tool', plan: 'Plan', renewal_date: 'Renews on', monthly_cost: 'Cost per month', credits_remaining: 'Credits left' } as const
+const FIELD_HINT = { tool: 'e.g. Higgsfield', plan: 'e.g. Creator', renewal_date: '', monthly_cost: 'e.g. 29.00', credits_remaining: 'leave blank if none' } as const
 
 /**
  * The hand-edited costs table. It answers "what lapses next" and "what does this cost a month"
@@ -130,7 +132,7 @@ export default function Costs({ initial, today }: { initial: Subscription[]; tod
   }
 
   return (
-    <section>
+    <section style={{ marginTop: 24 }}>
       {/* Named by the tab; kept for the document outline. See the note in page.tsx. */}
       <h2 className="sr-only">Costs and renewals</h2>
 
@@ -228,39 +230,46 @@ export default function Costs({ initial, today }: { initial: Subscription[]; tod
       )}
 
       {adding || editing ? (
-        <div className="addrow" data-testid="cost-form">
+        <div className="card" style={{ marginTop: 14, padding: '16px 18px 18px' }} data-testid="cost-form">
+          <h3 style={{ margin: 0, fontSize: 17 }}>{editing ? 'Edit this subscription' : 'Add a subscription'}</h3>
+          <div className="fields">
           {(['tool', 'plan', 'renewal_date', 'monthly_cost', 'credits_remaining'] as const).map((k) => (
-            <input
-              key={k}
-              /* ⚠️ `text`, not `number`, for the money fields. A number input silently drops a
-                 thousands separator in some browsers and refuses it in others, so the value the
-                 server sees is not the value the person typed. The route parses commas itself. */
-              type={k === 'renewal_date' ? 'date' : 'text'}
-              inputMode={k.includes('cost') || k.includes('credits') ? 'decimal' : undefined}
-              placeholder={k.replace(/_/g, ' ')}
-              value={form[k]}
-              disabled={editing !== null && k === 'tool'}
-              onChange={(e) => setForm({ ...form, [k]: e.target.value })}
-              data-testid={`cost-${k}`}
-            />
+            <label className="field" key={k}>
+              <span className="fieldname">{FIELD_LABEL[k]}</span>
+              <input
+                /* ⚠️ `text`, not `number`, for the money fields. A number input silently drops a
+                   thousands separator in some browsers and refuses it in others, so the value the
+                   server sees is not the value the person typed. The route parses commas itself. */
+                type={k === 'renewal_date' ? 'date' : 'text'}
+                inputMode={k.includes('cost') || k.includes('credits') ? 'decimal' : undefined}
+                placeholder={FIELD_HINT[k]}
+                value={form[k]}
+                disabled={editing !== null && k === 'tool'}
+                onChange={(e) => setForm({ ...form, [k]: e.target.value })}
+                data-testid={`cost-${k}`}
+              />
+            </label>
           ))}
-          <button
-            onClick={() => (editing ? saveEdit(rows.find((r) => r.id === editing)!) : add())}
-            disabled={busy || !form.tool.trim()}
-            data-testid="cost-save"
-          >
-            Save
-          </button>
-          <button className="ghost" onClick={() => { setAdding(false); setEditing(null); setForm(BLANK); setError(null) }}>
-            Cancel
-          </button>
+          </div>
+          <div className="actions">
+            <button
+              onClick={() => (editing ? saveEdit(rows.find((r) => r.id === editing)!) : add())}
+              disabled={busy || !form.tool.trim()}
+              data-testid="cost-save"
+            >
+              Save
+            </button>
+            <button className="ghost" onClick={() => { setAdding(false); setEditing(null); setForm(BLANK); setError(null) }}>
+              Cancel
+            </button>
+          </div>
         </div>
       ) : (
         <button className="ghost" style={{ marginTop: 12 }} onClick={() => setAdding(true)} data-testid="cost-add">
           Add a subscription
         </button>
       )}
-      {error && <p className="small" style={{ color: '#ff9d9d' }} data-testid="cost-error">{error}</p>}
+      {error && <p className="small error" data-testid="cost-error">{error}</p>}
     </section>
   )
 }

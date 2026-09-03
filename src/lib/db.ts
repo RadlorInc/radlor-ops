@@ -305,39 +305,3 @@ export const allVideos = cached(allVideosUncached, TAGS.videos, 'all-videos')
 export const allNotes = cached(allNotesUncached, TAGS.notes, 'all-notes')
 export const allAssignments = cached(allAssignmentsUncached, TAGS.assignments, 'all-assignments')
 export const allReviewers = cached(allReviewersUncached, TAGS.reviewers, 'all-reviewers')
-
-/**
- * The `type` values people have already used, for the filing form's suggestions.
- *
- * ⚠️ IT USED TO RETURN `area` TOO, AND NARROWING IT NARROWED THE EXPOSURE. Rafi decided on
- * 2026-09-03 that `area` gets no list — see `src/app/tester/Issues.tsx` — so reading every area
- * across everyone's issues would be a widening with nothing left to justify it. A read that has
- * outlived its reason is not harmless just because it already existed.
- *
- * ⚠️ THIS DELIBERATELY WIDENS WHAT A TESTER CAN SEE, AND THE WIDENING IS THE POINT. Everywhere else
- * a tester reads issues through `asUser()`, where `issues_read_own` gives them only their own — so
- * their suggestions would be only their own vocabulary, and three people would each converge on
- * their own spelling and never see anyone else's. That is the entire failure this is meant to
- * prevent, so the list is read with the service key across ALL issues.
- *
- * ⚠️ WHAT IT EXPOSES, EXACTLY: the distinct strings in ONE column. Not who wrote them, not when,
- * not how many, not the description, not the area, not the chapter, not the age band, not an id —
- * the select names one column and the rest never leaves the database. What a tester learns is the
- * vocabulary other people type into a dropdown, which is what a shared dropdown IS.
- *
- * ⚠️ AND THE APP IS DOING THE AUTHORISING HERE, NOT RLS — the one place in this schema where that
- * is true on purpose. The database-enforced version is a column-level `grant select (area, type)`
- * plus a policy letting `authenticated` see every row of those two columns; that is the upgrade
- * path if this list ever carries anything worth protecting. Today it carries "Nest game".
- *
- * ⚠️ NOT CACHED, ON PURPOSE. A value somebody typed a minute ago has to be in the next person's
- * dropdown or the convergence never happens; it is one more query in a wave that already runs in
- * parallel, so it costs nothing to keep it fresh.
- */
-export async function issueVocabulary(): Promise<{ types: string[] }> {
-  const rows = await rest<{ type: string | null }[]>('issue vocabulary', 'issues?select=type')
-  const types = [...new Set(rows.map((r) => r.type?.trim()).filter((v): v is string => !!v))].sort(
-    (a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }),
-  )
-  return { types }
-}

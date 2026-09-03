@@ -31,10 +31,10 @@ export async function ReviewerList({ identity, role }: { identity: ReviewerIdent
         badges={role === 'admin' ? await navBadges(identity.id) : { review: unfinished }}
       />
       <h1>Videos to review</h1>
-      <p className="muted small" data-testid="signout-inline">
+      <p className="help" data-testid="signout-inline">
         {videos.length === 0
           ? 'Nothing assigned to you.'
-          : `${unfinished} of ${videos.length} still waiting on you.`}
+          : `${unfinished} of ${videos.length} still waiting on you. Tap a video to watch it and leave your notes.`}
       </p>
 
       {videos.length === 0 ? (
@@ -44,12 +44,16 @@ export async function ReviewerList({ identity, role }: { identity: ReviewerIdent
       ) : (
         <div style={{ marginTop: 20 }}>
           {videos.map((v) => (
-            <Link key={v.id} className="card" href={`/review/${v.slug}`} data-testid="video-card">
-              <strong>{v.title}</strong>
-              <div className="muted small">
-                {v.slug} · v{v.version}
-                {v.myVerdict && ' · you marked this finished'}
+            <Link key={v.id} className="card videocard" href={`/review/${v.slug}`} data-testid="video-card">
+              <div>
+                <strong>{v.title}</strong>
+                <div className="muted small">Version {v.version}</div>
               </div>
+              {/* The state in words, not only in the count above: "waiting for you" is the thing
+                  to tap, "you finished this" is the thing you can leave alone. */}
+              <span className={v.myVerdict ? 'pill pill-ok' : 'pill pill-waiting'}>
+                {v.myVerdict ? 'You finished this' : 'Waiting for you'}
+              </span>
             </Link>
           ))}
         </div>
