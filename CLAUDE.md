@@ -38,12 +38,24 @@ else with: what result is this incapable of distinguishing?**
 
 ## Repository visibility
 
-**This repo is PRIVATE. `RadlorInc/website` and `RadlorInc/learn` are PUBLIC.** Security findings —
-about this tool or about either of those — go in [docs/security-findings.md](docs/security-findings.md),
-here. One was written into the public site repo on 2026-08-31 and reverted the same day; the revert
-is mitigation, not erasure. ⚠️ **"Safe to break" and "safe to publish" are different questions.**
-Establish a remote's visibility BEFORE the first push, not after — a first push publishes the whole
-history at once.
+**This repo (`RadlorInc/radlor-ops`) is PRIVATE. `RadlorInc/website` and `RadlorInc/learn` are
+PUBLIC.** Security findings — about this tool or about either of those — go in
+[docs/security-findings.md](docs/security-findings.md), here. One was written into the public site
+repo on 2026-08-31 and reverted the same day; the revert is mitigation, not erasure.
+⚠️ **"Safe to break" and "safe to publish" are different questions.** Establish a remote's
+visibility BEFORE the first push, not after — a first push publishes the whole history at once.
+
+⚠️⚠️ **AND DO NOT ESTABLISH IT BY READING THIS PARAGRAPH.** The sentence above said PRIVATE on
+2026-09-04 while GitHub said PUBLIC, and had done for five days — finding #10. A repo's visibility
+is not a fact the repo can state about itself; it is one call to the system that owns the answer,
+and it costs a second:
+
+```bash
+gh repo view RadlorInc/radlor-ops --json visibility
+```
+
+Same shape as `$schema` declaring a draft it is not, and as a migration comment claiming a grant it
+does not hold. **Validate against what a thing IS, not what it says it is** — including this file.
 
 ### The third face: filtering on the property under test
 

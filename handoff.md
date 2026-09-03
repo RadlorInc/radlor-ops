@@ -1,4 +1,4 @@
-# Session Handoff — video reviewer / ops dashboard
+# Session Handoff — Radlor Ops
 
 > **Read [CLAUDE.md](CLAUDE.md) first.** It holds the standing rules; this file is only "where work
 > left off". Keep it short — the product repo's handoff grew to 60 KB and became a running cost on
@@ -26,7 +26,7 @@ reviewer has approved. One "needs changes" is not cleared, however many approval
 
 ## Where it is right now
 
-**Live** at `https://video-reviewer-liard.vercel.app`, from **`RadlorInc/video-reviewer`** (PRIVATE).
+**Live** at `https://video-reviewer-liard.vercel.app`, from **`RadlorInc/radlor-ops`** (PRIVATE).
 Vercel deploys on push to `main`.
 
 ⚠️ **A push is not a deploy — confirm it.** On 2026-09-03 a build **failed** (a `"//"` key in
@@ -51,6 +51,29 @@ namespace, not a boundary; see [docs/security-findings.md](docs/security-finding
 
 ⚠️ **The schema is still `review`, not `ops`.** A rename 404s the live tool from the moment it runs
 until a human edits *API → Exposed schemas*, which no migration can reach.
+
+## ⚠️ The Vercel project is still called `video-reviewer` — and renaming it breaks live links
+
+The app was renamed to **Radlor Ops** on 2026-09-04: browser title, `package.json`, README, and the
+GitHub repo (`RadlorInc/video-reviewer` → `RadlorInc/radlor-ops`). **The Vercel project and its
+`video-reviewer-liard.vercel.app` domain were deliberately left alone.** It is a dashboard job —
+*Project → Settings → General → Project Name* — and nothing in this repo can do it.
+
+⚠️ **Do it only while no `/join/<token>` link is outstanding.** Those links are built from
+`location.origin` at the moment the admin copies them, so every link already forwarded to a tester
+points at the OLD domain and dies the moment the project is renamed. The person holding one gets a
+dead host, not a 404 from this app — there is no way to explain it to them from inside the tool.
+The safe window is: rename first, THEN make the links. There is no reason to rename it at all
+except tidiness, so if links are out, it waits.
+
+⚠️ **And check the Git connection after the repo rename.** Vercel usually follows a GitHub rename
+on its own, but "usually" is not a check: open *Project → Settings → Git* and confirm it names
+`RadlorInc/radlor-ops`. A stale connection does not error — it just quietly stops deploying, and
+the first symptom is a push that changes nothing.
+
+Nothing else needs the name: Supabase's Site URL and redirect URLs play no part in this design
+(no mail is sent), and `next.config.ts` derives its media origin from `SUPABASE_URL`, not from the
+app's own host.
 
 **Accounts in production:** `kuwari84@gmail.com` (admin), `kuwarirafi@gmail.com` (tester). Both real
 — **never delete either.** Throwaway accounts for checks use `@example.com` and are deleted against

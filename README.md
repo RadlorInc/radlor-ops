@@ -1,4 +1,4 @@
-# Radlor video reviewer
+# Radlor Ops
 
 An internal tool for getting timestamped notes on unreleased marketing videos from one outside
 reviewer, and getting them back as markdown.

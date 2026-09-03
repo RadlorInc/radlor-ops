@@ -1,4 +1,4 @@
-# Video reviewer — a separate tool, for one outside reviewer
+# Radlor Ops — a separate tool, for one outside reviewer
 
 A standalone Next.js app for getting timestamped notes on unreleased Radlor vertical videos back
 out as markdown. **New repo, new Vercel project** — it shares no infrastructure with the Milo app,

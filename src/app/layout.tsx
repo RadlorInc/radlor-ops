@@ -33,7 +33,7 @@ const mono = Fira_Code({
 })
 
 export const metadata: Metadata = {
-  title: 'Radlor video review',
+  title: 'Radlor Ops',
   // Unreleased marketing. Belt-and-braces with the X-Robots-Tag header in next.config.ts.
   robots: { index: false, follow: false },
 }

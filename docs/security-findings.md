@@ -1,8 +1,14 @@
 # Security findings — private
 
-**This repository (`RadlorInc/video-reviewer`) is PRIVATE. `RadlorInc/website` and
-`RadlorInc/learn` are PUBLIC.** Findings about any of the three live here. Check that sentence is
-still true before adding to it.
+**This repository (`RadlorInc/radlor-ops`) is PRIVATE. `RadlorInc/website` and
+`RadlorInc/learn` are PUBLIC.** Findings about any of the three live here.
+
+⚠️ **Do not check that sentence by reading it.** It said the same thing on 2026-09-04 while this
+repo was PUBLIC — see finding #10. Ask the system that owns the answer, before you add anything:
+
+```bash
+gh repo view RadlorInc/radlor-ops --json visibility
+```
 
 ---
 
@@ -225,7 +231,7 @@ publishes the whole history at once, and unpublishing is not a thing that exists
 commit `2b3ed4d`, and in any clone taken before the revert. It is not gone and must not be
 described as gone.
 
-What went right, and is worth keeping as the pattern: the `video-reviewer` repo's own first push
+What went right, and is worth keeping as the pattern: the `radlor-ops` repo's own first push
 was audited **before** it happened — `git log -p` across all 15 commits for JWTs, `sb_secret_`,
 AWS keys, PEM blocks, connection strings with passwords and assigned key values (all zero),
 `git check-ignore` on `.env` and `.env.local`, and every token-shaped literal traced to a named
@@ -471,3 +477,50 @@ justified by an unverified belief about which code was running.** The reasoning 
 request and was not checked, because the conclusion already explained the symptom. Nothing needed
 fixing; the deploy had already fixed it.
 
+
+---
+
+## 10. This repo asserted it was PRIVATE for five days and was PUBLIC — 2026-09-04
+
+**Closed same day. It is finding #2 again, in the repo that recorded finding #2.**
+
+`CLAUDE.md` says, in bold, *"This repo is PRIVATE"*, and this file's own header opened with the
+same sentence plus an instruction: *"Check that sentence is still true before adding to it."*
+Nobody did. Asked of GitHub directly on 2026-09-04:
+
+```
+$ gh repo view RadlorInc/video-reviewer --json isPrivate,visibility
+{"isPrivate":false,"visibility":"PUBLIC"}
+```
+
+It was made private the same hour, and renamed to `radlor-ops`.
+
+**What was actually exposed.** No secrets: `.env.local` is gitignored, only `.env.example` is
+tracked, and a scan of every tracked file for JWT-shaped strings, `sb_secret_` and assigned key
+values came back with one hit that was finding #2's own prose *describing* such a scan. What was
+public is the rest: **this file in full** — written on the assumption it was not — plus two real
+Gmail addresses in `handoff.md`, `scripts/rehearse-repoint.mjs` and
+`20260902110000_reviewer_accounts.sql`, the production URL, the Supabase project name, and the
+blast-radius analysis naming exactly which table holds children's age-bands and which public route
+shares the key that reaches it.
+
+⚠️ **Private-again is mitigation, not erasure** — the same sentence finding #2 ends on. Five days
+of history were fetchable by anyone, forks and clones taken in that window are unaffected by the
+change, and search-engine and archive caches are not something a visibility flip reaches.
+
+**The mechanism, which is the point.** Finding #2's rule was *establish visibility before the first
+push*. That rule was written down, kept in the repo, and still produced a wrong answer here —
+because it was satisfied by **reading the repo's own claim about itself** rather than by asking
+GitHub. The claim and the fact were never compared.
+
+> **A repo's visibility is not a fact it can state about itself.** It is one `gh` call, it takes a
+> second, and a file asserting its own confidentiality is worth exactly nothing as evidence — it is
+> the same shape as `$schema` declaring a draft it is not, and as a migration comment saying "it
+> cannot INSERT" while the grant says otherwise. **Ask the system that owns the answer.**
+
+⚠️ And note *when* it surfaced: an unrelated environment scan ran `gh` and printed the visibility
+next to CLAUDE.md's claim, minutes after a push to that remote. Nothing in five days of working in
+this repo had put the two side by side. **A standing assertion with no scheduled re-check is a
+belief, not a control** — so `scripts/check-blast-radius.mjs`, which already prints the exposure
+this repo has decided to accept, should print the answer to `gh repo view --json visibility` beside
+it and fail if it is not `PRIVATE`.

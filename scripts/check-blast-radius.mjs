@@ -23,6 +23,8 @@
  *   SUPABASE_URL=https://<ref>.supabase.co SUPABASE_SERVICE_ROLE_KEY=<service key> \
  *     node scripts/check-blast-radius.mjs
  */
+import { spawnSync } from 'node:child_process'
+
 const base = process.env.SUPABASE_URL
 const key = process.env.SUPABASE_SERVICE_ROLE_KEY
 if (!base || !key) {
@@ -138,4 +140,36 @@ if (fin.ok) {
 } else if (fin.code === 'PGRST205') {
   console.log('\n   (review.subscriptions does not exist yet — the financial trigger has not fired.)')
 }
+
+// ── Trigger 3: this repo's own visibility ───────────────────────────────────────────────────
+/**
+ * ⚠️ EVERYTHING ABOVE — the project ref, the table names, which one holds children's age-bands,
+ * which public route shares the key — is written down in a repo that CLAIMS to be private. On
+ * 2026-09-04 that claim had been false for five days (finding #10) and nothing noticed, because
+ * the only place it was ever checked was the sentence asserting it.
+ *
+ * So it is asked of GitHub here, beside the exposure it is supposed to contain. A standing
+ * assertion with no scheduled re-check is a belief, not a control.
+ *
+ * ⚠️ AND IT FAILS CLOSED. "gh is missing" and "gh is not logged in" must never read as "it is
+ * private" — the same shape as check-config.mjs refusing to treat a schema it could not fetch as
+ * a passing one.
+ */
+const REPO = 'RadlorInc/radlor-ops'
+const gh = spawnSync('gh', ['repo', 'view', REPO, '--json', 'visibility'], { encoding: 'utf8' })
+if (gh.error || gh.status !== 0) {
+  console.log(`\nFAIL — could not ask GitHub whether ${REPO} is private.`)
+  console.log('       That is NOT the same as "it is private". Install/authenticate gh and re-run:')
+  console.log('         gh auth status')
+  process.exit(1)
+}
+const visibility = JSON.parse(gh.stdout).visibility
+if (visibility !== 'PRIVATE') {
+  console.log(`\nFAIL — ${REPO} is ${visibility}. Everything this script just printed is public, and`)
+  console.log('       so is docs/security-findings.md. Finding #10 — the fix is one command:')
+  console.log(`         gh repo edit ${REPO} --visibility private`)
+  console.log('       ⚠️ And private-again is mitigation, not erasure: the history was already out.')
+  process.exit(1)
+}
+console.log(`\n   (${REPO} is PRIVATE — asked of GitHub, not of CLAUDE.md.)`)
 process.exit(0)
