@@ -153,3 +153,41 @@ test('a TESTER cannot move a status; an ADMIN can — and the row proves it', as
  * What IS testable here, and is tested above, is the app's half: a tester gets no status control and
  * the route refuses their PATCH with a 404 while an admin's succeeds.
  */
+
+/**
+ * ⚠️ BOTH HALVES, BECAUSE EITHER ONE ALONE IS THE WRONG FEATURE. A list that suggests nothing is
+ * the free-text field we are replacing; a list that only ACCEPTS its own options is a restriction
+ * nobody asked for, and the first person with a genuinely new area either gets stuck or hides it
+ * in the description where nothing can group it.
+ *
+ * ⚠️ THE PROPERTY THAT MATTERS MOST IS NOT ASSERTED HERE, AND CANNOT BE. "The suggestions include
+ * values from rows this tester cannot read" is the whole reason the list is built with the service
+ * key — and PGlite runs as one superuser with no policies, so offline the tester sees every issue
+ * anyway and a list of everyone's values is indistinguishable from a list of their own. An
+ * assertion here would go green on a build where the vocabulary was scoped to the caller, which is
+ * the exact bug. It is in the handoff's unverified list, where the other RLS-shaped facts live.
+ */
+test('the area field suggests what other people already typed, and still takes a new value', async ({ page, request }) => {
+  await signIn(page, 'tester')
+  await page.goto('/tester')
+
+  const areaOptions = () =>
+    page.locator('#area-options option').evaluateAll((os) => os.map((o) => (o as HTMLOptionElement).value))
+  expect(await areaOptions()).toContain('Smallest first game')
+
+  // ⚠️ And a value that is in no list still files. This is the half that stops the fix becoming a
+  // cage: `type` gets one nobody has used.
+  await page.getByTestId('issue-description').fill('a brand new kind of problem')
+  await page.getByTestId('issue-area').fill('Weighing scales')
+  await page.getByTestId('issue-type').fill('measurement')
+  await page.getByTestId('issue-submit').click()
+  await expect(page.getByTestId('issue-list')).toContainText('a brand new kind of problem')
+
+  const [row] = await rows(request, 'issues', '&description=eq.a%20brand%20new%20kind%20of%20problem')
+  expect(row.area).toBe('Weighing scales')
+  expect(row.type).toBe('measurement')
+
+  // And the new value joins the list for whoever files next — that is the convergence working.
+  await page.reload()
+  expect(await areaOptions()).toContain('Weighing scales')
+})

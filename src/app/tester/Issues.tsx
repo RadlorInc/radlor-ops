@@ -25,9 +25,22 @@ export default function Issues({
   initial,
   canTriage,
   names = {},
+  vocabulary = { areas: [], types: [] },
 }: {
   initial: Issue[]
   canTriage: boolean
+  /**
+   * ⚠️ SUGGESTIONS, NOT A WHITELIST. `<datalist>` shows what people have already typed and still
+   * accepts anything — which is the whole ask: make the existing value the EASY choice, not the
+   * only one. A `<select>` here would be a restriction, and the first person with a genuinely new
+   * area would be stuck or would put it in the description where nothing can group it.
+   *
+   * ⚠️ AND NOTHING REWRITES WHAT WAS TYPED. `measurrement` stays `measurrement` if somebody types
+   * it past the suggestion; silently correcting a person's data teaches them the tool edits what
+   * they wrote, which is a worse property than a typo. The list is how it stops happening, not a
+   * cleanup that runs after it does.
+   */
+  vocabulary?: { areas: string[]; types: string[] }
   /** user_id → name, for the triager. A tester only ever sees their own issues, so they would be
    *  reading their own name back on every row. */
   names?: Record<string, string>
@@ -86,18 +99,32 @@ export default function Issues({
         <div className="addrow">
           <input
             type="text"
-            placeholder="area (e.g. Nest game)"
+            list="area-options"
+            autoComplete="off"
+            placeholder={vocabulary.areas.length ? 'area — pick or type' : 'area (e.g. Nest game)'}
             value={form.area}
             onChange={(e) => setForm({ ...form, area: e.target.value })}
             data-testid="issue-area"
           />
+          <datalist id="area-options" data-testid="area-options">
+            {vocabulary.areas.map((v) => (
+              <option key={v} value={v} />
+            ))}
+          </datalist>
           <input
             type="text"
-            placeholder="type (e.g. wording)"
+            list="type-options"
+            autoComplete="off"
+            placeholder={vocabulary.types.length ? 'type — pick or type' : 'type (e.g. wording)'}
             value={form.type}
             onChange={(e) => setForm({ ...form, type: e.target.value })}
             data-testid="issue-type"
           />
+          <datalist id="type-options" data-testid="type-options">
+            {vocabulary.types.map((v) => (
+              <option key={v} value={v} />
+            ))}
+          </datalist>
           <input
             type="text"
             placeholder="chapter"
