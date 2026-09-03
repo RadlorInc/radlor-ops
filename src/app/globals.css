@@ -428,6 +428,17 @@ li[data-status='in_progress'] .chip { background: var(--info-bg); border-color: 
 }
 .chip.waiting:hover { background: var(--warn-bg); border-color: var(--warn-line); }
 
+/* The "Send these" block: one row per person, each with its own Copy. A single textarea was what
+   this used to be, and copying one person's line out of it by hand is exactly the step where the
+   wrong link gets sent to the wrong person. */
+ol.todos.linklist li { flex-wrap: wrap; gap: 8px 12px; }
+.linkwho { font-weight: 600; min-width: 190px; }
+.linkurl {
+  font-family: var(--font-mono), monospace; font-size: 13px; color: var(--muted);
+  background: var(--panel-2); border: 1px solid var(--line); border-radius: 8px;
+  padding: 3px 8px; overflow-wrap: anywhere;
+}
+
 .area {
   font-size: 13px; color: var(--text); background: var(--panel-2); border: 1px solid transparent;
   border-radius: 999px; padding: 3px 10px; white-space: nowrap;

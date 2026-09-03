@@ -1,7 +1,7 @@
 'use client'
 
 import { useRouter } from 'next/navigation'
-import { useState } from 'react'
+import { useMemo, useState, useSyncExternalStore } from 'react'
 
 type Person = {
   user_id: string
@@ -23,7 +23,57 @@ function expiry(days?: number): string {
   if (days === undefined) return 'link expires soon'
   if (days <= 1) return 'link expires today'
   if (days === 2) return 'link expires tomorrow'
-  return `link expires in ${days - 1} days`
+  // ⚠️ NO `- 1` HERE. It was there to undo the `Math.ceil` on the server and undid one day too
+  // many: a link made a second ago has 6.99 days left, ceil is 7, and the row said "6 days".
+  // Under-reporting an expiry is the direction that hurts — somebody plans around the wrong day.
+  return `link expires in ${days} days`
+}
+
+/**
+ * ⚠️ THE LINKS LIVE HERE BECAUSE THEY CANNOT BE FETCHED AGAIN. The table holds sha256 of each
+ * token and nothing else, so this response is the only copy that will ever exist. That made two
+ * ordinary things destructive:
+ *
+ *   • `router.refresh()`, which this component calls to update the list below, REMOUNTS it and
+ *     empties its state. Three links vanished between the fetch resolving and the list redrawing —
+ *     with the accounts already created, so pressing the button again did nothing but supersede
+ *     links nobody had seen.
+ *   • an accidental reload, or a click on another tab, did the same thing more slowly.
+ *
+ * `sessionStorage` survives both: it is per-tab, dies with the tab, and never leaves this origin.
+ * Yes, that is a bearer credential in browser storage — for the admin who is looking at it on
+ * screen anyway, in a page with a strict CSP and no third-party script. *Done — hide these* wipes
+ * it, and the honest alternative was losing people's links to a re-render.
+ */
+const STORE = 'radlor-ops:last-links'
+
+/**
+ * ⚠️ `useSyncExternalStore`, NOT `useState` + `useEffect`. Restoring in an effect is a setState in
+ * an effect, which the React Compiler's lint rejects — and it is right to: the value exists before
+ * the first paint, so reading it as an external store renders it once instead of rendering empty
+ * and then correcting. It also gets the hydration case for free — the server snapshot is `'[]'`,
+ * so the markup matches and the real value arrives on the client's first read.
+ */
+const listeners = new Set<() => void>()
+const subscribe = (fn: () => void) => {
+  listeners.add(fn)
+  return () => void listeners.delete(fn)
+}
+/** The RAW string, because `getSnapshot` must return something stable across calls — parsing here
+ *  would hand React a new array every time and spin. The parse happens in a `useMemo` below. */
+function readStore(): string {
+  try {
+    return sessionStorage.getItem(STORE) ?? '[]'
+  } catch {
+    return '[]' // private mode, or storage disabled: showing nothing is correct
+  }
+}
+function writeStore(links: Made[] | null) {
+  try {
+    if (links) sessionStorage.setItem(STORE, JSON.stringify(links))
+    else sessionStorage.removeItem(STORE)
+  } catch {}
+  for (const fn of listeners) fn()
 }
 
 /**
@@ -43,10 +93,29 @@ export default function People({ initial }: { initial: Person[] }) {
   const [emails, setEmails] = useState('')
   const [role, setRole] = useState('tester')
   const [busy, setBusy] = useState(false)
-  const [made, setMade] = useState<Made[]>([])
+  const madeJson = useSyncExternalStore(subscribe, readStore, () => '[]')
+  const made = useMemo<Made[]>(() => {
+    try {
+      return JSON.parse(madeJson) as Made[]
+    } catch {
+      return []
+    }
+  }, [madeJson])
   const [skipped, setSkipped] = useState<Skipped[]>([])
   const [error, setError] = useState<string | null>(null)
-  const [copied, setCopied] = useState(false)
+  const [copied, setCopied] = useState<string | null>(null)
+
+  function forget() {
+    setCopied(null)
+    writeStore(null)
+  }
+
+  function copy(text: string, key: string) {
+    navigator.clipboard.writeText(text).then(
+      () => setCopied(key),
+      () => setCopied(null),
+    )
+  }
 
   // ⚠️ The origin comes from the BROWSER, not from the server: a link copied out of a preview
   // deployment then points at that deployment instead of at whatever host the server guessed.
@@ -56,7 +125,7 @@ export default function People({ initial }: { initial: Person[] }) {
   async function post(body: unknown) {
     setBusy(true)
     setError(null)
-    setCopied(false)
+    setCopied(null)
     try {
       const res = await fetch('/api/admin/links', {
         method: 'POST',
@@ -65,7 +134,7 @@ export default function People({ initial }: { initial: Person[] }) {
       })
       if (!res.ok) throw new Error('That did not work. Try again.')
       const out = (await res.json()) as { links: Made[]; skipped: Skipped[] }
-      setMade(out.links)
+      writeStore(out.links)
       setSkipped(out.skipped)
       router.refresh()
     } catch (e) {
@@ -123,16 +192,31 @@ export default function People({ initial }: { initial: Person[] }) {
         <div className="card filecard" style={{ marginTop: 16 }}>
           <h2>Send these</h2>
           <p className="help">
-            One line per person. Each link works once and stops working in seven days. This is the only
-            time they can be read — copy them now.
+            One line per person — send each of them their own. Every link works once and stops working
+            in seven days. ⚠️ This is the only time they can be read: only their fingerprint is stored,
+            so nothing can show them to you again. Lost one? <em>New link</em> beside that person makes
+            a fresh one and kills the old.
           </p>
-          <textarea readOnly rows={Math.min(made.length + 1, 12)} value={block} data-testid="links-out" style={{ width: '100%', fontFamily: 'monospace' }} />
+          <ol className="todos linklist" data-testid="links-out">
+            {made.map((l) => (
+              <li key={l.path} data-testid="link-row">
+                <span className="linkwho">{l.email}</span>
+                <code className="linkurl">
+                  {origin}
+                  {l.path}
+                </code>
+                <button className="linky" data-testid="copy-one" onClick={() => copy(`${origin}${l.path}`, l.path)}>
+                  {copied === l.path ? 'Copied' : 'Copy'}
+                </button>
+              </li>
+            ))}
+          </ol>
           <div className="actions">
-            <button
-              onClick={() => navigator.clipboard.writeText(block).then(() => setCopied(true), () => setCopied(false))}
-              data-testid="copy-links"
-            >
-              {copied ? 'Copied' : 'Copy all'}
+            <button onClick={() => copy(block, 'all')} data-testid="copy-links">
+              {copied === 'all' ? 'Copied' : made.length === 1 ? 'Copy the line' : 'Copy all lines'}
+            </button>
+            <button className="linky" onClick={forget} data-testid="links-done">
+              Done — hide these
             </button>
           </div>
         </div>
