@@ -56,7 +56,7 @@ until a human edits *API → Exposed schemas*, which no migration can reach.
 — **never delete either.** Throwaway accounts for checks use `@example.com` and are deleted against
 an explicit allow-list, never "everything except the ones I remember".
 
-## Accounts by link — built 2026-09-04, NOT YET APPLIED LIVE
+## Accounts by link — built 2026-09-04, MIGRATION APPLIED, NOT YET DEPLOYED
 
 **What is live on Vercel right now** (`1d74b49`) is the *email* version: an *Invite someone* form
 calling `/auth/v1/invite`, plus `/forgot`, `/auth/confirm` and `/set-password`. ⚠️ **It does not
@@ -103,16 +103,37 @@ have failed live. `rest()` now decides on the body's emptiness, and the fake sen
 commit first): neuter the supersede write → the "new link kills the old" spec goes red on its own
 `expect`; neuter `spendInviteLink` → the single-use assertion goes red. Nothing else moves.
 
+**Done on 2026-09-04:** the migration is applied to `radlor-site` (through the MCP connector, which
+records it — never `supabase db push` against this project, SETUP.md:59). Grants read back off the
+live database, not assumed from the file:
+
+| | select | insert | update | delete |
+|---|---|---|---|---|
+| `service_role` | t | t | **t** | f |
+| `anon` | f | f | f | f |
+| `authenticated` | f | f | f | f |
+
+RLS on, **0 policies**, 0 rows. `scripts/check-anon-locked-out.mjs` covers the table and passes —
+`service_role` reaches it (HTTP 200, the positive control) and `anon` is refused at the same
+address with `42501`, so the denial is a denial and not a wrong address.
+
+⚠️ `update` being **t** is the one to re-check after any permission work: default privileges only
+hand over select+insert, so without the explicit grant a link would never be spent — every link
+would stay alive for ever and the offline suite would stay green through it (PGlite is one
+superuser; it cannot see this).
+
 **Still to do, in this order:**
 
-1. Apply the migration to the live project, then **read the grants back** with
-   `has_table_privilege('service_role', 'review.invite_links', …)` — select/insert/update true,
-   delete false — and re-run `node --env-file=.env.local scripts/check-anon-locked-out.mjs`, which
-   now covers the table.
-2. Push. Confirm from the *running deployment* — not the dashboard — that `/api/admin/links`
-   answers as the admin (the old build 404s it for everyone), then make a link for a throwaway
-   `@example.com` address and open it.
-3. Delete the Supabase *Invite user* / *Reset password* template edits if any were made. There is
+1. Merge `accounts-by-link` into `main` and push. The commit is `13c7a24`; it is deliberately NOT
+   on `main`, because a push to `main` deploys and this code reads a table that only existed from
+   this afternoon.
+2. Confirm from the *running deployment* — not the dashboard — that `/api/admin/links` answers as
+   the admin (the old build 404s it for everyone), then make a link for a throwaway `@example.com`
+   address, open it, and delete that account afterwards against the allow-list.
+3. **Then** `kuwarirafi@gmail.com`: it already has an account, so it goes through *New link* beside
+   their name, **not** the paste box — the paste box will (correctly) answer "already has an
+   account" and create nothing.
+4. Delete the Supabase *Invite user* / *Reset password* template edits if any were made. There is
    no mailer in this design.
 
 ## ⚠️ Waiting on Rafi — one thing
