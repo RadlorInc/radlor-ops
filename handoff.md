@@ -71,6 +71,34 @@ on its own, but "usually" is not a check: open *Project → Settings → Git* an
 `RadlorInc/radlor-ops`. A stale connection does not error — it just quietly stops deploying, and
 the first symptom is a push that changes nothing.
 
+⚠️⚠️ **THAT IS NO LONGER A WARNING — IT HAPPENED. Checked 2026-09-04 01:03 IST:** production still
+serves `<title>Radlor video review</title>`, twenty minutes after `7c30c24` (which changes exactly
+that string) was pushed. `13c7a24`'s login copy — *"New here? Use the link you were given."* — IS
+live, so the pipeline was working and stopped somewhere after it. Earlier deploys in this project
+landed in under two minutes, so this is not slowness. **`7c30c24` is on GitHub and is not in
+production.**
+
+The tell was the one the paragraph above predicted: nothing errored anywhere. `git push` reported
+success, GitHub holds the commit, the site serves 200s, and `npm run check` is green. The only
+thing that says otherwise is asking production what its title actually is — the same shape as
+`/api/waitlist` answering 303 whether or not it worked, and the same fix: **ask the running
+deployment for a value the change moves**, not the dashboard, not git.
+
+**Fix, in this order** (all of it is dashboard work — the Vercel MCP connector cannot see this
+project at all: `get_project` 404s on the id in `.vercel/project.json` and `list_deployments`
+answers 403, so it lives outside whatever that token is scoped to):
+
+1. *Settings → Git* — reconnect to `RadlorInc/radlor-ops`.
+2. *Settings → General → Project Name* → `radlor-ops`. ⚠️ The domain changes here; do it before
+   any real link goes out, not after.
+3. *Deployments → latest → Redeploy*, so `7c30c24` actually builds.
+4. Confirm from the running deployment that the tab now says **Radlor Ops** — that string is the
+   whole point of the commit, so it is the value to check.
+
+⚠️ And `.vercel/project.json` already says `"projectName": "radlor-ops"` while Vercel 404s the id
+beside it. **An artifact's self-description is a claim** (CLAUDE.md) — that file is not evidence
+the rename happened, and it was not treated as any.
+
 Nothing else needs the name: Supabase's Site URL and redirect URLs play no part in this design
 (no mail is sent), and `next.config.ts` derives its media origin from `SUPABASE_URL`, not from the
 app's own host.
