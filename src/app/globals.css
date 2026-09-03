@@ -17,22 +17,26 @@
 
 :root {
   /* Surfaces, darkest to lightest. */
-  --bg: #f7f5f0;
+  /* Cool neutrals, because the accent is the logo's cyan and a warm ground fought it. */
+  --bg: #f4f7f9;
   --panel: #ffffff;
-  --panel-2: #f1eee7;
-  --line: #e3dfd6;
-  --line-strong: #c9c3b6;
+  --panel-2: #e9eff3;
+  --line: #d9e1e7;
+  --line-strong: #b9c5cf;
 
   /* Text. ⚠️ --muted is #a5aac0, not the #9599ad it used to be: the old value fell under 4.5:1
      against --panel-2, which is exactly where the pills and chips sit. Checked against the
      lightest surface it is ever used on, not against --bg where everything passes. */
-  --text: #1f2430;
-  --muted: #5b6270;
+  --text: #141a21;
+  --muted: #55636f;
 
   /* One accent for interaction, one for attention. Blue carries data, amber carries urgency —
      they are never swapped, so "amber" always means "this needs you". */
-  --accent: #245dcf;
-  --accent-hover: #1a4aa8;
+  /* ⚠️ THE LOGO'S CYAN, DARKENED UNTIL WHITE TEXT CLEARS 4.5:1 ON IT. The mark glows at roughly
+     #2fd0f5, which is a light on black and cannot carry text on white — so this is the same hue
+     taken down to where it can. Rafi's call on 2026-09-03: the scheme follows the logo. */
+  --accent: #0b6e8f;
+  --accent-hover: #085874;
   --accent-ink: #ffffff;
   --attention: #b45309;
 
@@ -40,7 +44,7 @@
   --ok-bg: #e6f5ea;      --ok-line: #b7e0c2;   --ok-ink: #1a6b3c;
   --warn-bg: #fff3d6;    --warn-line: #f0d59a; --warn-ink: #7a4b00;
   --bad-bg: #fdeaea;     --bad-line: #f3b9b9;  --bad-ink: #a11d1d;
-  --info-bg: #e9f0fd;    --info-line: #c2d4f7; --info-ink: #1e3f8a;
+  --info-bg: #e3f4fa;    --info-line: #b3e0ef; --info-ink: #0b5a76;
 
   --radius: 10px;
   --radius-sm: 8px;
@@ -406,7 +410,10 @@ ol.todos .strike { color: var(--muted); text-decoration: line-through; }
   cursor: pointer; white-space: nowrap;
   transition: background-color var(--t) ease, border-color var(--t) ease;
 }
-.chip:hover { border-color: var(--line-strong); }
+/* Chips are <button>s. Without these the global button:hover / :disabled:hover paint a chip solid
+   accent under the cursor — which is what a filter chip did. A chip's hover is a border, not a fill. */
+.chip:hover { border-color: var(--line-strong); background: var(--panel-2); }
+.chip:disabled:hover { background: var(--panel-2); }
 li[data-status='done'] .chip { background: var(--ok-bg); border-color: var(--ok-line); color: var(--ok-ink); }
 li[data-status='in_progress'] .chip { background: var(--info-bg); border-color: var(--info-line); color: var(--info-ink); }
 
