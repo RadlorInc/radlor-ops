@@ -26,7 +26,9 @@ reviewer has approved. One "needs changes" is not cleared, however many approval
 
 ## Where it is right now
 
-**Live** at `https://video-reviewer-liard.vercel.app`, from **`RadlorInc/radlor-ops`** (PRIVATE).
+**Live** at **`https://ops.radlor.com`**, from **`RadlorInc/radlor-ops`** (PRIVATE).
+`video-reviewer-liard.vercel.app` still answers as the project's generated domain; **use the
+custom one for anything a person sees**, and especially for making `/join` links.
 Vercel deploys on push to `main`.
 
 ⚠️ **A push is not a deploy — confirm it.** On 2026-09-03 a build **failed** (a `"//"` key in
@@ -52,12 +54,28 @@ namespace, not a boundary; see [docs/security-findings.md](docs/security-finding
 ⚠️ **The schema is still `review`, not `ops`.** A rename 404s the live tool from the moment it runs
 until a human edits *API → Exposed schemas*, which no migration can reach.
 
-## ⚠️ The Vercel project is still called `video-reviewer` — and renaming it breaks live links
+## The Vercel project is still called `video-reviewer` — and since 2026-09-04 that no longer matters
 
 The app was renamed to **Radlor Ops** on 2026-09-04: browser title, `package.json`, README, and the
 GitHub repo (`RadlorInc/video-reviewer` → `RadlorInc/radlor-ops`). **The Vercel project and its
 `video-reviewer-liard.vercel.app` domain were deliberately left alone.** It is a dashboard job —
 *Project → Settings → General → Project Name* — and nothing in this repo can do it.
+
+⚠️⚠️ **THAT RISK IS GONE, AND THE REASON IS WORTH KEEPING.** `ops.radlor.com` was added on
+2026-09-04 (GoDaddy holds `radlor.com`'s DNS — `ns11/ns12.domaincontrol.com` — so it is a plain
+CNAME there to the target Vercel printed for THIS project; verified as
+`097fda5c5f8bccec.vercel-dns-017.com`, deliberately not the `19e7809ba6b0ec76…` that `www` uses,
+which belongs to the marketing site). A link built from `location.origin` on a custom domain does
+not care what the Vercel project is called, so **renaming the project is now cosmetic and safe at
+any time**. The fix for "renaming breaks the links" was not to schedule the rename carefully — it
+was to stop the links depending on the generated name at all.
+
+Read back off the running deployment, not the dashboard: `ops.radlor.com` serves `Radlor Ops` over
+https with `/api/health` → `{"status":"ok","auth_configured":true,"region":"pdx1"}` and
+`/join/<junk>` → 404; `radlor.com` still serves the marketing site, which is the neighbour a wrong
+DNS record would have taken down.
+
+The paragraph below is kept for the mechanism, and still applies to any future domain move:
 
 ⚠️ **Do it only while no `/join/<token>` link is outstanding.** Those links are built from
 `location.origin` at the moment the admin copies them, so every link already forwarded to a tester
