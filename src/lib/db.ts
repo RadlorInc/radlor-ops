@@ -91,9 +91,16 @@ async function rest<T>(label: string, path: string, init?: RequestInit): Promise
     const detail = (await res.text().catch(() => '')).slice(0, 300)
     throw new Error(`${label} failed ${res.status}: ${detail}`)
   }
-  // `Prefer: return=minimal` answers 204 with no body, and `res.json()` throws on empty input.
-  if (res.status === 204) return null as T
-  return (await res.json()) as T
+  /**
+   * ⚠️ AN EMPTY BODY IS NOT A 204-ONLY CASE, AND ASSUMING IT WAS WOULD HAVE SHIPPED BROKEN.
+   * A PATCH with `Prefer: return=minimal` answers 204; a POST with the same header answers **201
+   * with Content-Length: 0**, and `res.json()` throws `Unexpected end of JSON input` on that. The
+   * offline harness answered `null` — valid JSON — so every minimal insert passed here and would
+   * have failed in production. Read the text and decide on its emptiness, which is the property
+   * that actually matters.
+   */
+  const text = await res.text()
+  return (text ? JSON.parse(text) : null) as T
 }
 
 /** The token → reviewer resolution. Revoked and unknown are BOTH `null` — the caller must not be
@@ -307,39 +314,118 @@ export const allAssignments = cached(allAssignmentsUncached, TAGS.assignments, '
 export const allReviewers = cached(allReviewersUncached, TAGS.reviewers, 'all-reviewers')
 
 /**
- * Creates the Supabase Auth user and has Supabase email them the invite link. Service key only —
- * `/auth/v1/invite` is the admin API, and `name` / `role` ride along as user metadata so the
- * email template can greet them. ⚠️ The profile row is NOT written here; `insertProfile` is a
- * separate call so a caller can tell "the user exists but has no role" from "nothing happened".
+ * Creates the Supabase Auth user from an EMAIL ALONE — no password is set here, and none is ever
+ * typed by the admin. The person chooses theirs through their link (`/join/<token>`), so there is
+ * nothing to hand over and nothing to leak in a forward.
  *
- * ⚠️ WHETHER THE EMAIL ARRIVES IS NOT SOMETHING THIS CALL CAN SEE. Supabase answers 200 when the
- * user is created; delivery depends on the project's SMTP settings, which no API here can read.
- * On the built-in mailer only addresses on the Supabase team receive anything.
+ * ⚠️ NO EMAIL IS SENT BY ANYONE, which is the whole design (Rafi, 2026-09-03: "meko email nahi
+ * bhejna"). The admin API, so the service key; `email_confirm: true` is what stops GoTrue queuing
+ * a confirmation mail. Until the link is opened the account has no password at all, so it cannot
+ * be signed into — the link is the only door, and it is single use.
  */
-export async function inviteUser(email: string, data: { name: string; role: string }): Promise<{ id: string }> {
+export async function createUser(email: string, name: string): Promise<{ id: string }> {
   const { url, key } = assertConfigured()
-  const res = await fetch(`${url}/auth/v1/invite`, {
+  const res = await fetch(`${url}/auth/v1/admin/users`, {
     method: 'POST',
     cache: 'no-store',
     headers: { apikey: key, Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email, data }),
+    body: JSON.stringify({ email, email_confirm: true, user_metadata: { name } }),
   })
   if (res.status === 422) throw new Error('exists')
   if (!res.ok) {
     const detail = (await res.text().catch(() => '')).slice(0, 300)
-    throw new Error(`invite failed ${res.status}: ${detail}`)
+    throw new Error(`create user failed ${res.status}: ${detail}`)
   }
   const u = (await res.json()) as { id?: string }
-  if (!u.id) throw new Error('invite returned no user id')
+  if (!u.id) throw new Error('create user returned no id')
   return { id: u.id }
 }
 
+/** Sets somebody's password from the server — the second half of every link. */
+export async function setUserPassword(userId: string, password: string): Promise<void> {
+  const { url, key } = assertConfigured()
+  const res = await fetch(`${url}/auth/v1/admin/users/${encodeURIComponent(userId)}`, {
+    method: 'PUT',
+    cache: 'no-store',
+    headers: { apikey: key, Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ password }),
+  })
+  if (!res.ok) {
+    const detail = (await res.text().catch(() => '')).slice(0, 300)
+    throw new Error(`set password failed ${res.status}: ${detail}`)
+  }
+}
+
 /** The role row. Service key: `profiles` is insertable by `service_role` only, on purpose — an
- *  admin's own session cannot hand out roles, only this route running on the server can. */
+ *  admin's own session cannot hand out roles, only a route running on the server can. */
 export function insertProfile(row: { user_id: string; role: 'admin' | 'tester' | 'reviewer'; name: string }): Promise<null> {
   return rest<null>('profile insert', 'profiles', {
     method: 'POST',
     headers: { Prefer: 'return=minimal' },
     body: JSON.stringify(row),
   })
+}
+
+/**
+ * ONE PERSON'S LINK TO CHOOSE THEIR PASSWORD. ⚠️ THE TABLE HOLDS A HASH, NEVER THE TOKEN — the
+ * raw token lives only in the URL the admin copied, so a dump of this table is not a way in.
+ *
+ * Single use, and re-issuing is what revoking looks like: `newInviteLink` spends every unused link
+ * the person already has before writing the new one, so the line the admin has just copied is the
+ * only live one.
+ */
+export type InviteLink = { id: string; user_id: string; expires_at: string; used_at: string | null }
+const LINK_COLS = 'id,user_id,expires_at,used_at'
+
+/** Spends every unused link for one person. See the note above: this IS the revoke. */
+function spendUnusedLinks(userId: string): Promise<null> {
+  return rest<null>('link supersede', `invite_links?user_id=eq.${userId}&used_at=is.null`, {
+    method: 'PATCH',
+    headers: { Prefer: 'return=minimal' },
+    body: JSON.stringify({ used_at: new Date().toISOString() }),
+  })
+}
+
+export async function newInviteLink(userId: string, tokenHash: string, days: number): Promise<void> {
+  await spendUnusedLinks(userId)
+  await rest<null>('link insert', 'invite_links', {
+    method: 'POST',
+    headers: { Prefer: 'return=minimal' },
+    body: JSON.stringify({
+      token_hash: tokenHash,
+      user_id: userId,
+      expires_at: new Date(Date.now() + days * 86_400_000).toISOString(),
+    }),
+  })
+}
+
+/**
+ * A link that can still be used, or null. Spent, superseded, expired and unknown are all the same
+ * null, so the page can answer all four with the same 404 — a different answer for "expired" tells
+ * whoever is holding it that the link was once real.
+ */
+export async function usableInviteLink(tokenHash: string): Promise<InviteLink | null> {
+  const rows = await rest<InviteLink[]>('link lookup', `invite_links?select=${LINK_COLS}&token_hash=eq.${tokenHash}&limit=1`)
+  const l = rows[0]
+  if (!l || l.used_at || Date.parse(l.expires_at) <= Date.now()) return null
+  return l
+}
+
+export function spendInviteLink(id: string): Promise<null> {
+  return rest<null>('link use', `invite_links?id=eq.${id}`, {
+    method: 'PATCH',
+    headers: { Prefer: 'return=minimal' },
+    body: JSON.stringify({ used_at: new Date().toISOString() }),
+  })
+}
+
+/** The address a link belongs to, so the join page can say whose account it is setting up. */
+export async function userEmail(userId: string): Promise<string> {
+  const { url, key } = assertConfigured()
+  const res = await fetch(`${url}/auth/v1/admin/users/${encodeURIComponent(userId)}`, {
+    cache: 'no-store',
+    headers: { apikey: key, Authorization: `Bearer ${key}` },
+  })
+  if (!res.ok) throw new Error(`read user failed ${res.status}`)
+  return ((await res.json()) as { email?: string }).email ?? ''
 }

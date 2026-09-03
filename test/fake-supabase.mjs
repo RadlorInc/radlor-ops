@@ -61,7 +61,7 @@ const HERE = dirname(fileURLToPath(import.meta.url))
 const ROOT = join(HERE, '..')
 const PORT = Number(process.env.FAKE_SUPABASE_PORT || 54329)
 const SECRET = 'fake-storage-secret'
-const TABLES = new Set(['reviewers', 'videos', 'video_reviewers', 'notes', 'profiles', 'subscriptions', 'todos', 'issues', 'testing_sessions'])
+const TABLES = new Set(['reviewers', 'videos', 'video_reviewers', 'notes', 'profiles', 'subscriptions', 'todos', 'issues', 'testing_sessions', 'invite_links'])
 /** These tables live in `review`, not `public` — the shared project's `public` belongs to the
  *  marketing site. The shim ENFORCES the profile header for the same reason real PostgREST does:
  *  without it the app would be asking for `public.reviewers`, which does not exist. If this were
@@ -205,15 +205,8 @@ const ACCOUNTS = {
 const ACCESS_TTL = Number(process.env.FAKE_ACCESS_TTL || 3600)
 const refreshTokens = new Map()
 
-/** Harness-only: the mailer's outbox and the one-time links it would have sent. */
+/** The service key, spelled the same way `playwright.config.ts` hands it to the app. */
 const SERVICE_KEY = 'fake-service-role-key-for-the-offline-harness'
-const pendingLinks = new Map()
-const outbox = []
-function mintLink(id, email, type) {
-  const hash = `th_${Math.random().toString(36).slice(2)}${Math.random().toString(36).slice(2)}`
-  pendingLinks.set(hash, { id, email, type })
-  outbox.push({ to: email, type, link: `/auth/confirm?token_hash=${hash}&type=${type}` })
-}
 
 /** ⚠️ `jti` is not decoration. Without it two tokens minted in the same SECOND are byte-identical,
  *  because `exp` has second resolution and nothing else varies — so a test asserting "the token
@@ -267,49 +260,40 @@ const server = createServer(async (req, res) => {
       return json(res, 200, { id: p.sub, email: p.email })
     }
 
-    // ---- Auth: invite, reset, the emailed link, set password -----------------------------
-    // The stand-in for Supabase's mailer is `outbox`: every link it would have emailed is pushed
-    // there, and `GET /_outbox` (harness only, never in src/) lets a spec read it. The link is a
-    // PATH — the spec opens it against the app's own baseURL, the way a person would.
-    if (url.pathname === '/auth/v1/invite' && req.method === 'POST') {
-      // ⚠️ The service key, or nothing. Real GoTrue refuses an invite from the anon key, and the
-      // route under test must be holding the right key for the mailer to have anyone to write to.
+    // ---- Auth: the ADMIN API, which is the only way an account is made now ---------------
+    // ⚠️ NO MAILER STAND-IN ANY MORE, because there is no mailer: `/auth/v1/invite`, `/recover`,
+    // `/verify` and the `_outbox` are gone with the emailed-link design they served. An account is
+    // created here with NO PASSWORD and reached through a link the admin copies out of the app.
+    // ⚠️ SERVICE KEY OR 401 ON ALL THREE. Real GoTrue refuses the admin API to the anon key, and a
+    // route that reached it with the wrong key must fail here too — otherwise the harness would
+    // pass a build whose account creation is unauthenticated in production.
+    const admin = url.pathname.match(/^\/auth\/v1\/admin\/users(?:\/([^/]+))?$/)
+    if (admin) {
       if ((req.headers.authorization || '') !== `Bearer ${SERVICE_KEY}`) return json(res, 401, { message: 'service role required' })
-      const body = await readBody(req)
-      const email = String(body.email || '').toLowerCase()
-      if (!email) return json(res, 422, { msg: 'email required' })
-      if (ACCOUNTS[email]) return json(res, 422, { msg: 'A user with this email address has already been registered' })
-      const id = globalThis.crypto.randomUUID()
-      ACCOUNTS[email] = { password: null, id } // no password until the link is opened and one is chosen
-      await db.query('insert into auth.users (id, email) values ($1, $2)', [id, email])
-      mintLink(id, email, 'invite')
-      return json(res, 200, { id, email, user_metadata: body.data ?? {} })
+      const id = admin[1]
+      if (!id && req.method === 'POST') {
+        const body = await readBody(req)
+        const email = String(body.email || '').toLowerCase()
+        if (!email) return json(res, 422, { msg: 'email required' })
+        if (ACCOUNTS[email]) return json(res, 422, { msg: 'A user with this email address has already been registered' })
+        const newId = globalThis.crypto.randomUUID()
+        // ⚠️ `password: null` is the point of the whole design: the account exists and CANNOT be
+        // signed into until somebody sets one through their link.
+        ACCOUNTS[email] = { password: null, id: newId }
+        await db.query('insert into auth.users (id, email) values ($1, $2)', [newId, email])
+        return json(res, 200, { id: newId, email, user_metadata: body.user_metadata ?? {} })
+      }
+      const entry = id && Object.entries(ACCOUNTS).find(([, a]) => a.id === id)
+      if (!entry) return json(res, 404, { message: 'no such user' })
+      const [email, acct] = entry
+      if (req.method === 'GET') return json(res, 200, { id, email })
+      if (req.method === 'PUT') {
+        const body = await readBody(req)
+        if (typeof body.password !== 'string' || body.password.length < 6) return json(res, 422, { msg: 'Password should be at least 6 characters' })
+        acct.password = body.password
+        return json(res, 200, { id, email })
+      }
     }
-    if (url.pathname === '/auth/v1/recover' && req.method === 'POST') {
-      const body = await readBody(req)
-      const email = String(body.email || '').toLowerCase()
-      const acct = ACCOUNTS[email]
-      if (acct) mintLink(acct.id, email, 'recovery')
-      return json(res, 200, {}) // same answer for an unknown address, like the real thing
-    }
-    if (url.pathname === '/auth/v1/verify' && req.method === 'POST') {
-      const body = await readBody(req)
-      const p = pendingLinks.get(String(body.token_hash))
-      if (!p || p.type !== body.type) return json(res, 403, { error: 'access_denied', error_description: 'Email link is invalid or has expired' })
-      pendingLinks.delete(String(body.token_hash)) // single use
-      return json(res, 200, issue(p.id, p.email))
-    }
-    if (url.pathname === '/auth/v1/user' && req.method === 'PUT') {
-      const p = readAccess((req.headers.authorization || '').replace(/^Bearer /, ''))
-      if (!p) return json(res, 401, { message: 'invalid or expired token' })
-      const body = await readBody(req)
-      const acct = ACCOUNTS[p.email]
-      if (!acct) return json(res, 404, { message: 'no such user' })
-      if (typeof body.password !== 'string' || body.password.length < 6) return json(res, 422, { msg: 'Password should be at least 6 characters' })
-      acct.password = body.password
-      return json(res, 200, { id: p.sub, email: p.email })
-    }
-    if (url.pathname === '/_outbox' && req.method === 'GET') return json(res, 200, outbox)
 
     // ---- Storage: mint a signed URL -------------------------------------------------
     let m = url.pathname.match(/^\/storage\/v1\/object\/sign\/([^/]+)\/(.+)$/)
@@ -374,8 +358,14 @@ const server = createServer(async (req, res) => {
           `insert into ${SCHEMA}.${table} (${keys.join(', ')}) values (${keys.map((_, i) => `$${i + 1}`).join(', ')}) returning *`,
           keys.map((k) => row[k]),
         )
-        const wants = (req.headers.prefer || '').includes('return=representation')
-        return json(res, 201, wants ? r.rows : null)
+        // ⚠️ `return=minimal` GETS AN EMPTY 201, NOT `null`. Real PostgREST sends no body at all,
+        // and `null` is valid JSON — so answering `null` here made `res.json()` succeed offline on
+        // a call that throws in production. A lenient harness is how that ships.
+        if (!(req.headers.prefer || '').includes('return=representation')) {
+          res.writeHead(201, { 'Content-Length': 0 })
+          return res.end()
+        }
+        return json(res, 201, r.rows)
       }
     }
     json(res, 404, { error: 'no route', path: url.pathname })

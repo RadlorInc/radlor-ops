@@ -1,5 +1,6 @@
-import { redirect } from 'next/navigation'
-import { currentUser } from '@/lib/session'
+import { notFound } from 'next/navigation'
+import { usableInviteLink, userEmail } from '@/lib/db'
+import { hashToken } from '@/lib/inviteToken'
 
 export const dynamic = 'force-dynamic'
 
@@ -10,16 +11,27 @@ const MESSAGE: Record<string, string> = {
   '1': 'That did not save. Try again.',
 }
 
-/** Where an invite link and a reset link both end: choose the password you will sign in with. */
-export default async function SetPassword({
+/**
+ * The link the tester head forwarded. It is the only door into a brand-new account — the account
+ * has no password until this page sets one — and it is single use.
+ *
+ * ⚠️ SPENT, SUPERSEDED, EXPIRED AND UNKNOWN ARE ALL THE SAME 404. `usableInviteLink` collapses
+ * them, and this page must not un-collapse them: telling somebody holding a dead link that it was
+ * "already used" tells them it was once real, and which addresses this tool knows about is the one
+ * thing a forwarded link should not be able to reveal.
+ */
+export default async function Join({
+  params,
   searchParams,
 }: {
+  params: Promise<{ token: string }>
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
-  // Only reachable with a session — the one the emailed link just created. Anyone else is sent
-  // to the same place a dead link goes, so this page does not say which of the two they lack.
-  const user = await currentUser()
-  if (!user) redirect('/login?error=link')
+  const { token } = await params
+  const link = await usableInviteLink(hashToken(token))
+  if (!link) notFound()
+
+  const email = await userEmail(link.user_id)
   const error = (await searchParams).error
 
   return (
@@ -27,12 +39,15 @@ export default async function SetPassword({
       <section className="card" style={{ marginTop: 40, padding: '24px 24px 26px' }}>
         <h1>Choose a password</h1>
         <p className="help">
-          You&apos;re signed in as <strong>{user.email}</strong>. Pick a password you&apos;ll remember. At least 8
-          characters.
+          This link sets up <strong>{email}</strong>. Pick a password you&apos;ll remember — at least 8
+          characters — and you&apos;ll be signed in. From then on you sign in with that email and password.
         </p>
-        <form method="post" action="/api/auth/password">
+        {/* Form-encoded, like the sign-in form: the password goes from the browser's own submission
+            to the route to Supabase, and never through page script. */}
+        <form method="post" action="/api/join">
+          <input type="hidden" name="token" value={token} />
           <label className="field" htmlFor="password">
-            <span className="fieldname">New password</span>
+            <span className="fieldname">Password</span>
             <input id="password" name="password" type="password" autoComplete="new-password" minLength={8} required data-testid="new-password" />
           </label>
           <label className="field" htmlFor="confirm" style={{ marginTop: 14 }}>

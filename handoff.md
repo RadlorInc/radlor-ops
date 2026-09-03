@@ -13,10 +13,13 @@ Three people, three screens, one Next.js app on Vercel:
 - **reviewer** — `/review`: watches the video assigned to them, leaves timestamped notes, says
   **Approved** or **Needs changes**.
 
-Everyone signs in at `/login`. There is no sign-up: **an admin invites people** from the *People*
-tab. Supabase emails them a link; opening it confirms the address and lands on *Choose a password*.
-*Forgot your password?* on the sign-in page sends the same kind of link. **An admin can open all
-three surfaces**; a tester and a reviewer see only their own.
+Everyone signs in at `/login`. There is no open sign-up and **no email is ever sent** — Rafi's call
+on 2026-09-03. The admin pastes the testers' **email addresses** into the *People* tab; the server
+makes one account per address **with no password at all** and hands back one single-use link each.
+The admin copies that block and sends it to the tester head, who forwards each person their own
+line; opening it is where that person chooses their password, and it signs them straight in.
+Forgot a password? *New link* beside their name — which also kills any link they were still
+holding. **An admin can open all three surfaces**; a tester and a reviewer see only their own.
 
 **The one rule the whole tool exists for:** a video is cleared to post only when **every** assigned
 reviewer has approved. One "needs changes" is not cleared, however many approvals sit beside it.
@@ -53,32 +56,69 @@ until a human edits *API → Exposed schemas*, which no migration can reach.
 — **never delete either.** Throwaway accounts for checks use `@example.com` and are deleted against
 an explicit allow-list, never "everything except the ones I remember".
 
-## ⚠️ Waiting on Rafi — two things
+## Accounts by link — built 2026-09-04, NOT YET APPLIED LIVE
 
-**1. The invite and reset emails do not go anywhere until the Supabase project is told how to send
-them.** The code is done and proven offline (`e2e/auth.spec.ts`); delivery is dashboard config the
-repo cannot reach, and the invite route answers 200 whether or not a mail leaves — it cannot see.
-In the `radlor-site` project, *Authentication*:
+**What is live on Vercel right now** (`1d74b49`) is the *email* version: an *Invite someone* form
+calling `/auth/v1/invite`, plus `/forgot`, `/auth/confirm` and `/set-password`. ⚠️ **It does not
+work in production and never will** — it needs custom SMTP and rewritten templates, and Rafi
+decided the same evening that no email is to be sent at all. **Nobody should configure SMTP.
+Nobody should send an invite from that tab.** The working tree replaces all of it.
 
-- **SMTP settings → Enable custom SMTP.** The built-in mailer only delivers to addresses on the
-  Supabase team, a few an hour. Any provider with an SMTP endpoint works; Resend and Brevo have
-  free tiers. The sender address has to be one the provider has verified for you.
-- **URL configuration → Site URL** = `https://video-reviewer-liard.vercel.app`, and the same
-  origin under *Redirect URLs*.
-- **Email templates → "Invite user"** and **"Reset password"**: replace the link with
-  `{{ .SiteURL }}/auth/confirm?token_hash={{ .TokenHash }}&type=invite` (and `type=recovery` in
-  the reset one). ⚠️ This is load-bearing, not cosmetic: the default `{{ .ConfirmationURL }}`
-  hands the session back in a URL *fragment*, which a server never sees, and this app has no
-  browser-side Supabase to catch it. `/auth/confirm` trades the hash for a session over the back
-  channel instead.
-- Then invite a throwaway `@example.com`-style address you can read, open the link, choose a
-  password, sign out, and use *Forgot your password?* once. That is the whole flow, end to end,
-  on the live project — the only place it can be seen to work.
+**What the tree now does** — accounts by link, nothing emailed, and the admin never types or sends
+a password:
 
-**2. Run the tester-vs-admin RLS check.**
+- `supabase/migrations/20260904090000_invite_links.sql` — `review.invite_links`: `token_hash`
+  (sha256 of the raw token; **the table never holds a working link**), `user_id` **not null**,
+  `expires_at`, `used_at`. RLS on, **no policies**: only `service_role` touches it.
+  ⚠️ `grant update` is written explicitly, because default privileges already hand over
+  select+insert and the grants you *don't* write are invisible in the diff (CLAUDE.md).
+- **There is no "anyone may sign up" link and no `revoked_at`.** One link belongs to one person and
+  is spent on use; **re-issuing is what revoking looks like** — `newInviteLink` marks every unused
+  link that person holds as used before writing the new one. That is one button instead of a Stop
+  button plus a list, and it is the thing an admin does anyway when a link goes to the wrong person.
+- `POST /api/admin/links` (admin only): `{ emails: [...], role }` creates a user per address
+  (`POST /auth/v1/admin/users`, `email_confirm: true`, **no password**) + its `profiles` row +
+  a link each; `{ user_id }` makes one fresh link for somebody who already exists. Returns
+  **paths**, and the client prefixes `location.origin` so a link copied from a preview deployment
+  points at that deployment. Each address gets its own try/catch and its own line in `skipped` —
+  one typo in a pasted list must not cost the other forty their links.
+- `/join/[token]` + `POST /api/join`: spent, superseded, expired and unknown are all the **same
+  404**. The route re-checks the link itself (the page's 404 is a rendering decision), sets the
+  password, spends the link **after** the password lands — the other order loses the account to
+  everyone if the auth call fails — then signs them in and redirects to `/login`, which already
+  sends a signed-in person to the surface their role is for. Rate limited **20/min per IP**: a
+  room of testers on one office wifi is the normal case.
+- The name on the profile is the address's local part, tidied (`ponytail:` in the route). The ask
+  was emails and nothing else; the upgrade path is a name field on the join page.
+- `e2e/join.spec.ts` replaces `e2e/auth.spec.ts`; `test/fake-supabase.mjs` lost the mailer
+  stand-ins (`/invite`, `/recover`, `/verify`, `PUT /auth/v1/user`, `/_outbox`) and gained the
+  admin users API, service-key-or-401.
 
-It is the only authorization property with a gap right now, and it finally has the data it needs
-(see *Verified nowhere*).
+⚠️ **A lenient harness was hiding a production bug, and it is fixed in both places.** A POST with
+`Prefer: return=minimal` answers **201 with an empty body**, not 204 — `res.json()` throws on that.
+The fake answered `null`, which is valid JSON, so every minimal insert passed offline and would
+have failed live. `rest()` now decides on the body's emptiness, and the fake sends a genuinely empty 201.
+
+**Break-checked** (by hand — `scripts/break-check.sh` stashes uncommitted work, so it needs a
+commit first): neuter the supersede write → the "new link kills the old" spec goes red on its own
+`expect`; neuter `spendInviteLink` → the single-use assertion goes red. Nothing else moves.
+
+**Still to do, in this order:**
+
+1. Apply the migration to the live project, then **read the grants back** with
+   `has_table_privilege('service_role', 'review.invite_links', …)` — select/insert/update true,
+   delete false — and re-run `node --env-file=.env.local scripts/check-anon-locked-out.mjs`, which
+   now covers the table.
+2. Push. Confirm from the *running deployment* — not the dashboard — that `/api/admin/links`
+   answers as the admin (the old build 404s it for everyone), then make a link for a throwaway
+   `@example.com` address and open it.
+3. Delete the Supabase *Invite user* / *Reset password* template edits if any were made. There is
+   no mailer in this design.
+
+## ⚠️ Waiting on Rafi — one thing
+
+**Run the tester-vs-admin RLS check.** It is the only authorization property with a gap right now,
+and it finally has the data it needs (see *Verified nowhere*).
 
 ```bash
 node --env-file=.env.local scripts/check-tester-cannot-read-admin.mjs

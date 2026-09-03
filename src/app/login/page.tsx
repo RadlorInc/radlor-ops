@@ -14,13 +14,19 @@ export default async function Login({
   // sent to should be the one your role is FOR. Rafi reaches his own review list from there.
   if (profile) redirect(profile.role === 'admin' ? '/admin' : profile.role === 'reviewer' ? '/review' : '/tester')
 
-  const error = (await searchParams).error
+  const q = await searchParams
+  const error = q.error
+  const done = q.done
 
   return (
     <main className="wrap" style={{ maxWidth: 420 }}>
       <section className="card" style={{ marginTop: 40, padding: '24px 24px 26px' }}>
         <h1>Welcome</h1>
-        <p className="help">Sign in with the email and password you were sent. There is nothing to sign up for.</p>
+        <p className="help">
+          {done === 'password'
+            ? 'Your new password is saved. Sign in with it.'
+            : 'Sign in with your email and password. New here? Use the link you were given.'}
+        </p>
 
         <form method="post" action="/api/auth/login">
           <label className="field" htmlFor="email">
@@ -44,11 +50,11 @@ export default async function Login({
           <p className="small error" data-testid="login-error">
             {error === 'rate'
               ? 'Too many attempts. Wait a minute and try again.'
-              : error === 'link'
-                ? 'That link has expired or was already used. Ask for a new one.'
-                : error === 'norole'
+              : error === 'norole'
                   ? 'Your account is not set up yet. Ask Rafi to add you.'
-                  : 'That email and password did not match.'}
+                  : error === 'link'
+                    ? 'That link has expired or was already used. Ask for a new one.'
+                    : 'That email and password did not match.'}
           </p>
         )}
 
@@ -56,9 +62,7 @@ export default async function Login({
             Sign in
           </button>
         </form>
-        <p className="small" style={{ marginTop: 16 }}>
-          <a href="/forgot" data-testid="forgot-link">Forgot your password?</a>
-        </p>
+
       </section>
     </main>
   )
