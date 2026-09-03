@@ -201,7 +201,13 @@ hand over select+insert, so without the explicit grant a link would never be spe
 would stay alive for ever and the offline suite would stay green through it (PGlite is one
 superuser; it cannot see this).
 
-**Still to do, in this order:**
+✔ **DONE, END TO END IN PRODUCTION, 2026-09-04.** `kuwarirafi@gmail.com` was issued a link from
+*Who has access* → *New link*, opened it, chose their own password, landed on `/tester`, filed a
+report, and it showed up on `/admin`. That is every part of the design exercised by a real person
+on the real system: link issue, single use, password set, sign-in, role routing, and the write
+reaching the admin's read through the cache. **No email was sent by anything at any point.**
+
+The original list, kept because the order is the reusable part:
 
 1. Merge `accounts-by-link` into `main` and push. The commit is `13c7a24`; it is deliberately NOT
    on `main`, because a push to `main` deploys and this code reads a table that only existed from
@@ -395,10 +401,20 @@ All in [docs/security-findings.md](docs/security-findings.md). Two are scheduled
 
 ## Verified nowhere, as of 2026-09-03
 
-- ⚠️ **The strong tester-vs-admin comparison — available and NOT RUN.** Rafi filed a real issue in
-  production on 2026-09-03, so a tester finally owns a row. The script is upgraded: **a tester
-  owning nothing is now a FAIL** (zero satisfied "saw only its own" vacuously), and the admin's view
-  must CONTAIN the tester's and be strictly larger. Expect tester **1**, admin **14**.
+- ⚠️ **The strong tester-vs-admin comparison — still NOT RUN, and the way to run it CHANGED on
+  2026-09-04.** The data got better: `kuwarirafi@gmail.com` came in through a `/join` link, set
+  their own password, filed from `/tester`, and the row reached `/admin`. So a tester owns rows and
+  the script's "a tester owning nothing is a FAIL" arm is satisfied — but **re-read the counts when
+  you run it rather than trusting the 1 / 14 that used to be here**, because rows have been added
+  since.
+  ⚠️⚠️ **The wrinkle, and it is caused by this very design: the admin no longer knows anybody's
+  password.** The script wants `TESTER_EMAIL` / `TESTER_PASSWORD` in `.env.local`, and there is now
+  no honest way to fill them for a real tester — the whole point of accounts-by-link is that the
+  password is chosen by the person and never travels. **Do not ask a tester for theirs.** Make a
+  throwaway `@example.com` tester through *People*, open its link yourself, set a password you
+  chose, file one issue as it, and run the comparison against that; delete it afterwards against
+  the allow-list. The check is unchanged in what it proves — only the fixture has to be one you are
+  allowed to hold the password to.
 - **That `type` suggestions include values from rows the caller cannot read.** It is the whole
   reason `issueVocabulary()` uses the service key, and the offline harness cannot see it: PGlite has
   no policies, so a list of everyone's values is indistinguishable from a list of the caller's own.
@@ -409,5 +425,7 @@ All in [docs/security-findings.md](docs/security-findings.md). Two are scheduled
   `equals-reel` is the smallest thing that changes that.
 - **Nobody has driven `/admin` or `/tester` as themselves beyond filing one issue.** The reviewer
   surface has been: Rafi signed in at `/review` on 2026-09-02 and confirmed it, which is what
-  allowed the token path to be deleted.
+  allowed the token path to be deleted. ✔ **Partly retired 2026-09-04:** a second person now has
+  driven `/tester` as themselves, from a link, through to the row appearing on `/admin`. The
+  reviewer surface has still only ever had one human on it.
 - **Self-signup being off** in Supabase Auth — cannot be read from here.
