@@ -70,10 +70,24 @@ test('"all chapters" is a scope, not a chapter', async ({ page, request }) => {
   await page.goto('/tester')
   await page.getByTestId('issue-description').fill('Every heading uses "shall"')
   await page.getByTestId('issue-chapter').fill('7')
+  /**
+   * ⚠️ THE WORDING IS ASSERTED, WRITTEN OUT, NOT IMPORTED. Rafi filed "the app is lagging" against
+   * `ch 1` — the definition of an all-chapters issue — because the control was an unlabelled box
+   * with "all chapters" beside it, which reads as a scope FILTER rather than a question about this
+   * issue. The mechanism below was already right and already checked; the words were the defect.
+   * So they are a decision now: changing them takes an edit here too, and the red in between is
+   * the reminder that somebody got this exact control wrong once.
+   */
+  await expect(page.getByTestId('issue-scope')).toContainText('Not about one chapter')
+  await expect(page.getByTestId('scope-hint')).toContainText('happens all over the app')
+  await expect(page.getByTestId('scope-hint')).toContainText('lagging')
+
   await page.getByTestId('issue-all-chapters').check()
-  // Ticking it clears and disables the chapter box — the two cannot both be set.
+  // Ticking it clears and disables the chapter box — the two cannot both be set. And the box says
+  // WHY it is disabled instead of going quietly grey.
   await expect(page.getByTestId('issue-chapter')).toBeDisabled()
   await expect(page.getByTestId('issue-chapter')).toHaveValue('')
+  await expect(page.getByTestId('issue-chapter')).toHaveAttribute('placeholder', 'chapter not needed')
   await page.getByTestId('issue-submit').click()
   await expect(page.getByTestId('issue-list')).toContainText('Every heading uses')
 

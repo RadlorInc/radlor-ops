@@ -311,6 +311,18 @@ button.linky.small { font-size: 13px; }
  * page that says 200 first has already answered.
  */
 
+/* The chapter question: one control, not two things that happen to be adjacent. The border is
+   what makes the checkbox read as belonging to the field beside it rather than floating after it. */
+.scope {
+  display: inline-flex; align-items: center; gap: 10px;
+  border: 1px solid var(--line); border-radius: var(--radius-sm); padding: 4px 10px 4px 4px;
+}
+.scope input[type='text'] { border-color: transparent; background: transparent; min-width: 9em; }
+.scope input[type='text']:disabled { color: var(--muted); font-style: italic; }
+.check { display: inline-flex; align-items: center; gap: 7px; font-size: 13px; white-space: nowrap; cursor: pointer; }
+.check input[type='checkbox'] { min-height: 0; width: 16px; height: 16px; accent-color: var(--accent); cursor: pointer; }
+@media (pointer: coarse) { .check input[type='checkbox'] { width: 22px; height: 22px; } }
+
 /* ── Figures and meters ─────────────────────────────────────────────────────────────────────
  *
  * ⚠️ NO SPARKLINES AND NO DELTAS ANYWHERE, AND THAT IS A DATA FACT, NOT A STYLE CHOICE. A stat

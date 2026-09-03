@@ -106,6 +106,7 @@ export default function Issues({
               with the split in front of him. */}
           <input
             type="text"
+            aria-label="Area"
             placeholder="area (e.g. Nest game)"
             value={form.area}
             onChange={(e) => setForm({ ...form, area: e.target.value })}
@@ -115,6 +116,7 @@ export default function Issues({
             type="text"
             list="type-options"
             autoComplete="off"
+            aria-label="Type"
             placeholder={vocabulary.types.length ? 'type — pick or type' : 'type (e.g. wording)'}
             value={form.type}
             onChange={(e) => setForm({ ...form, type: e.target.value })}
@@ -125,24 +127,44 @@ export default function Issues({
               <option key={v} value={v} />
             ))}
           </datalist>
-          <input
-            type="text"
-            placeholder="chapter"
-            value={form.chapter}
-            disabled={form.all_chapters}
-            onChange={(e) => setForm({ ...form, chapter: e.target.value })}
-            data-testid="issue-chapter"
-          />
-          <label className="small muted" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          {/**
+            * ⚠️ THE MECHANISM WAS ALWAYS RIGHT; THE WORDING WAS THE BUG. Ticking has always cleared
+            * and disabled the chapter box, and the route has always forced `chapter` to null — both
+            * checked. Rafi still filed "the app is lagging" against `ch 1`, which is the definition
+            * of an all-chapters issue, because the control was an unlabelled box with the words
+            * "all chapters" floating beside it. Read cold that is a SCOPE FILTER, not a question
+            * about this issue, and it invites you to leave it alone and name a chapter.
+            *
+            * So: a group that reads as one question, a label that says what ticking MEANS rather
+            * than what it selects, and the disabled field saying why it is disabled instead of
+            * going quietly grey.
+            */}
+          <span className="scope" data-testid="issue-scope">
             <input
-              type="checkbox"
-              checked={form.all_chapters}
-              onChange={(e) => setForm({ ...form, all_chapters: e.target.checked, chapter: '' })}
-              data-testid="issue-all-chapters"
+              type="text"
+              aria-label="Chapter this happened in"
+              /* ⚠️ NOT the label's own words again. The first version put "not about one chapter"
+                 in here AND on the checkbox beside it — the same sentence twice, six inches apart,
+                 which is the repetition this app has already been told off for. The disabled field
+                 says it is out of play; the checkbox says why. */
+              placeholder={form.all_chapters ? 'chapter not needed' : 'chapter (e.g. 1)'}
+              value={form.chapter}
+              disabled={form.all_chapters}
+              onChange={(e) => setForm({ ...form, chapter: e.target.value })}
+              data-testid="issue-chapter"
             />
-            all chapters
-          </label>
+            <label className="check">
+              <input
+                type="checkbox"
+                checked={form.all_chapters}
+                onChange={(e) => setForm({ ...form, all_chapters: e.target.checked, chapter: '' })}
+                data-testid="issue-all-chapters"
+              />
+              Not about one chapter
+            </label>
+          </span>
           <select
+            aria-label="Age band"
             value={form.age_band}
             onChange={(e) => setForm({ ...form, age_band: e.target.value })}
             data-testid="issue-age"
@@ -158,6 +180,14 @@ export default function Issues({
             {busy ? 'Filing…' : 'File it'}
           </button>
         </div>
+        {/* ⚠️ EXAMPLES, NOT A DEFINITION. "Happens everywhere" is the rule and nobody applies a rule
+            to their own case in the moment; "lagging" is the one that was actually got wrong, so it
+            is named first. */}
+        <p className="small muted" data-testid="scope-hint">
+          Tick <strong>Not about one chapter</strong> when it happens all over the app — lagging,
+          sound, saving, a word used the same way everywhere. Name a chapter only when it happens in
+          that one.
+        </p>
         {error && (
           <p className="small" style={{ color: '#ff9d9d' }} data-testid="issue-error">
             {error}
