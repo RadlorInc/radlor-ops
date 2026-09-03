@@ -11,6 +11,15 @@ import { NextResponse } from 'next/server'
  * it is removes the inference. It matters because every Supabase read crosses to us-west-2, so a
  * function in the wrong region pays that crossing on every wave of a page render.
  *
+ * ⚠️ `commit` IS THE SECOND NON-BOOLEAN, AND IT EARNED ITS PLACE TWICE IN ONE DAY. On 2026-09-04
+ * a push silently did not deploy — the Git connection had gone stale on a repo rename, and every
+ * surface said fine: push succeeded, GitHub held the commit, the site returned 200, the suite was
+ * green. Hours later, "the links still vanish" could not be answered either, because there was no
+ * way to ask production WHICH BUILD it was serving; the fix was live locally and unverifiable
+ * remotely. Seven hex characters end both arguments. It is not a secret — it names a commit in a
+ * private repo and reveals nothing about its contents — and it is the answer to the only question
+ * that matters after a push.
+ *
  * ⚠️ EVERYTHING ELSE IS BOOLEANS ONLY, NEVER VALUES. `auth_configured` says whether the two variables sign-in needs
  * are PRESENT, not what they are. It exists because the login route deliberately gives the same
  * `?error=1` for a wrong password and for a missing environment variable — that sameness is what
@@ -25,6 +34,7 @@ export function GET() {
       status: 'ok',
       auth_configured: Boolean(process.env.SUPABASE_URL && process.env.SUPABASE_ANON_KEY),
       region: process.env.VERCEL_REGION ?? 'local',
+      commit: process.env.VERCEL_GIT_COMMIT_SHA?.slice(0, 7) ?? 'local',
     },
     { headers: { 'Cache-Control': 'no-store' } },
   )
