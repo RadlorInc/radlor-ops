@@ -211,6 +211,21 @@ pass offline. Deleting a check is sometimes the honest option; making it green n
   gate), which went right precisely because it was written down first.
   ⚠️ And on Vercel, **setting the variable is not enough — it takes effect on the next deploy**, so
   confirm it from the running deployment, not from the dashboard.
+- ⚠️ **"IS IT DEPLOYED?" MUST BE ANSWERABLE IN ONE REQUEST, OR EVERY BUG REPORT IS AMBIGUOUS.** On
+  2026-09-04 a push silently did not deploy (a stale Git connection after a repo rename) while
+  every surface said fine — push succeeded, GitHub held the commit, the site returned 200, the
+  suite was green. Hours later a fix that worked locally was reported as still broken, and *"the
+  bug is still there"* could not be told apart from *"your fix is not there yet"*. `/api/health`
+  now returns `commit`, the first seven of `VERCEL_GIT_COMMIT_SHA`. **Read it before believing any
+  report about production.** Same family as the health route's other fields: put the signal
+  somewhere that answers, because the thing you are looking at answers 200 either way.
+- ⚠️ **A PROBE THAT CHANGES TWO THINGS PROVES NEITHER.** Diagnosing the same incident, the first
+  probe removed a `router.refresh()` **and** switched how the button was clicked, then read the
+  result as proof about the refresh. It was right by luck. Change one variable, and drive the thing
+  the way the person who reported it did.
+- ⚠️ **DO NOT PIPE A CHECK WHOSE EXIT CODE YOU ARE ABOUT TO BRANCH ON.** `npm run check | tail -4
+  && git push` takes `tail`'s status, not the suite's: the suite failed to start on a port clash
+  and the push went out anyway, reported as verified. Run it, read its own exit code, then decide.
 - ⚠️ **A ROUTE THAT REFUSES TO TELL AN ATTACKER ANYTHING REFUSES TO TELL YOU ANYTHING EITHER.**
   `/api/waitlist` answers `303` whether it succeeded or failed — the right design, and the reason a
   completely broken endpoint looked healthy from outside for four minutes. The fix is not to weaken

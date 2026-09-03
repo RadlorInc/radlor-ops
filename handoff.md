@@ -36,9 +36,15 @@ Vercel deploys on push to `main`.
 Confirm from the running deployment, never from a settings page or from the push succeeding:
 
 ```bash
-curl -s https://video-reviewer-liard.vercel.app/api/health
-# {"status":"ok","auth_configured":true,"region":"pdx1"}
+curl -s https://ops.radlor.com/api/health
+# {"status":"ok","auth_configured":true,"region":"pdx1","commit":"ea64cdf"}
 ```
+
+✔ **`commit` ANSWERS "WHICH BUILD" DIRECTLY, since 2026-09-04** — the first seven of
+`VERCEL_GIT_COMMIT_SHA`. Compare it with `git log --oneline -1 origin/main`. It was added the
+second time in one day that the question was unanswerable: a push that silently did not deploy,
+and then a bug report ("the links still vanish") that could not be told apart from "the fix is not
+there yet". **Read it before believing any report about production**, yours or somebody else's.
 
 ⚠️ **Do not pin a SHA here** — check it: `git log --oneline -1 origin/main`. And when you need to
 know *which build* is serving, use **behaviour only one build has** (a route that exists in one, a
@@ -135,13 +141,13 @@ app's own host.
 — **never delete either.** Throwaway accounts for checks use `@example.com` and are deleted against
 an explicit allow-list, never "everything except the ones I remember".
 
-## Accounts by link — built 2026-09-04, MIGRATION APPLIED, NOT YET DEPLOYED
+## Accounts by link — LIVE since 2026-09-04, migration applied and in production use
 
-**What is live on Vercel right now** (`1d74b49`) is the *email* version: an *Invite someone* form
-calling `/auth/v1/invite`, plus `/forgot`, `/auth/confirm` and `/set-password`. ⚠️ **It does not
-work in production and never will** — it needs custom SMTP and rewritten templates, and Rafi
-decided the same evening that no email is to be sent at all. **Nobody should configure SMTP.
-Nobody should send an invite from that tab.** The working tree replaces all of it.
+**The *email* version is gone** — it was `1d74b49`: an *Invite someone* form calling
+`/auth/v1/invite`, plus `/forgot`, `/auth/confirm` and `/set-password`. It never worked in
+production and never would have: it needed custom SMTP and rewritten templates, and Rafi
+decided the same evening that no email is to be sent at all. **Nobody should configure SMTP**, and the
+templates should be left alone — there is no mailer in this design.
 
 **What the tree now does** — accounts by link, nothing emailed, and the admin never types or sends
 a password:
@@ -220,6 +226,44 @@ The original list, kept because the order is the reusable part:
    account" and create nothing.
 4. Delete the Supabase *Invite user* / *Reset password* template edits if any were made. There is
    no mailer in this design.
+
+## ⚠️ The links were destroyed by the refresh meant to show them — 2026-09-04
+
+**Fixed in `bbbae4c`, and worth reading before touching `People.tsx`.** Three testers' links were
+generated in production and never reached the admin: the accounts were created, the rows said
+*Not joined yet*, and the links themselves were **gone for good**, because the table stores sha256
+and nothing else. There is no recovery path — only *New link*, which supersedes and re-issues.
+
+`router.refresh()`, called to redraw *Who has access*, remounts the component holding the links and
+empties its state. It was always a race; adding the "not joined yet" chip put another server fetch
+in the way and the race started landing the other way every time. **The precious value was living
+in the state that a routine re-render throws away.**
+
+- The links now live in `sessionStorage`, read through `useSyncExternalStore` — surviving the
+  remount *and* an accidental reload. Restoring in an effect is a setState in an effect and the
+  React Compiler's lint rejects it, correctly: the value exists before first paint.
+- A bearer token in browser storage, deliberately: per tab, dies with the tab, strict CSP, and it
+  is on screen for that admin anyway. *Done — hide these* wipes it.
+- **Per-row Copy buttons.** Copying one person's line out of one blob by hand is precisely where
+  the wrong link reaches the wrong person.
+- The chip said *"expires in 6 days"* on a link made seconds earlier — a stray `- 1` undoing the
+  server's `Math.ceil`. Under-reporting an expiry is the direction somebody plans around.
+
+⚠️ **Two assertions had to move, and both had been passing for the wrong reason:**
+
+1. The block was asserted **right after the click** — in the gap before the refresh destroyed it.
+   `makeLinks` now waits for the row count to move first, which puts the assertion on the far side
+   of the thing that breaks it. *"AT WHICH STATE OF THE UI"*, exactly as CLAUDE.md says.
+2. *"the block changed"* used `not.toHaveText(<innerText snapshot>)`. **`toHaveText` normalises
+   whitespace**, so it was satisfied instantly by the newlines rather than by anything changing,
+   and the read after it returned the stale link and compared it to itself. It now waits for the
+   OLD token to leave the screen.
+
+⚠️ **And how the diagnosis nearly went wrong.** The first probe removed `router.refresh()` **and**
+switched from a coordinate click to a scripted one, then read the result as proof about the
+refresh. Two variables, one conclusion — it happened to be right and could as easily not have
+been. **Change one thing.** The second probe drove it exactly as a person does and sampled at 1s,
+4s and 9s.
 
 ## ✔ Waiting on Rafi — nothing
 
