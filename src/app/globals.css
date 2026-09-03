@@ -16,44 +16,44 @@
  */
 
 :root {
+  /* ⚠️ THE LOGO, LITERALLY. Rafi's call on 2026-09-03, twice: the site takes the mark's own
+     colours — a black ground, silver lettering, and the electric cyan of the ring and the eyes.
+     On black the cyan is a light and can carry text; on white it never could, which is why the
+     light attempt in between had to darken it to a teal that was no longer the logo. */
+
   /* Surfaces, darkest to lightest. */
-  /* Cool neutrals, because the accent is the logo's cyan and a warm ground fought it. */
-  --bg: #f4f7f9;
-  --panel: #ffffff;
-  --panel-2: #e9eff3;
-  --line: #d9e1e7;
-  --line-strong: #b9c5cf;
+  --bg: #070a0f;
+  --panel: #10161e;
+  --panel-2: #182029;
+  --line: #243040;
+  --line-strong: #35465a;
 
-  /* Text. ⚠️ --muted is #a5aac0, not the #9599ad it used to be: the old value fell under 4.5:1
-     against --panel-2, which is exactly where the pills and chips sit. Checked against the
-     lightest surface it is ever used on, not against --bg where everything passes. */
-  --text: #141a21;
-  --muted: #55636f;
+  /* Text: silver, like the lettering. ⚠️ --muted is checked against --panel-2, the lightest
+     surface it is ever used on, not against --bg where everything passes. */
+  --text: #e8edf3;
+  --muted: #a3afbe;
 
-  /* One accent for interaction, one for attention. Blue carries data, amber carries urgency —
+  /* One accent for interaction, one for attention. Cyan carries data, amber carries urgency —
      they are never swapped, so "amber" always means "this needs you". */
-  /* ⚠️ THE LOGO'S CYAN, DARKENED UNTIL WHITE TEXT CLEARS 4.5:1 ON IT. The mark glows at roughly
-     #2fd0f5, which is a light on black and cannot carry text on white — so this is the same hue
-     taken down to where it can. Rafi's call on 2026-09-03: the scheme follows the logo. */
-  --accent: #0b6e8f;
-  --accent-hover: #085874;
-  --accent-ink: #ffffff;
-  --attention: #b45309;
+  --accent: #2fd0f5;
+  --accent-hover: #74e2fa;
+  --accent-ink: #041016;
+  --attention: #f5b73b;
 
   /* Status, each with a matching ink that clears 4.5:1 on it. */
-  --ok-bg: #e6f5ea;      --ok-line: #b7e0c2;   --ok-ink: #1a6b3c;
-  --warn-bg: #fff3d6;    --warn-line: #f0d59a; --warn-ink: #7a4b00;
-  --bad-bg: #fdeaea;     --bad-line: #f3b9b9;  --bad-ink: #a11d1d;
-  --info-bg: #e3f4fa;    --info-line: #b3e0ef; --info-ink: #0b5a76;
+  --ok-bg: #0f2a1c;      --ok-line: #1f4d33;   --ok-ink: #8ce4b2;
+  --warn-bg: #2b2210;    --warn-line: #5a4515; --warn-ink: #f2d48a;
+  --bad-bg: #331517;     --bad-line: #6b262b;  --bad-ink: #ffa8a8;
+  --info-bg: #0b2530;    --info-line: #164a5e; --info-ink: #8ee3fb;
 
   --radius: 10px;
   --radius-sm: 8px;
-  --shadow: 0 1px 2px rgb(20 20 30 / 0.06), 0 8px 24px -12px rgb(20 20 30 / 0.12);
+  --shadow: 0 1px 2px rgb(0 0 0 / 0.5), 0 8px 24px -12px rgb(0 0 0 / 0.6);
 
   /* One duration for every state change. Long enough to read, short enough not to wait on. */
   --t: 160ms;
 
-  color-scheme: light;
+  color-scheme: dark;
 }
 
 * { box-sizing: border-box; }
@@ -145,11 +145,12 @@ button {
   font-weight: 600;
   transition: background-color var(--t) ease, border-color var(--t) ease, opacity var(--t) ease;
 }
-button:hover { background: var(--accent-hover); }
+button:hover { background: var(--accent-hover); box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 22%, transparent); }
+button { box-shadow: 0 0 0 0 transparent; transition: background-color var(--t) ease, border-color var(--t) ease, opacity var(--t) ease, box-shadow var(--t) ease; }
 button.ghost { background: transparent; color: var(--text); border: 1px solid var(--line); }
-button.ghost:hover { background: var(--panel-2); border-color: var(--line-strong); }
+button.ghost:hover { background: var(--panel-2); border-color: var(--line-strong); box-shadow: none; }
 button:disabled { opacity: .5; cursor: not-allowed; }
-button:disabled:hover { background: var(--accent); }
+button:disabled:hover { background: var(--accent); box-shadow: none; }
 button.ghost:disabled:hover { background: transparent; }
 
 textarea, input[type='email'], input[type='password'],
@@ -165,7 +166,7 @@ input[type='email'], input[type='password'] { width: 100%; margin-top: 4px; }
 /* ⚠️ #7c8199, measured at 5.07:1 on the field background — the first pick was #6f7488 and came
    out at 4.21, which is the kind of miss you only catch by computing it. A placeholder is real
    text: it is often the only label a compact field has. */
-::placeholder { color: #6a7180; }
+::placeholder { color: #8391a2; }
 
 ol.notes { list-style: none; margin: 12px 0 0; padding: 0; }
 ol.notes li { border-top: 1px solid var(--line); padding: 8px 0; }
@@ -174,7 +175,7 @@ ol.notes .t {
   font-family: var(--font-mono, ui-monospace, monospace);
   font-variant-numeric: tabular-nums; cursor: pointer;
 }
-ol.notes .t:hover { background: none; color: var(--accent-hover); text-decoration: underline; }
+ol.notes .t:hover { background: none; color: var(--accent-hover); text-decoration: underline; box-shadow: none; }
 
 details.questions {
   background: var(--panel); border: 1px solid var(--line);
@@ -203,8 +204,8 @@ summary { cursor: pointer; }
   background:
     linear-gradient(to right, var(--bg) 30%, transparent) left center / 40px 100% no-repeat local,
     linear-gradient(to left, var(--bg) 30%, transparent) right center / 40px 100% no-repeat local,
-    radial-gradient(farthest-side at 0 50%, rgb(0 0 0 / 0.14), transparent) left center / 18px 100% no-repeat scroll,
-    radial-gradient(farthest-side at 100% 50%, rgb(0 0 0 / 0.14), transparent) right center / 18px 100% no-repeat scroll;
+    radial-gradient(farthest-side at 0 50%, rgb(0 0 0 / 0.6), transparent) left center / 18px 100% no-repeat scroll,
+    radial-gradient(farthest-side at 100% 50%, rgb(0 0 0 / 0.6), transparent) right center / 18px 100% no-repeat scroll;
 }
 /* Digits line up down a column even in the sans face — costs, versions, note counts. */
 table { border-collapse: collapse; width: 100%; font-variant-numeric: tabular-nums; }
@@ -236,7 +237,7 @@ button.linky {
   background: none; border: 0; color: var(--accent); padding: 0; min-height: 0;
   font: inherit; cursor: pointer; text-decoration: underline; text-underline-offset: 2px;
 }
-button.linky:hover { background: none; color: var(--accent-hover); }
+button.linky:hover { background: none; color: var(--accent-hover); box-shadow: none; }
 button.linky.small { font-size: 14px; }
 
 /* ── Navigation ─────────────────────────────────────────────────────────────────────────────
@@ -387,7 +388,7 @@ button.linky.small { font-size: 14px; }
   transition: width var(--t) ease;
 }
 .meter .count { font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
-.meter[data-state='cleared'] { --meter-hue: #2e9e5b; }
+.meter[data-state='cleared'] { --meter-hue: #4ec98a; }
 .meter[data-state='blocked'] { --meter-hue: var(--attention); }
 
 /* Per-area progress above the to-do list: small multiples of the same meter, one per area. */
@@ -412,8 +413,8 @@ ol.todos .strike { color: var(--muted); text-decoration: line-through; }
 }
 /* Chips are <button>s. Without these the global button:hover / :disabled:hover paint a chip solid
    accent under the cursor — which is what a filter chip did. A chip's hover is a border, not a fill. */
-.chip:hover { border-color: var(--line-strong); background: var(--panel-2); }
-.chip:disabled:hover { background: var(--panel-2); }
+.chip:hover { border-color: var(--line-strong); background: var(--panel-2); box-shadow: none; }
+.chip:disabled:hover { background: var(--panel-2); box-shadow: none; }
 li[data-status='done'] .chip { background: var(--ok-bg); border-color: var(--ok-line); color: var(--ok-ink); }
 li[data-status='in_progress'] .chip { background: var(--info-bg); border-color: var(--info-line); color: var(--info-ink); }
 
@@ -428,7 +429,7 @@ li[data-status='in_progress'] .chip { background: var(--info-bg); border-color: 
   border-radius: var(--radius-sm); min-height: 32px; min-width: 32px; padding: 0 8px;
   font-size: 13px; line-height: 1; cursor: pointer;
 }
-.iconbtn:hover { background: var(--line); border-color: var(--line-strong); }
+.iconbtn:hover { background: var(--line); border-color: var(--line-strong); box-shadow: none; }
 .iconbtn:disabled { opacity: .35; }
 .iconbtn:disabled:hover { background: var(--panel-2); border-color: var(--line); }
 
@@ -491,7 +492,7 @@ details.group ol.issues li:first-child { border-top: 0; }
   content: ''; display: inline-block; width: 7px; height: 7px; border-radius: 50%;
   margin-right: 7px; vertical-align: 1px; background: var(--muted);
 }
-.verdicts li[data-verdict='approved']::before { background: #2e9e5b; }
+.verdicts li[data-verdict='approved']::before { background: #4ec98a; }
 .verdicts li[data-verdict='changes_needed']::before { background: var(--attention); }
 
 td[data-cleared='yes'] { color: var(--ok-ink); font-weight: 600; }
