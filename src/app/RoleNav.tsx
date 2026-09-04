@@ -7,10 +7,10 @@ import type { NavBadges } from '@/lib/navBadges'
  *
  * ⚠️ IT USED TO BE TWO LEVELS — role surfaces on top, dashboard sections underneath — and the
  * second level is gone on purpose. Two strips of tabs on one page make the reader work out which
- * one they are in before they can look for anything, and "Costs" was never a different KIND of
+ * one they are in before they can look for anything, and "To-do" was never a different KIND of
  * thing from "Chapter testing": both are just a place to be. Nesting them said otherwise.
  *
- * ⚠️ IT RENDERS ONLY WHAT THE ROLE CAN ACTUALLY OPEN. A tester seeing a "Videos" tab that 404s is
+ * ⚠️ IT RENDERS ONLY WHAT THE ROLE CAN ACTUALLY OPEN. A tester seeing a "Marketing material" tab that 404s is
  * worse than no tab: the gate is correct and the interface is lying about it. A tester and a
  * reviewer have one destination each, so they get no strip at all — just their name and a way out.
  */
@@ -19,7 +19,6 @@ type Tab = { href: string; label: string; badge?: keyof NavBadges }
 const TABS: Record<Role, Tab[]> = {
   admin: [
     { href: '/admin', label: 'Dashboard' },
-    { href: '/admin?tab=costs', label: 'Costs', badge: 'costs' },
     { href: '/admin?tab=todo', label: 'To-do', badge: 'todo' },
     { href: '/admin?tab=videos', label: 'Marketing material', badge: 'videos' },
     { href: '/admin?tab=people', label: 'People' },

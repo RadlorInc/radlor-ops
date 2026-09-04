@@ -12,49 +12,6 @@ async function rows(request: import('@playwright/test').APIRequestContext, table
 
 test.describe.configure({ mode: 'serial' })
 
-test('a renewal three days out does not look like one two months out', async ({ page }) => {
-  await signIn(page, 'admin')
-  await page.goto('/admin?tab=costs')
-  const soon = page.getByTestId('cost-row').filter({ hasText: 'Higgsfield' })
-  const later = page.getByTestId('cost-row').filter({ hasText: 'Vercel' })
-
-  // The states must DIFFER — a table where everything renders the same is a table with dates in it.
-  await expect(soon).toHaveAttribute('data-renewal', 'soon')
-  await expect(later).toHaveAttribute('data-renewal', 'ok')
-  await expect(soon.getByTestId('renewal-pill')).toHaveText('in 3d')
-})
-
-test('a typed number is labelled as typed, never as refreshed', async ({ page }) => {
-  await signIn(page, 'admin')
-  await page.goto('/admin?tab=costs')
-  const fresh = page.getByTestId('credits-freshness').first()
-  await expect(fresh).toContainText('you typed this')
-  await expect(fresh).not.toContainText('refreshed')
-})
-
-test('the monthly total adds up the rows it shows', async ({ page }) => {
-  await signIn(page, 'admin')
-  await page.goto('/admin?tab=costs')
-  await expect(page.getByTestId('monthly-total')).toContainText('49.00') // 29 + 20 + 0
-  await expect(page.getByTestId('monthly-total')).toContainText('across 3')
-})
-
-test('adding a subscription writes a row and marks it typed, not fetched', async ({ page, request }) => {
-  await signIn(page, 'admin')
-  await page.goto('/admin?tab=costs')
-  await page.getByTestId('cost-add').click()
-  await page.getByTestId('cost-tool').fill('ElevenLabs')
-  await page.getByTestId('cost-monthly_cost').fill('11')
-  await page.getByTestId('cost-save').click()
-  await expect(page.getByTestId('cost-row').filter({ hasText: 'ElevenLabs' })).toBeVisible()
-
-  const [row] = await rows(request, 'subscriptions', '&tool=eq.ElevenLabs')
-  expect(row).toBeTruthy()
-  expect(Number(row.monthly_cost)).toBe(11)
-  // ⚠️ A hand-typed number may never claim to be an API reading.
-  expect(row.credits_source).toBe('manual')
-})
-
 test('a to-do can be added, renamed, advanced and reordered — and the row moves', async ({ page, request }) => {
   await signIn(page, 'admin')
   await page.goto('/admin?tab=todo')
@@ -116,61 +73,6 @@ test('and a signed-OUT caller gets 404 from the API, not a redirect that reads a
   expect(res.status()).toBe(404)
 })
 
-test('a duplicate tool says so instead of failing blankly, and edit exists so nobody has to retry', async ({ page }) => {
-  await signIn(page, 'admin')
-  await page.goto('/admin?tab=costs')
-  await page.getByTestId('cost-add').click()
-  await page.getByTestId('cost-tool').fill('Higgsfield')   // already in the seed
-  await page.getByTestId('cost-credits_remaining').fill('19973')
-  await page.getByTestId('cost-save').click()
-
-  const err = page.getByTestId('cost-error')
-  await expect(err).toBeVisible()
-  // Names the thing and says what to do — not "check the numbers".
-  await expect(err).toContainText('Higgsfield')
-  await expect(err).toContainText('Edit that one')
-  await expect(err).not.toContainText('Check the numbers')
-})
-
-test('a thousands separator is a number, not an error', async ({ page, request }) => {
-  await signIn(page, 'admin')
-  await page.goto('/admin?tab=costs')
-  await page.getByTestId('cost-add').click()
-  await page.getByTestId('cost-tool').fill('Runway')
-  await page.getByTestId('cost-credits_remaining').fill('19,973')
-  await page.getByTestId('cost-save').click()
-  await expect(page.getByTestId('cost-row').filter({ hasText: 'Runway' })).toBeVisible()
-
-  const [row] = await rows(request, 'subscriptions', '&tool=eq.Runway')
-  expect(Number(row.credits_remaining)).toBe(19973)
-})
-
-test('a bad number names its own field', async ({ page }) => {
-  await signIn(page, 'admin')
-  await page.goto('/admin?tab=costs')
-  await page.getByTestId('cost-add').click()
-  await page.getByTestId('cost-tool').fill('Whatever')
-  await page.getByTestId('cost-monthly_cost').fill('twelve pounds')
-  await page.getByTestId('cost-save').click()
-  await expect(page.getByTestId('cost-error')).toContainText('Monthly cost must be a number')
-})
-
-test('editing a subscription updates the row rather than adding a second one', async ({ page, request }) => {
-  await signIn(page, 'admin')
-  await page.goto('/admin?tab=costs')
-  const before = (await rows(request, 'subscriptions')).length
-  const target = page.getByTestId('cost-row').filter({ hasText: 'Higgsfield' })
-  await target.getByTestId('cost-edit').click()
-  await page.getByTestId('cost-credits_remaining').fill('19973')
-  await page.getByTestId('cost-save').click()
-
-  await expect
-    .poll(async () => Number((await rows(request, 'subscriptions', '&tool=eq.Higgsfield'))[0]?.credits_remaining))
-    .toBe(19973)
-  // The count must not move — an "edit" that inserts is the bug that started this.
-  expect((await rows(request, 'subscriptions')).length).toBe(before)
-})
-
 /**
  * ⚠️ THE "ISSUES APPEAR ON THE DASHBOARD, ACTION-NEEDED FIRST" SPEC IS DELETED, NOT MOVED. Its
  * subject was the admin Issues tab's collapsible status groups — open and ready-for-retest
@@ -206,15 +108,16 @@ test('an admin triages from the issue list, and the row it names is the row that
 })
 
 /**
- * ⚠️ A SUMMARY THAT SILENTLY DROPS ROWS IS WORSE THAN NO SUMMARY. Both pictures on this page are
- * derived — the per-area meters group the to-do list, the spend bar folds anything past the sixth
- * tool into "Other" — and each is one `.slice()` or one `reduce` away from quietly leaving
- * something out. Nothing else on the page would go red if they did: the list underneath would
- * still be complete and correct, and the number above it would just be wrong.
+ * ⚠️ A SUMMARY THAT SILENTLY DROPS ROWS IS WORSE THAN NO SUMMARY. The per-area meters are derived
+ * — they group the to-do list — and that is one `.slice()` or one `reduce` away from quietly
+ * leaving something out. Nothing else on the page would go red if it did: the list underneath
+ * would still be complete and correct, and the number above it would just be wrong.
  *
- * So the assertions are the ARITHMETIC, against the rendered list, not the presence of a bar.
+ * ⚠️ THIS USED TO WATCH TWO PICTURES. The spend bar was the other, and it went with the costs tab.
+ *
+ * So the assertion is the ARITHMETIC, against the rendered list, not the presence of a bar.
  */
-test('the pictures account for every row they summarise', async ({ page }) => {
+test('the meters account for every row they summarise', async ({ page }) => {
   await signIn(page, 'admin')
 
   await page.goto('/admin?tab=todo')
@@ -225,18 +128,6 @@ test('the pictures account for every row they summarise', async ({ page }) => {
   const totals = counts.map((c) => Number(c.split('/')[1]))
   expect(totals.length).toBeGreaterThan(0)
   expect(totals.reduce((a, b) => a + b, 0)).toBe(items)
-
-  // And the spend legend names every tool that costs something — the £0 row has no share, so it
-  // is the one that must NOT be there. Asserting "3 entries" would pass on a bar that dropped
-  // Vercel and invented a segment.
-  await page.goto('/admin?tab=costs')
-  const legend = await page.getByTestId('spend-legend').innerText()
-  expect(legend).toContain('Higgsfield')
-  expect(legend).toContain('Vercel')
-  expect(legend).not.toContain('Supabase')
-  const pcts = [...legend.matchAll(/(\d+)%/g)].map((m) => Number(m[1]))
-  expect(pcts.reduce((a, b) => a + b, 0)).toBeGreaterThanOrEqual(99)
-  expect(pcts.reduce((a, b) => a + b, 0)).toBeLessThanOrEqual(101)
 })
 
 /**
@@ -255,7 +146,6 @@ test('the Dashboard cards agree with the tabs they summarise', async ({ page }) 
   await page.goto('/admin?tab=summary')
   const todoCard = await page.getByTestId('summary-todo').innerText()
   const issuesCard = await page.getByTestId('summary-issues').innerText()
-  const costsCard = await page.getByTestId('summary-next-renewal').innerText()
 
   await page.goto('/admin?tab=todo')
   // "3 open of 4" on the card, "3 open of 4" on the tab — same two numbers, either order of words.
@@ -272,9 +162,4 @@ test('the Dashboard cards agree with the tabs they summarise', async ({ page }) 
   const all = await page.getByTestId('issue-item').count()
   const resolved = await page.locator('[data-testid="issue-item"][data-status="resolved"]').count()
   expect(issuesCard.match(/\d+/g)).toEqual([String(all - resolved), String(all)])
-
-  // The card names the NEXT renewal; the tab's row for that tool must carry the same urgency.
-  await page.goto('/admin?tab=costs')
-  const tool = costsCard.split(/\s+/)[1]
-  await expect(page.getByTestId('cost-row').filter({ hasText: tool })).toHaveAttribute('data-renewal', 'soon')
 })

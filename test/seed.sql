@@ -109,13 +109,6 @@ insert into review.profiles (user_id, role, name) values
 insert into review.video_reviewers (video_id, reviewer_id, verdict) values
   ('eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee', '55555555-5555-4555-8555-555555555555', null);
 
--- A couple of subscriptions so the renewal states have something to render. Dates are RELATIVE to
--- the day the harness starts, so the "soon" row is always soon and the spec never rots.
-insert into review.subscriptions (tool, plan, renewal_date, monthly_cost, credits_remaining, credits_source, sort_order) values
-  ('Higgsfield', 'Creator', current_date + 3,  29.00, 1250, 'manual', 0),
-  ('Vercel',     'Pro',     current_date + 60, 20.00, null,  'manual', 1),
-  ('Supabase',   'Free',    null,              0.00,  null,  'manual', 2);
-
 -- Two to-dos, one already done, so the open/total count means something.
 insert into review.todos (task, status, area, sort_order) values
   ('Design Logo', 'in_progress', null, 0),

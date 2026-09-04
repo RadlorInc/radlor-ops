@@ -3,9 +3,8 @@ import Summary from './Summary'
 import { badgesFrom } from '@/lib/navBadges'
 import { allAssignments, allNotes, allReviewers, allVideos, inviteLinkStates } from '@/lib/db'
 import { clearance, progressLabel } from '@/lib/clearance'
-import { listIssues, listSubscriptions, listTodos, listProfiles } from '@/lib/adminDb'
+import { listIssues, listTodos, listProfiles } from '@/lib/adminDb'
 import { requireRole } from '@/lib/session'
-import Costs from './Costs'
 import Todos from './Todos'
 import People from './People'
 import Watch from './Watch'
@@ -14,7 +13,6 @@ export const dynamic = 'force-dynamic'
 
 const TABS = [
   { key: 'summary', label: 'Dashboard' },
-  { key: 'costs', label: 'Costs' },
   { key: 'todo', label: 'To-do' },
   { key: 'videos', label: 'Marketing material' },
   { key: 'people', label: 'People' },
@@ -60,12 +58,11 @@ export default async function Admin({
 
   // ⚠️ The two admin tables are read AS THE USER (RLS decides); videos and notes still go through
   // the service key, because reviewers have no account for a policy to be written against.
-  const [videos, notes, assignments, reviewers, subscriptions, todos, issues, people, links] = await Promise.all([
+  const [videos, notes, assignments, reviewers, todos, issues, people, links] = await Promise.all([
     allVideos(),
     allNotes(),
     allAssignments(),
     allReviewers(),
-    listSubscriptions(),
     listTodos(),
     listIssues(),
     listProfiles(),
@@ -116,7 +113,7 @@ export default async function Admin({
    * at 25 for ever and stop meaning anything; a tab with nothing waiting gets no badge at all
    * rather than a zero. The Dashboard tab never gets one: it is a summary OF the badges beside it.
    */
-  const badges = badgesFrom({ subscriptions, todos, issues, assignments, userId: me.user_id })
+  const badges = badgesFrom({ todos, issues, assignments, userId: me.user_id })
 
   return (
     <main className="wrap">
@@ -164,16 +161,8 @@ export default async function Admin({
 
 
       {tab === 'summary' && (
-        <Summary
-          subscriptions={subscriptions}
-          todos={todos}
-          issues={issues}
-          rows={rows}
-          unread={unread}
-          today={new Date()}
-        />
+        <Summary todos={todos} issues={issues} rows={rows} unread={unread} />
       )}
-      {tab === 'costs' && <Costs initial={subscriptions} today={new Date().toISOString()} />}
       {tab === 'todo' && <Todos initial={todos} />}
       {tab === 'people' && <People initial={peopleWithJoin} />}
       {tab === 'videos' && (

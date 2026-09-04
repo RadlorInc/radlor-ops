@@ -9,7 +9,7 @@ import './globals.css'
  * unstyled text because the CSS is inlined with a `size-adjust` fallback.
  *
  * Fira Sans for the interface, Fira Code wherever a column is meant to be compared down rather
- * than read across: slugs, ids, timestamps, money, renewal dates.
+ * than read across: slugs, ids, timestamps, version numbers.
  */
 // Nunito Sans, not Fira: rounded and soft on purpose. The people reading these pages are
 // reviewers and testers, not developers, and the face is the first thing that says which.

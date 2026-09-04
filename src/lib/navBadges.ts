@@ -1,7 +1,6 @@
 import 'server-only'
 import { allAssignments, type Assignment } from './db'
-import { listIssues, listSubscriptions, listTodos, type Issue, type Subscription, type Todo } from './adminDb'
-import { renewalState } from './renewal'
+import { listIssues, listTodos, type Issue, type Todo } from './adminDb'
 
 /**
  * The counts on the tab strip, for an admin, on the pages that have a tab strip.
@@ -19,7 +18,6 @@ import { renewalState } from './renewal'
  * rows the dashboard itself loads.
  */
 export type NavBadges = {
-  costs?: number
   todo?: number
   issues?: number
   videos?: number
@@ -27,7 +25,7 @@ export type NavBadges = {
 }
 
 /**
- * ⚠️ THE PURE HALF, AND THE REASON IT IS SPLIT OUT. `/admin` already loads all four of these lists
+ * ⚠️ THE PURE HALF, AND THE REASON IT IS SPLIT OUT. `/admin` already loads all three of these lists
  * for the page itself. Calling `navBadges()` there fetched them a SECOND time, and — because it
  * was a separate `await` after the page's own `Promise.all` — it did so in a whole extra
  * sequential round trip. On a page where one Supabase round trip is the unit of latency, that was
@@ -37,21 +35,16 @@ export type NavBadges = {
  * fetches and then calls this. One definition of what a badge counts, two ways to feed it.
  */
 export function badgesFrom({
-  subscriptions,
   todos,
   issues,
   assignments,
   userId,
-  today = new Date(),
 }: {
-  subscriptions: Subscription[]
   todos: Todo[]
   issues: Issue[]
   assignments: Assignment[]
   userId: string
-  today?: Date
 }): NavBadges {
-
   // Grouped by video so "not cleared" means the video, not each assignment on it.
   const byVideo = new Map<string, { assigned: number; approved: number }>()
   for (const a of assignments) {
@@ -62,7 +55,6 @@ export function badgesFrom({
   }
 
   return {
-    costs: subscriptions.filter((s) => ['soon', 'lapsed'].includes(renewalState(s.renewal_date, today))).length,
     todo: todos.filter((t) => t.status !== 'done').length,
     issues: issues.filter((i) => i.status !== 'resolved').length,
     videos: [...byVideo.values()].filter((v) => v.approved !== v.assigned).length,
@@ -78,11 +70,10 @@ export function badgesFrom({
 
 /** For the pages that do not already hold these rows — `/tester` and the reviewer list. */
 export async function navBadges(userId: string): Promise<NavBadges> {
-  const [subscriptions, todos, issues, assignments] = await Promise.all([
-    listSubscriptions(),
+  const [todos, issues, assignments] = await Promise.all([
     listTodos(),
     listIssues(),
     allAssignments(),
   ])
-  return badgesFrom({ subscriptions, todos, issues, assignments, userId })
+  return badgesFrom({ todos, issues, assignments, userId })
 }

@@ -1,16 +1,15 @@
 import Link from 'next/link'
-import type { Subscription, Todo, Issue } from '@/lib/adminDb'
+import type { Todo, Issue } from '@/lib/adminDb'
 import type { Video } from '@/lib/db'
 import type { Clearance } from '@/lib/clearance'
 import { progressLabel } from '@/lib/clearance'
-import { renewalLabel, renewalState } from '@/lib/renewal'
 
 /**
  * The Dashboard tab: one card per section, each one the smallest thing that answers "do I need to
  * open this?".
  *
  * ⚠️ IT IS SERVER-RENDERED, AND THAT IS ONLY SAFE BECAUSE OF WHERE IT SITS. The per-section
- * summaries deliberately live INSIDE Costs/Todos/AdminIssues, because those lists mutate
+ * summaries deliberately live INSIDE Todos and the tester's issue list, because those lists mutate
  * client-side and a summary rendered elsewhere would disagree with the list it summarises the
  * moment anybody clicked something. This one cannot: the lists it summarises are not on screen at
  * the same time as it, and switching to one is a navigation, so it is a fresh server render every
@@ -20,26 +19,16 @@ import { renewalLabel, renewalState } from '@/lib/renewal'
  * "4 items" is a number that never changes and stops being read.
  */
 export default function Summary({
-  subscriptions,
   todos,
   issues,
   rows,
   unread,
-  today,
 }: {
-  subscriptions: Subscription[]
   todos: Todo[]
   issues: Issue[]
   rows: { video: Video; c: Clearance }[]
   unread: Map<string, number>
-  today: Date
 }) {
-  const monthly = subscriptions.reduce((s, r) => s + Number(r.monthly_cost ?? 0), 0)
-  const dated = subscriptions
-    .filter((r) => r.renewal_date)
-    .sort((a, b) => (a.renewal_date! < b.renewal_date! ? -1 : 1))
-  const next = dated[0]
-
   const openTodos = todos.filter((t) => t.status !== 'done').length
   const openIssues = issues.filter((i) => i.status !== 'resolved').length
   const assigned = rows.filter((r) => r.c.assigned > 0)
@@ -49,25 +38,6 @@ export default function Summary({
 
   return (
     <div className="summary" data-testid="summary">
-      <Link prefetch={false} className="card sumcard" href="/admin?tab=costs">
-        <h2>Costs and renewals</h2>
-        {/* The one number this dashboard leads with. Exactly one hero on this view. */}
-        <p className="hero">
-          <span className="figure">$ {monthly.toFixed(2)}</span>
-          <span className="unit">a month across {subscriptions.length}</span>
-        </p>
-        {next ? (
-          <p className="muted small" data-testid="summary-next-renewal">
-            Next: <strong>{next.tool}</strong>{' '}
-            <span className={`pill pill-${renewalState(next.renewal_date, today)}`}>
-              {renewalLabel(next.renewal_date, today)}
-            </span>
-          </p>
-        ) : (
-          <p className="muted small">No renewal dates yet.</p>
-        )}
-      </Link>
-
       <Link prefetch={false} className="card sumcard" href="/admin?tab=todo">
         <h2>To-do</h2>
         <p className="bignum" data-testid="summary-todo">

@@ -1,4 +1,4 @@
-import { listIssues, listProfiles, listSessions, listSubscriptions, listTodos, type Subscription, type Todo } from '@/lib/adminDb'
+import { listIssues, listProfiles, listSessions, listTodos, type Todo } from '@/lib/adminDb'
 import { allAssignments, type Assignment } from '@/lib/db'
 import { requireRole } from '@/lib/session'
 import RoleNav from '../RoleNav'
@@ -24,24 +24,23 @@ export default async function Tester() {
    * not a query. Everything this page needs now goes in one `Promise.all` and `badgesFrom()` does
    * the counting.
    *
-   * ⚠️ A TESTER FETCHES ALMOST NONE OF IT. The four badge lists exist only to label an ADMIN's
+   * ⚠️ A TESTER FETCHES ALMOST NONE OF IT. The three badge lists exist only to label an ADMIN's
    * tabs; a tester has a single tab and no use for them, so those slots resolve to empty arrays
    * without a request. The strip they cannot see costs them nothing.
    */
   const admin = profile.role === 'admin'
   const none = <T,>(): Promise<T[]> => Promise.resolve([])
-  const [issues, sessions, people, subscriptions, todos, assignments] = await Promise.all([
+  const [issues, sessions, people, todos, assignments] = await Promise.all([
     listIssues(),
     listSessions(),
     // Only a triager needs to know whose issue it is; a tester reads their own name back otherwise.
     admin ? listProfiles() : none<{ user_id: string; name: string }>(),
-    admin ? listSubscriptions() : none<Subscription>(),
     admin ? listTodos() : none<Todo>(),
     admin ? allAssignments() : none<Assignment>(),
   ])
   const names = Object.fromEntries(people.map((p) => [p.user_id, p.name]))
   const badges = admin
-    ? badgesFrom({ subscriptions, todos, issues, assignments, userId: profile.user_id })
+    ? badgesFrom({ todos, issues, assignments, userId: profile.user_id })
     : undefined
 
   return (

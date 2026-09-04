@@ -61,7 +61,7 @@ const HERE = dirname(fileURLToPath(import.meta.url))
 const ROOT = join(HERE, '..')
 const PORT = Number(process.env.FAKE_SUPABASE_PORT || 54329)
 const SECRET = 'fake-storage-secret'
-const TABLES = new Set(['reviewers', 'videos', 'video_reviewers', 'notes', 'profiles', 'subscriptions', 'todos', 'issues', 'testing_sessions', 'invite_links'])
+const TABLES = new Set(['reviewers', 'videos', 'video_reviewers', 'notes', 'profiles', 'todos', 'issues', 'testing_sessions', 'invite_links'])
 /** These tables live in `review`, not `public` — the shared project's `public` belongs to the
  *  marketing site. The shim ENFORCES the profile header for the same reason real PostgREST does:
  *  without it the app would be asking for `public.reviewers`, which does not exist. If this were
@@ -73,7 +73,9 @@ const IDENT = /^[a-z_][a-z0-9_]*$/
  * ⚠️ PGlite PARSES `date` COLUMNS INTO JS `Date`; REAL PostgREST RETURNS `YYYY-MM-DD`.
  * Left alone, `JSON.stringify` turns the Date into a full ISO timestamp and the app — which builds
  * `${renewal}T00:00:00Z` to compare at UTC midnight — produces `NaN` and reports every renewal as
- * having no date. Caught by a renewal spec going `Expected: "soon", Received: "none"`.
+ * having no date. Caught by a renewal spec going `Expected: "soon", Received: "none"` — that spec
+ * went with the costs tab, so nothing exercises this today. It stays because the coercion is right
+ * for ANY `date` column, and the day one arrives is not the day to rediscover this.
  *
  * Fixed in the STAND-IN rather than by making the app accept both shapes: the app should speak to
  * one contract, and a harness that hands it a shape production never sends is a harness that hides
