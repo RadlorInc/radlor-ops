@@ -29,6 +29,19 @@ certified a check that goes red because you deleted a semicolon. It now requires
 from the named spec's own `expect(...)`. **Check the checker with the question you check everything
 else with: what result is this incapable of distinguishing?**
 
+⚠️ **THIS SCRIPT NOW EXISTS TWICE, WITH DIFFERENT RUNNERS, AND A FIX TO ONE WILL NOT REACH THE
+OTHER.** It was ported to `milo-story-mode` on 2026-09-04 (`scripts/break-check.sh` +
+`break-verdict.mjs` + `break-live.sh`, `npm run break`), after a stray `git checkout` there reverted
+a fix twice in one session while the tool that prevents it sat in this repo. That port is **vitest**;
+this one is **playwright**, and the verdict half is exactly where they diverge — a report shape and
+an error-message format, one per runner. Sharing a single version would mean one reader that knows
+both and has been watched failing in both, which is more than either repo needs, so the duplication
+is deliberate. **What is NOT deliberate is a lesson landing in one copy only: if you improve the
+verdict logic, the trap, or the exit codes here, say so in Milo's CLAUDE.md too, and vice versa.**
+Milo's port already carries one finding this copy does not — its live-break run proved that vitest
+reports a broken SETUP file byte-identically to a broken SOURCE file, so its reader stops claiming
+to tell them apart. Worth asking whether playwright collapses anything the same way.
+
 ## The two that got through, in this repo
 
 | what it looked like | what it was |
