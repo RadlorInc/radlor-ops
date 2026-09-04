@@ -116,52 +116,21 @@ export default function Issues({
           />
         </label>
         <div className="fields">
-          {/* ⚠️ NO SUGGESTION LIST ON `area`, AND THAT IS A DECISION, NOT AN OVERSIGHT. It had one
-              for a day. Rafi's call on 2026-09-03: an area is whatever part of the app the person
-              was looking at, and offering a list makes the listed answers feel like the allowed
-              ones — people reach for the nearest option instead of naming what they actually saw.
-              The cost is accepted: `measurement` and `Measurement` will both exist and grouping by
-              area will be approximate. Do not put it back citing convergence; that trade was made
-              with the split in front of him. */}
           <label className="field">
-            <span className="fieldname">Where in the app?</span>
-            <input
-              type="text"
-              placeholder="e.g. Nest game"
-              value={form.area}
-              onChange={(e) => setForm({ ...form, area: e.target.value })}
-              data-testid="issue-area"
-            />
-          </label>
-          <label className="field">
-            <span className="fieldname">What kind of problem?</span>
+            <span className="fieldname">Age Group</span>
             <select
-              value={form.type}
-              onChange={(e) => setForm({ ...form, type: e.target.value })}
-              data-testid="issue-type"
+              value={form.age_band}
+              onChange={(e) => setForm({ ...form, age_band: e.target.value })}
+              data-testid="issue-age"
             >
               <option value="">choose…</option>
-              {TYPES.map((t) => (
-                <option key={t} value={t}>
-                  {t}
+              {AGE_BANDS.map((b) => (
+                <option key={b} value={b}>
+                  {b === 'any' ? 'any age' : b.replace('-', '–')}
                 </option>
               ))}
-              <option value="other">Other…</option>
             </select>
           </label>
-          {form.type === 'other' && (
-            <label className="field">
-              <span className="fieldname">What kind, in your words?</span>
-              <input
-                type="text"
-                autoFocus
-                placeholder="e.g. the timer runs too fast"
-                value={typeOther}
-                onChange={(e) => setTypeOther(e.target.value)}
-                data-testid="issue-type-other"
-              />
-            </label>
-          )}
           {/**
             * ⚠️ THE MECHANISM WAS ALWAYS RIGHT; THE WORDING WAS THE BUG. Ticking has always cleared
             * and disabled the chapter box, and the route has always forced `chapter` to null — both
@@ -212,21 +181,52 @@ export default function Issues({
             </label>
           </span>
           </div>
+          {/* ⚠️ NO SUGGESTION LIST ON `area`, AND THAT IS A DECISION, NOT AN OVERSIGHT. It had one
+              for a day. Rafi's call on 2026-09-03: an area is whatever part of the app the person
+              was looking at, and offering a list makes the listed answers feel like the allowed
+              ones — people reach for the nearest option instead of naming what they actually saw.
+              The cost is accepted: `measurement` and `Measurement` will both exist and grouping by
+              area will be approximate. Do not put it back citing convergence; that trade was made
+              with the split in front of him. */}
           <label className="field">
-            <span className="fieldname">Age Group</span>
+            <span className="fieldname">Where in the chapter?</span>
+            <input
+              type="text"
+              placeholder="e.g. Nest game"
+              value={form.area}
+              onChange={(e) => setForm({ ...form, area: e.target.value })}
+              data-testid="issue-area"
+            />
+          </label>
+          <label className="field">
+            <span className="fieldname">What kind of problem?</span>
             <select
-              value={form.age_band}
-              onChange={(e) => setForm({ ...form, age_band: e.target.value })}
-              data-testid="issue-age"
+              value={form.type}
+              onChange={(e) => setForm({ ...form, type: e.target.value })}
+              data-testid="issue-type"
             >
               <option value="">choose…</option>
-              {AGE_BANDS.map((b) => (
-                <option key={b} value={b}>
-                  {b === 'any' ? 'any age' : b.replace('-', '–')}
+              {TYPES.map((t) => (
+                <option key={t} value={t}>
+                  {t}
                 </option>
               ))}
+              <option value="other">Other…</option>
             </select>
           </label>
+          {form.type === 'other' && (
+            <label className="field">
+              <span className="fieldname">What kind, in your words?</span>
+              <input
+                type="text"
+                autoFocus
+                placeholder="e.g. the timer runs too fast"
+                value={typeOther}
+                onChange={(e) => setTypeOther(e.target.value)}
+                data-testid="issue-type-other"
+              />
+            </label>
+          )}
         </div>
         <button className="send" onClick={submit} disabled={busy || !form.description.trim()} data-testid="issue-submit">
           {busy ? 'Sending…' : 'Send it in'}
