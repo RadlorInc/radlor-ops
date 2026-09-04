@@ -8,6 +8,7 @@ import { requireRole } from '@/lib/session'
 import Costs from './Costs'
 import Todos from './Todos'
 import People from './People'
+import Watch from './Watch'
 
 export const dynamic = 'force-dynamic'
 
@@ -15,7 +16,7 @@ const TABS = [
   { key: 'summary', label: 'Dashboard' },
   { key: 'costs', label: 'Costs' },
   { key: 'todo', label: 'To-do' },
-  { key: 'videos', label: 'Videos' },
+  { key: 'videos', label: 'Marketing material' },
   { key: 'people', label: 'People' },
 ] as const
 type TabKey = (typeof TABS)[number]['key']
@@ -180,15 +181,15 @@ export default async function Admin({
       {/* ⚠️ VISUALLY HIDDEN, NOT DELETED. The tab above already says "Videos", so printing it
           again is noise — but a section with no heading at all is a section a screen reader cannot
           find or skip to, and the document loses its outline. The label moves, it does not go. */}
-      <h2 className="sr-only">Videos</h2>
+      <h2 className="sr-only">Marketing material</h2>
       <p className="muted small">
         <a href="/admin/export">Open notes as markdown →</a> ·{' '}
         <a href="/admin/export?all=1">including resolved</a>
       </p>
-      {/* ⚠️ Seven columns. At 375px this pushed the whole document sideways until it was given a
+      {/* ⚠️ Eight columns. At 375px this pushed the whole document sideways until it was given a
           container of its own to scroll inside; `tabIndex` so the scroll is reachable by keyboard
           and not only by a finger or a trackpad. */}
-      <div className="tablewrap" tabIndex={0} role="region" aria-label="Videos">
+      <div className="tablewrap" tabIndex={0} role="region" aria-label="Marketing material">
         <table style={{ marginTop: 10 }}>
         <thead>
           <tr>
@@ -198,6 +199,7 @@ export default async function Admin({
             <th>Version</th>
             <th>Reviewers</th>
             <th>Cleared to post</th>
+            <th>Watch</th>
             <th>Unread notes</th>
           </tr>
         </thead>
@@ -248,6 +250,13 @@ export default async function Admin({
                     </span>
                   </span>
                 )}
+              </td>
+              {/* ⚠️ CLEARED ROWS ONLY, and the dash is the answer for the rest rather than an
+                  empty cell — "not approved yet" is information, a blank is a rendering bug you
+                  cannot tell apart from a missing feature. The route enforces this independently;
+                  see the note on `clearedVideoForAdmin`. */}
+              <td data-testid="watch-cell">
+                {c.cleared ? <Watch slug={v.slug} /> : <span className="muted">—</span>}
               </td>
               <td>{unread.get(v.id) ?? 0}</td>
             </tr>

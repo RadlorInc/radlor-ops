@@ -53,7 +53,7 @@ export default function Summary({
         <h2>Costs and renewals</h2>
         {/* The one number this dashboard leads with. Exactly one hero on this view. */}
         <p className="hero">
-          <span className="figure">£/$ {monthly.toFixed(2)}</span>
+          <span className="figure">$ {monthly.toFixed(2)}</span>
           <span className="unit">a month across {subscriptions.length}</span>
         </p>
         {next ? (

@@ -142,7 +142,7 @@ export default function Costs({ initial, today }: { initial: Subscription[]; tod
           "49.00" next to a stale "across 2" is exactly the bug worth failing on. Splitting them
           into two testids would have let each half pass separately. */}
       <p className="hero" data-testid="monthly-total">
-        <span className="figure">£/$ {total.toFixed(2)}</span>
+        <span className="figure">$ {total.toFixed(2)}</span>
         <span className="unit">a month across {rows.length}</span>
       </p>
 

@@ -21,7 +21,7 @@ const TABS: Record<Role, Tab[]> = {
     { href: '/admin', label: 'Dashboard' },
     { href: '/admin?tab=costs', label: 'Costs', badge: 'costs' },
     { href: '/admin?tab=todo', label: 'To-do', badge: 'todo' },
-    { href: '/admin?tab=videos', label: 'Videos', badge: 'videos' },
+    { href: '/admin?tab=videos', label: 'Marketing material', badge: 'videos' },
     { href: '/admin?tab=people', label: 'People' },
     { href: '/tester', label: 'Chapter testing', badge: 'issues' },
     { href: '/review', label: 'My reviews', badge: 'review' },
