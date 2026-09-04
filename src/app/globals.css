@@ -570,3 +570,11 @@ td[data-cleared='no'] { color: var(--muted); }
     scroll-behavior: auto !important;
   }
 }
+
+/* The admin's player, in a native <dialog>. Sized off the viewport rather than the column it was
+   opened from — a 9:16 cut inside a table cell is a 284px-tall row and an eighth column pushed off
+   the screen, which is what put it in here. */
+dialog.watchbox { border: 1px solid var(--line); border-radius: 12px; background: var(--panel); color: var(--text); padding: 14px; }
+dialog.watchbox::backdrop { background: rgb(0 0 0 / 0.6); }
+dialog.watchbox video { display: block; width: min(46vh, 90vw); aspect-ratio: 9 / 16; border-radius: 8px; background: #000; }
+dialog.watchbox button { margin-top: 10px; width: 100%; }

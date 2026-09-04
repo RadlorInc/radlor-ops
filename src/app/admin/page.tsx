@@ -256,7 +256,7 @@ export default async function Admin({
                   cannot tell apart from a missing feature. The route enforces this independently;
                   see the note on `clearedVideoForAdmin`. */}
               <td data-testid="watch-cell">
-                {c.cleared ? <Watch slug={v.slug} /> : <span className="muted">—</span>}
+                {c.cleared ? <Watch slug={v.slug} title={v.title} /> : <span className="muted">—</span>}
               </td>
               <td>{unread.get(v.id) ?? 0}</td>
             </tr>

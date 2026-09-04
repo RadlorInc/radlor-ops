@@ -103,7 +103,7 @@ export default function Summary({
       </Link>
 
       <Link prefetch={false} className="card sumcard" href="/admin?tab=videos">
-        <h2>Videos</h2>
+        <h2>Marketing material</h2>
         <p className="bignum" data-testid="summary-videos">
           {notCleared.length} <span className="unit">not cleared of {assigned.length} out for review</span>
         </p>
