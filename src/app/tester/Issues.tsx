@@ -105,7 +105,7 @@ export default function Issues({
           Plain words are perfect. Say what happened and what would be better.
         </p>
         <label className="field">
-          <span className="fieldname">What happened?</span>
+          <span className="fieldname">What&apos;s your observation/feedback</span>
           <textarea
             rows={4}
             value={form.description}
@@ -213,7 +213,7 @@ export default function Issues({
           </span>
           </div>
           <label className="field">
-            <span className="fieldname">Child&apos;s age</span>
+            <span className="fieldname">Age Group</span>
             <select
               value={form.age_band}
               onChange={(e) => setForm({ ...form, age_band: e.target.value })}
@@ -240,7 +240,7 @@ export default function Issues({
 
       <section className="issuelist" style={{ marginTop: 32 }}>
         <h2>
-          {canTriage ? 'Everything found so far' : 'What you have sent'}{' '}
+          {canTriage ? 'Everything found so far' : 'Issues/Feedback reported by you'}{' '}
           <span className="muted small" data-testid="issue-count">({shown.length} of {items.length})</span>
         </h2>
         <div style={{ display: 'flex', gap: 6, margin: '8px 0 12px', flexWrap: 'wrap' }}>
