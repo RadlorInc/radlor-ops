@@ -143,7 +143,7 @@ export default function Issues({
             * than what it selects, and the disabled field saying why it is disabled instead of
             * going quietly grey.
             */}
-          <div className="field wide">
+          <div className="field">
             <span className="fieldname">Which chapter?</span>
           <span className="scope" data-testid="issue-scope">
             <input
@@ -192,7 +192,7 @@ export default function Issues({
             <span className="fieldname">Where in the chapter?</span>
             <input
               type="text"
-              placeholder="e.g. Nest game"
+              placeholder="e.g. the counting game"
               value={form.area}
               onChange={(e) => setForm({ ...form, area: e.target.value })}
               data-testid="issue-area"

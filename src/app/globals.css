@@ -473,11 +473,9 @@ ol.todos.linklist li { flex-wrap: wrap; gap: 8px 12px; }
 .fieldname { font-size: 14px; font-weight: 600; color: var(--muted); }
 .field input, .field select, .field textarea { width: 100%; }
 .fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 14px 16px; margin-top: 14px; }
-.fields .wide { grid-column: span 2; }
 .actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-top: 16px; }
 .help { color: var(--muted); font-size: 15px; margin: 0 0 14px; max-width: 60ch; }
 .error { color: var(--bad-ink); }
-@media (max-width: 720px) { .fields .wide { grid-column: auto; } }
 
 /* ── The tester's page ──────────────────────────────────────────────────────────────────────
  *
