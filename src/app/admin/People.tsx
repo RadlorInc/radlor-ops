@@ -193,7 +193,7 @@ export default function People({ initial }: { initial: Person[] }) {
           <h2>Send these</h2>
           <p className="help">
             One line per person — send each of them their own. Every link works once and stops working
-            in seven days. ⚠️ This is the only time they can be read: only their fingerprint is stored,
+            in three weeks. ⚠️ This is the only time they can be read: only their fingerprint is stored,
             so nothing can show them to you again. Lost one? <em>New link</em> beside that person makes
             a fresh one and kills the old.
           </p>

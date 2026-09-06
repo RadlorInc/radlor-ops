@@ -189,12 +189,16 @@ test('the People list says who has not opened their link yet, and stops saying i
   const theirRow = page.getByTestId('person').filter({ hasText: 'newjoin' })
   await expect(theirRow.getByTestId('person-join')).toContainText('Not joined yet')
   /**
-   * ⚠️ THE NUMBER, NOT JUST THE WORD "expires". A link is made with seven days on it, so a row
-   * made a second ago has 6.99 left and must read **7**. Asserting only that the phrase appears
-   * let an off-by-one ship that told the admin every fresh link died a day early — under-reporting
-   * an expiry is the direction somebody plans around and gets wrong.
+   * ⚠️ THE NUMBER, NOT JUST THE WORD "expires". A link is made with 21 days on it, so a row made a
+   * second ago has 20.99 left and must read **21**. Asserting only that the phrase appears let an
+   * off-by-one ship that told the admin every fresh link died a day early — under-reporting an
+   * expiry is the direction somebody plans around and gets wrong.
+   *
+   * ⚠️ AND 21 IS WRITTEN HERE, NOT IMPORTED FROM `DAYS`. That is the point: changing the window
+   * takes two edits, and the red test in between is the reminder that three sentences in the
+   * interface also say how long a link lasts. Going 7 → 21 is exactly how this earned the note.
    */
-  await expect(theirRow.getByTestId('person-join')).toContainText('link expires in 7 days')
+  await expect(theirRow.getByTestId('person-join')).toContainText('link expires in 21 days')
 
   /**
    * ⚠️ THE FIXTURE THE NAIVE VERSION GETS WRONG. The admin account was made by hand and has no

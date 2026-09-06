@@ -6,9 +6,13 @@ import { hashToken, mintToken } from '@/lib/inviteToken'
 export const dynamic = 'force-dynamic'
 
 const ROLES = new Set(['admin', 'tester', 'reviewer'])
-/** A week to open your link. Long enough for a forward to sit in a WhatsApp thread over a weekend,
- *  short enough that a leaked list of links is not a permanent way in. */
-const DAYS = 7
+/** Three weeks to open your link. It was a week, and a week turned out to be the wrong end of the
+ *  trade: the first tester round had three people still unopened on day four, because a link sent
+ *  to somebody who is not expecting it competes with everything else in their inbox and loses for
+ *  a few days. Nobody was at risk of a leaked list; they were at risk of the link dying quietly and
+ *  the admin never hearing why. Still finite, and still single-use — the link is spent the moment
+ *  it is opened, so the window only ever governs people who have not arrived yet. */
+const DAYS = 21
 const MAX_EMAILS = 200
 
 /**
