@@ -101,20 +101,6 @@ export default function Issues({
     <>
       <section className="card filecard" data-testid="issue-form">
         <h2>Tell us what you found</h2>
-        <p className="muted small" style={{ margin: '0 0 14px' }}>
-          Plain words are perfect. Say what happened and what would be better.
-        </p>
-        <label className="field">
-          <span className="fieldname">What&apos;s your observation/feedback</span>
-          <textarea
-            rows={4}
-            value={form.description}
-            maxLength={4000}
-            placeholder="e.g. The turtles are too close together to read the numbers"
-            onChange={(e) => setForm({ ...form, description: e.target.value })}
-            data-testid="issue-description"
-          />
-        </label>
         <div className="fields">
           <label className="field">
             <span className="fieldname">Age Group</span>
@@ -144,7 +130,7 @@ export default function Issues({
             * going quietly grey.
             */}
           <div className="field">
-            <span className="fieldname">Which chapter?</span>
+            <span className="fieldname">Chapter Name</span>
           <span className="scope" data-testid="issue-scope">
             <input
               type="text"
@@ -199,7 +185,7 @@ export default function Issues({
             />
           </label>
           <label className="field">
-            <span className="fieldname">What kind of problem?</span>
+            <span className="fieldname">Select Problem Type</span>
             <select
               value={form.type}
               onChange={(e) => setForm({ ...form, type: e.target.value })}
@@ -228,6 +214,33 @@ export default function Issues({
             </label>
           )}
         </div>
+        {/* ⚠️ LAST, AND THAT IS THE POINT OF THE ORDER. The tester now answers the short
+            questions first — age, chapter, place, type — and writes prose only once they have
+            already said which chapter and which kind. Prose first was asking for the hardest
+            answer while the reader still had the whole form ahead of them.
+
+            ⚠️ AND THE ENCOURAGEMENT MOVED INTO THE BOX. "Plain words are perfect" was a line of
+            help sitting above a label, three inches from the field it was about; a person who
+            skips grey text — which is most people — never met it. In the placeholder it is in the
+            one place they are looking when they need it, and it disappears the moment they type
+            rather than staying on screen as furniture. */}
+        <label className="field">
+          <span className="fieldname">Please provide additional details to help our development better resolve this issue.</span>
+          {/* ⚠️ FIVE ROWS, NOT FOUR, AND THE PLACEHOLDER IS WHY. At 390px the two-line hint wraps
+              to four lines and clipped the example — the half a tester actually copies. A
+              placeholder that is cut off is worse than none: it looks like the box is too small. */}
+          <textarea
+            rows={5}
+            value={form.description}
+            maxLength={4000}
+            placeholder={
+              'Plain words are perfect. Say what happened and what would be better.\n\n' +
+              'e.g. The turtles are too close together to read the numbers'
+            }
+            onChange={(e) => setForm({ ...form, description: e.target.value })}
+            data-testid="issue-description"
+          />
+        </label>
         <button className="send" onClick={submit} disabled={busy || !form.description.trim()} data-testid="issue-submit">
           {busy ? 'Sending…' : 'Send it in'}
         </button>
