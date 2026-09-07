@@ -13,6 +13,8 @@ const NEXT: Record<Todo['status'], Todo['status']> = {
   in_progress: 'done',
   done: 'not_started',
 }
+const FILTERS = ['all', 'not_started', 'in_progress', 'done'] as const
+type Filter = (typeof FILTERS)[number]
 
 /**
  * Add, edit, mark done, reorder. Four actions, because those are the ones the sheet earned:
@@ -26,6 +28,7 @@ export default function Todos({ initial }: { initial: Todo[] }) {
   const [editing, setEditing] = useState<string | null>(null)
   const [draft, setDraft] = useState('')
   const [error, setError] = useState<string | null>(null)
+  const [filter, setFilter] = useState<Filter>('all')
 
   async function call(method: 'POST' | 'PATCH', body: unknown) {
     setBusy(true)
@@ -87,6 +90,7 @@ export default function Todos({ initial }: { initial: Todo[] }) {
   }
 
   const open = items.filter((t) => t.status !== 'done').length
+  const shown = filter === 'all' ? items : items.filter((t) => t.status === filter)
 
   /** Done out of total, per area, biggest first. Items with no area are grouped as "No area" so
    *  the meters always add up to the list — a summary that silently drops rows is worse than none. */
@@ -117,6 +121,11 @@ export default function Todos({ initial }: { initial: Todo[] }) {
         * and that is the whole reason it can be trusted: the list below mutates client-side as
         * items are added and advanced, so a summary rendered anywhere else would quietly disagree
         * with the list it is summarising the moment anybody clicked something.
+        *
+        * ⚠️ IT READS `items`, NEVER `shown`, AND THE FILTER MUST NOT REACH IT. "2 of 5 done" is a
+        * fact about the work; recomputing it over the visible rows turns every filter into "3 of 3
+        * done" and the meters into a picture of the filter rather than of the list. Filtering the
+        * meters too is the obvious-looking change, which is why there is a test for it.
         */}
       {areas.length > 0 && (
         <div className="areameters" data-testid="area-progress">
@@ -155,8 +164,44 @@ export default function Todos({ initial }: { initial: Todo[] }) {
       </div>
       {error && <p className="small error" data-testid="todo-error">{error}</p>}
 
+      {/* ⚠️ THE SAME CHIP ROW AS THE TESTER'S ISSUE LIST, ON PURPOSE. Two lists in one product
+          that filter by status should not have two ways of doing it — a person who learned the
+          chips on /tester already knows this one. */}
+      <div style={{ display: 'flex', gap: 6, margin: '0 0 12px', flexWrap: 'wrap', alignItems: 'center' }}>
+        {FILTERS.map((f) => (
+          <button
+            key={f}
+            className="chip"
+            onClick={() => setFilter(f)}
+            /* ⚠️ THE COLOUR IS NOT THE ONLY ANSWER TO "WHICH ONE IS ON". A screen reader gets
+               nothing from a border, and neither does anyone in forced-colors. `aria-pressed` is
+               the whole fix and these are already <button>s. */
+            aria-pressed={filter === f}
+            style={filter === f ? { borderColor: 'var(--accent)', color: 'var(--accent)' } : undefined}
+            data-testid={`todo-filter-${f}`}
+          >
+            {f === 'all' ? 'All' : LABEL[f]}
+          </button>
+        ))}
+        <span className="muted small" data-testid="todo-shown-count">
+          {shown.length} of {items.length}
+        </span>
+      </div>
+
+      {/* ⚠️ THE ARROWS GO AWAY WHILE A FILTER IS ON, AND THAT IS THE FEATURE, NOT A GAP. Position
+          is a property of the WHOLE list: "up" swaps with the row above in the full order, which
+          under a filter is usually a row you cannot see. Left in, the button would either do
+          nothing visible or move the item somewhere the screen cannot show — and its `disabled`
+          rule (`i === 0`) would be lying too, because the first VISIBLE row is rarely the first
+          row. A control that cannot mean what it looks like should not be on screen. */}
+      {filter !== 'all' && (
+        <p className="muted small" data-testid="todo-reorder-off">
+          Reordering is off while filtered — an item&apos;s position belongs to the whole list.
+        </p>
+      )}
+
       <ol className="todos" data-testid="todo-list">
-        {items.map((t, i) => (
+        {shown.map((t, i) => (
           <li key={t.id} data-testid="todo-item" data-status={t.status}>
             <button className="chip" onClick={() => cycle(t)} disabled={busy} data-testid="todo-status">
               {LABEL[t.status]}
@@ -186,29 +231,33 @@ export default function Todos({ initial }: { initial: Todo[] }) {
             )}
             {t.area && <span className="area">{t.area}</span>}
             <span style={{ marginLeft: 'auto', whiteSpace: 'nowrap' }}>
+              {filter === 'all' && (
+                <>
               {/* ⚠️ `iconbtn`, NOT `chip`. As chips they inherited `li[data-status='done'] .chip`
                   and turned green on a finished row — a colour that means "done" painted onto a
                   control with nothing to do with status. And an icon-only button needs a name:
                   a screen reader otherwise announces these two as "up arrow" and "down arrow",
                   which says what they look like rather than what they do. */}
-              <button
-                className="iconbtn"
-                onClick={() => move(t, 'up')}
-                disabled={busy || i === 0}
-                aria-label={`Move “${t.task}” up`}
-                data-testid="todo-up"
-              >
-                ↑
-              </button>{' '}
-              <button
-                className="iconbtn"
-                onClick={() => move(t, 'down')}
-                disabled={busy || i === items.length - 1}
-                aria-label={`Move “${t.task}” down`}
-                data-testid="todo-down"
-              >
+                  <button
+                    className="iconbtn"
+                    onClick={() => move(t, 'up')}
+                    disabled={busy || i === 0}
+                    aria-label={`Move “${t.task}” up`}
+                    data-testid="todo-up"
+                  >
+                    ↑
+                  </button>{' '}
+                  <button
+                    className="iconbtn"
+                    onClick={() => move(t, 'down')}
+                    disabled={busy || i === items.length - 1}
+                    aria-label={`Move “${t.task}” down`}
+                    data-testid="todo-down"
+                  >
                 ↓
-              </button>
+                  </button>
+                </>
+              )}
             </span>
           </li>
         ))}

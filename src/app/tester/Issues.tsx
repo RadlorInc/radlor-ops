@@ -262,6 +262,8 @@ export default function Issues({
               key={f}
               className="chip"
               onClick={() => setFilter(f)}
+              /* Same reason as the to-do chips: the border is not readable by everybody. */
+              aria-pressed={filter === f}
               style={filter === f ? { borderColor: 'var(--accent)', color: 'var(--accent)' } : undefined}
               data-testid={`filter-${f}`}
             >
