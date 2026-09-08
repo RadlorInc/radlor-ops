@@ -103,3 +103,28 @@ export async function videoIsReadable(storagePath: string): Promise<boolean> {
     return false
   }
 }
+
+/**
+ * Remove one object. Answers whether it is actually gone, and the caller is expected to care.
+ *
+ * ⚠️ A DELETE THAT REPORTS SUCCESS IS NOT PROOF THE OBJECT LEFT — this bucket has form. On
+ * 2026-08-31 an object here survived a delete that returned 200 and stayed unreachable through
+ * every other verb too (docs/security-findings.md #4). So the row goes first and this runs after:
+ * an object left behind is invisible litter, whereas a row whose file has gone is a reviewer
+ * staring at a dead player. Failure is returned rather than thrown so the admin is told which of
+ * the two happened.
+ */
+export async function deleteVideoObject(storagePath: string): Promise<boolean> {
+  const { url, key } = env()
+  try {
+    const res = await fetch(`${url}/storage/v1/object/${VIDEO_BUCKET}/${encodeURI(storagePath)}`, {
+      method: 'DELETE',
+      cache: 'no-store',
+      headers: { apikey: key, Authorization: `Bearer ${key}` },
+    })
+    await res.arrayBuffer()
+    return res.ok
+  } catch {
+    return false
+  }
+}

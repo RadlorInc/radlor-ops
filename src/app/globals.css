@@ -553,3 +553,9 @@ input[type='file']::file-selector-button {
   transition: background-color var(--t) ease, border-color var(--t) ease;
 }
 input[type='file']::file-selector-button:hover { background: var(--panel-2); border-color: var(--line-strong); }
+
+/* The delete confirm, in the same native <dialog> as the player. Wider than the player because it
+   is a sentence rather than a picture, and capped so the question stays one comfortable measure. */
+.confirmbox { border: 1px solid var(--line); border-radius: 12px; background: var(--panel); color: var(--text); padding: 18px 20px; max-width: min(34em, 90vw); }
+.confirmbox::backdrop { background: rgb(0 0 0 / 0.6); }
+.confirmbox button { white-space: nowrap; }

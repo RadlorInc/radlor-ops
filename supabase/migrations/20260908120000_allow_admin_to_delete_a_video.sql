@@ -1,0 +1,18 @@
+-- ⚠️ THE GRANT THAT WAS NOT THERE, AND WHOSE ABSENCE LOOKED EXACTLY LIKE A DELIBERATE DENIAL.
+--
+-- `20260831165900` gave `service_role` `select, insert` on everything in this schema and set the
+-- same as the DEFAULT privileges, and `20260831183000` added `update (status)` on videos. Nothing
+-- ever granted DELETE, so the delete button would have answered `42501 permission denied` from
+-- production while the offline suite stayed green — PGlite runs as one superuser and cannot see a
+-- grant at all. Read back with `has_table_privilege` after applying; the falses matter as much as
+-- the trues.
+--
+-- ⚠️ ONE TABLE, NOT THREE. `review.notes.video_id` and `review.video_reviewers.video_id` are both
+-- `on delete cascade`, and a cascading delete runs with the privileges of the constraint rather
+-- than of the caller — so granting delete on the children would widen what the web tier can reach
+-- without being needed for this at all. A reviewer's note can still only disappear WITH its video.
+--
+-- Deliberately NOT granted: delete on `review.issues`, `review.todos`, `review.profiles`,
+-- `review.invite_links`. Losing a tester's issue or somebody's account is not an action this tool
+-- offers, and an unused grant is the kind of thing a later bug finds for you.
+grant delete on review.videos to service_role;

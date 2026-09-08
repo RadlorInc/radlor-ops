@@ -9,6 +9,7 @@ import Todos from './Todos'
 import People from './People'
 import Watch from './Watch'
 import Upload from './Upload'
+import DeleteVideo from './DeleteVideo'
 
 export const dynamic = 'force-dynamic'
 
@@ -71,6 +72,12 @@ export default async function Admin({
   ])
 
   const peopleWithJoin = withJoinState(people, links)
+
+  // ⚠️ EVERY NOTE, NOT JUST THE UNREAD ONES. The delete confirm counts what would be destroyed,
+  // and a resolved note is still somebody's work — "and 0 notes" over a video carrying six
+  // resolved ones would be the interface underselling what the button does.
+  const noteCount = new Map<string, number>()
+  for (const n of notes) noteCount.set(n.video_id, (noteCount.get(n.video_id) ?? 0) + 1)
 
   // Unread = not yet acted on. `resolved_at` is the only thing that clears it.
   const unread = new Map<string, number>()
@@ -177,7 +184,7 @@ export default async function Admin({
         <a href="/admin/export">Open notes as markdown →</a> ·{' '}
         <a href="/admin/export?all=1">including resolved</a>
       </p>
-      {/* ⚠️ Eight columns. At 375px this pushed the whole document sideways until it was given a
+      {/* ⚠️ Nine columns. At 375px this pushed the whole document sideways until it was given a
           container of its own to scroll inside; `tabIndex` so the scroll is reachable by keyboard
           and not only by a finger or a trackpad. */}
       <div className="tablewrap" tabIndex={0} role="region" aria-label="Marketing material">
@@ -192,6 +199,7 @@ export default async function Admin({
             <th>Cleared to post</th>
             <th>Watch</th>
             <th>Unread notes</th>
+            <th>Remove</th>
           </tr>
         </thead>
         <tbody>
@@ -250,6 +258,9 @@ export default async function Admin({
                 {c.cleared ? <Watch slug={v.slug} title={v.title} /> : <span className="muted">—</span>}
               </td>
               <td>{unread.get(v.id) ?? 0}</td>
+              <td>
+                <DeleteVideo id={v.id} slug={v.slug} notes={noteCount.get(v.id) ?? 0} reviewers={c.assigned} />
+              </td>
             </tr>
           ))}
           </tbody>

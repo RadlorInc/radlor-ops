@@ -378,12 +378,18 @@ npm run test:e2e
 
 ## Things that are deliberately not here
 
+<!-- ⚠️ THREE ENTRIES WERE RETIRED FROM THIS LIST ON 2026-09-08 BECAUSE THEY HAD STOPPED BEING TRUE,
+     and a list of deliberate absences is the worst place for a stale claim: it reads as a decision
+     somebody made, so nobody re-checks it. "No upload UI" (the Marketing material tab has one),
+     "No hashed tokens — plain text" (`invite_links` has held sha256 since the join links landed;
+     see `src/lib/inviteToken.ts`), and "No admin login form" (`/login`, with a password). Each was
+     checked against the code, not against this file. -->
+
 - **No email.** SMTP is unstarted; the unread count on `/admin` is the notification.
-- **No upload UI.** Files go into the bucket by hand or by your own script.
+- **No second version of a cut.** The Marketing material tab uploads and deletes; `version` is
+  written as `1` and there is no "replace this with v2". The column exists and the export already
+  groups by it, so the data model is ready and the UI is not.
 - **No reply threads, no shared visibility between reviewers, no side-by-side v1/v2 player.** The
   version is stored; the comparison UI is not built.
-- **No hashed tokens.** Plain text, so the link can be re-sent. See the PR body.
-- **No admin login form.** The token-in-a-link is swapped for a cookie on first use; there is
-  nothing to log into and no password to store.
 - **No dedicated database role, and no separation from the marketing site's data.** Deliberate,
   costed, and written up under [Blast radius](#blast-radius). Not an oversight.

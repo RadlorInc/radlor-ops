@@ -33,6 +33,13 @@ insert into review.videos (id, slug, title, storage_path, version, status, verdi
    1, 'awaiting_review', null, 4),
   -- Two reviewers who disagree. `status` is `reviewed` because both have answered; being answered
   -- and being cleared are different questions, and this row is the one that keeps them different.
+  -- ⚠️ THIS ONE EXISTS TO BE DELETED, AND IT HAS TO BE ITS OWN ROW. The delete spec first took
+  -- `overwrite-cut`, which `e2e/verdict.spec.ts` drives — one suite, two specs, and whichever ran
+  -- second lost. Same lesson as `overwrite-cut` itself, which exists so `split-cut` stays a
+  -- fixture: a spec that MUTATES a row cannot share it. Two reviewers and a note, because a delete
+  -- that leaves orphans behind is only provable against a video that has children to orphan.
+  ('11111111-1111-4111-8111-111111111111', 'doomed-cut', 'Doomed cut', 'doomed-cut-v1.webm',
+   1, 'reviewed', null, 7),
   ('ffffffff-ffff-4fff-8fff-ffffffffffff', 'split-cut', 'Split cut', 'split-cut-v1.webm',
    1, 'reviewed', null, 5),
   -- ⚠️ A SECOND SPLIT VIDEO, SO THE FIRST STAYS A FIXTURE. The spec that proves one reviewer
@@ -69,6 +76,9 @@ insert into review.video_reviewers (video_id, reviewer_id, verdict) values
   -- against the code this change replaced.
   ('ffffffff-ffff-4fff-8fff-ffffffffffff', '77777777-7777-4777-8777-777777777777', 'approved'),
   ('ffffffff-ffff-4fff-8fff-ffffffffffff', '88888888-8888-4888-8888-888888888888', 'changes_needed'),
+  -- The delete spec's video, with two answers to lose.
+  ('11111111-1111-4111-8111-111111111111', '77777777-7777-4777-8777-777777777777', 'approved'),
+  ('11111111-1111-4111-8111-111111111111', '88888888-8888-4888-8888-888888888888', 'changes_needed'),
   -- The overwrite spec's own copy of the same shape. See the video row above.
   ('99999999-9999-4999-8999-999999999999', '77777777-7777-4777-8777-777777777777', 'approved'),
   ('99999999-9999-4999-8999-999999999999', '88888888-8888-4888-8888-888888888888', 'changes_needed');
@@ -89,7 +99,12 @@ insert into review.notes (video_id, reviewer_id, t_seconds, body, video_version,
   -- export that would happily print CLEARED over the objection. Same shape as the phone spec:
   -- the assertion has to be made at a state that exists.
   ('ffffffff-ffff-4fff-8fff-ffffffffffff', '77777777-7777-4777-8777-777777777777',
-   9, 'the transition at the end is abrupt', 1, null);
+   9, 'the transition at the end is abrupt', 1, null),
+  -- ⚠️ WITHOUT THIS LINE THE CASCADE IS UNPROVABLE. "No notes remain after the delete" is already
+  -- true of a video that never had one, so the assertion would be green on a build that orphaned
+  -- every note in the table. Pick the fixture the wrong code answers wrong.
+  ('11111111-1111-4111-8111-111111111111', '77777777-7777-4777-8777-777777777777',
+   3, 'the caption sits over her face at the start', 1, null);
 
 -- Harness accounts. The stub `auth.users` rows exist so the profiles FK is real; the passwords
 -- live in `test/fake-supabase.mjs`, which is the only thing that checks them.

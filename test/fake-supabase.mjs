@@ -352,6 +352,16 @@ const server = createServer(async (req, res) => {
       return json(res, 200, { Key: `${m[1]}/${m[2]}` })
     }
 
+    // ---- Storage: delete one object -------------------------------------------------
+    m = url.pathname.match(/^\/storage\/v1\/object\/([^/]+)\/(.+)$/)
+    if (m && req.method === 'DELETE' && m[1] !== 'sign' && m[1] !== 'upload') {
+      const had = uploaded.delete(`${m[1]}/${m[2]}`)
+      // Real storage 404s for an object that was not there, and the route reports that difference
+      // to the admin — so the shim has to be able to say no.
+      if (!had) return json(res, 404, { error: 'Object not found' })
+      return json(res, 200, { message: 'Successfully deleted' })
+    }
+
     // ---- Storage: mint a signed URL -------------------------------------------------
     m = url.pathname.match(/^\/storage\/v1\/object\/sign\/([^/]+)\/(.+)$/)
     if (m && req.method === 'POST') {
@@ -408,6 +418,17 @@ const server = createServer(async (req, res) => {
         if (!whereSql) throw new Error('refusing an unfiltered PATCH')
         const sets = keys.map((k, i) => `${k} = $${args.length + i + 1}`).join(', ')
         await db.query(`update ${SCHEMA}.${table} set ${sets}${whereSql}`, [...args, ...keys.map((k) => row[k])])
+        res.writeHead(204)
+        return res.end()
+      }
+      if (req.method === 'DELETE') {
+        /* ⚠️ FILTERED ONLY, LIKE THE PATCH ABOVE. Real PostgREST will happily delete a whole table
+         * when no filter is sent; refusing here means a bug that dropped the filter shows up as a
+         * loud failure in the suite rather than as an empty database three tests later. */
+        const { sql, args } = buildSelect(table, url.searchParams)
+        const whereSql = sql.includes(' where ') ? sql.slice(sql.indexOf(' where ')) : ''
+        if (!whereSql) throw new Error('refusing an unfiltered DELETE')
+        await db.query(`delete from ${SCHEMA}.${table}${whereSql}`, args)
         res.writeHead(204)
         return res.end()
       }

@@ -241,6 +241,26 @@ export function publishVideo(videoId: string): Promise<null> {
   })
 }
 
+/**
+ * REMOVE A CUT ENTIRELY. The notes and the verdicts go with it, by cascade.
+ *
+ * ⚠️ THAT CASCADE IS THE WHOLE WEIGHT OF THIS FUNCTION AND IT IS NOT VISIBLE HERE. One statement
+ * against `videos` also destroys every row in `notes` and `video_reviewers` that pointed at it —
+ * other people's timestamped feedback, and their conclusions. The interface has to say so before
+ * it calls this; nothing downstream can put it back.
+ *
+ * ⚠️ AND `service_role` COULD NOT DO THIS UNTIL 20260908120000. Every other table in this schema
+ * arrives with `select, insert` from a default privilege and nothing more, so the DELETE that was
+ * never written read as a denial and was not one — it was an omission that would have surfaced as
+ * `42501` in production and nowhere in the offline suite.
+ */
+export function deleteVideo(videoId: string): Promise<null> {
+  return rest<null>('video delete', `videos?id=eq.${videoId}`, {
+    method: 'DELETE',
+    headers: { Prefer: 'return=minimal' },
+  })
+}
+
 /** ⚠️ A SLUG IS IN A URL AND IN AN OBJECT NAME, so a second one is not a cosmetic clash. */
 export async function slugTaken(slug: string): Promise<boolean> {
   const rows = await rest<{ id: string }[]>('slug check', `videos?select=id&slug=eq.${encodeURIComponent(slug)}&limit=1`)

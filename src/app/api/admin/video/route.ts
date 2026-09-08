@@ -1,8 +1,8 @@
 import { NextResponse } from 'next/server'
 import { revalidateTag } from 'next/cache'
 import { requireRoleApi } from '@/lib/session'
-import { TAGS, allVideos, assignReviewers, insertVideo, publishVideo, slugTaken } from '@/lib/db'
-import { signedUploadUrl, videoIsReadable } from '@/lib/storage'
+import { TAGS, allVideos, assignReviewers, deleteVideo, insertVideo, publishVideo, slugTaken } from '@/lib/db'
+import { deleteVideoObject, signedUploadUrl, videoIsReadable } from '@/lib/storage'
 
 /**
  * PUTTING A CUT IN FRONT OF REVIEWERS, IN TWO CALLS WITH THE UPLOAD BETWEEN THEM.
@@ -105,4 +105,43 @@ export async function PATCH(req: Request) {
   await publishVideo(id)
   revalidateTag(TAGS.videos, { expire: 0 })
   return NextResponse.json({ ok: true })
+}
+
+/**
+ * REMOVE A CUT. Irreversible, and it takes other people's work with it.
+ *
+ * ⚠️ THE ROW GOES FIRST, THE OBJECT SECOND, AND THAT ORDER IS THE WHOLE DESIGN. The two writes
+ * cannot be made atomic across Postgres and storage, so one of them has to be the one that may
+ * fail alone — and the two leftovers are not equally bad. An object with no row is litter nobody
+ * can see. A row whose file has gone is a reviewer opening a dead player, on a video the
+ * dashboard still says is waiting for them.
+ *
+ * ⚠️ AND A FAILED OBJECT DELETE IS REPORTED, NOT SWALLOWED. This bucket has already kept an object
+ * through a delete that answered 200 (docs/security-findings.md #4), and the leftover matters
+ * beyond tidiness: the slug is free again, so re-uploading under the same title aims at the same
+ * `slug-v1.ext` path and the PUT fails on an object the admin was told was gone.
+ *
+ * The client is not asked which video by SLUG here — it sends the id it already has on screen,
+ * and `requireRoleApi('admin')` is the only thing that decides whether any of this is allowed.
+ */
+export async function DELETE(req: Request) {
+  const gate = await requireRoleApi('admin')
+  if ('deny' in gate) return gate.deny
+
+  const body = (await req.json().catch(() => null)) as { id?: unknown } | null
+  const id = typeof body?.id === 'string' ? body.id : ''
+  if (!id) return NextResponse.json({ error: 'no_id' }, { status: 400 })
+
+  // Read the path BEFORE the row goes: afterwards there is nothing left to say where the file was.
+  const video = (await allVideos()).find((v) => v.id === id)
+  if (!video) return NextResponse.json({ error: 'not_found' }, { status: 404 })
+
+  await deleteVideo(id)
+  const objectGone = await deleteVideoObject(video.storage_path)
+
+  revalidateTag(TAGS.videos, { expire: 0 })
+  revalidateTag(TAGS.assignments, { expire: 0 })
+  revalidateTag(TAGS.notes, { expire: 0 })
+
+  return NextResponse.json({ ok: true, objectGone })
 }
