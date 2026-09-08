@@ -223,12 +223,20 @@ export async function insertVideo(v: {
   return rows[0]
 }
 
-/** Who is being asked. One row per reviewer, which is what makes each verdict its own answer. */
+/**
+ * Who is being asked. One row per reviewer, which is what makes each verdict its own answer.
+ *
+ * ⚠️ IT DOES NOT SEND `verdict`, AND THAT IS LOAD-BEARING RATHER THAN TIDY. The grant this call
+ * runs under is COLUMN-LEVEL — `insert (video_id, reviewer_id)` — so naming `verdict` at all, even
+ * as `null`, is refused by Postgres with `42501`. The column is nullable with no default, so an
+ * assignment lands as "not finished" on its own. See 20260909100000: the web tier can ask somebody
+ * to review a cut and can never write what they concluded.
+ */
 export function assignReviewers(videoId: string, reviewerIds: string[]): Promise<null> {
   return rest<null>('assignment insert', 'video_reviewers', {
     method: 'POST',
     headers: { Prefer: 'return=minimal' },
-    body: JSON.stringify(reviewerIds.map((reviewer_id) => ({ video_id: videoId, reviewer_id, verdict: null }))),
+    body: JSON.stringify(reviewerIds.map((reviewer_id) => ({ video_id: videoId, reviewer_id }))),
   })
 }
 

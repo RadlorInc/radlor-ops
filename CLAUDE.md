@@ -184,6 +184,23 @@ the same axis as the GRANTs that left the suite 19/19 green while every route wo
 `42501`. **Read privileges back out of the live project after creating a table**, with
 `has_table_privilege` / `has_column_privilege`, and assert the falses as loudly as the trues.
 
+⚠️ **AND IT HAS NOW COST IN THE OTHER DIRECTION TOO — A REVOKE THAT OUTLIVED ITS REASON.** On
+2026-09-09 the new upload form answered **500 in production on its first use**: `42501 permission
+denied for table video_reviewers`. That revoke was deliberate and its migration explained itself
+well — *"Nothing in `src/` inserts here: assignment is a statement Rafi runs"* — and it had simply
+stopped being true, because the feature shipped the day before inserts there from a route. **A
+privilege is a claim about the system, so it goes stale exactly like a comment does.** When you
+add a route that touches a new table, the question is not "is there a grant" but "does the reason
+the grant is missing still hold".
+
+`scripts/check-grants.mjs` now pins the whole matrix and is the thing to run after any migration.
+It probes **behaviourally** — real verbs through PostgREST, as `service_role` — because PostgREST
+cannot call `has_table_privilege` without an RPC, and an RPC added so a checker can pass is a new
+thing to trust. It was watched failing on the broken state the only way that means anything: the
+grant was revoked on the live project, the script went red on that one row, and the grant was put
+back. It writes one throwaway video and deletes it, clearing any leftover first — the first version
+did not, and one crashed run left a duplicate slug that made every later run fail.
+
 ### And the corollary about deleting a check
 
 A test that goes green on something the harness **structurally cannot observe** is worse than no
