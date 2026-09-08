@@ -201,6 +201,53 @@ async function allReviewersUncached(): Promise<Reviewer[]> {
 }
 
 /**
+ * A NEW CUT, AS A DRAFT. Written before a single byte has been uploaded, on purpose.
+ *
+ * ⚠️ `draft` IS THE POINT, NOT A PLACEHOLDER. The row has to exist before the upload so the
+ * storage path has something to belong to and the admin can see the attempt at all — and `draft`
+ * is the one status reviewers cannot see (`REVIEWER_VISIBLE`), so an upload that fails half way
+ * leaves a row only the admin looks at rather than a video in somebody's queue with no file behind
+ * it. `publishVideo` is what moves it, and only after the object has been read back.
+ */
+export async function insertVideo(v: {
+  slug: string
+  title: string
+  storage_path: string
+  sort_order: number
+}): Promise<{ id: string }> {
+  const rows = await rest<{ id: string }[]>('video insert', 'videos', {
+    method: 'POST',
+    headers: { Prefer: 'return=representation' },
+    body: JSON.stringify({ ...v, version: 1, status: 'draft' }),
+  })
+  return rows[0]
+}
+
+/** Who is being asked. One row per reviewer, which is what makes each verdict its own answer. */
+export function assignReviewers(videoId: string, reviewerIds: string[]): Promise<null> {
+  return rest<null>('assignment insert', 'video_reviewers', {
+    method: 'POST',
+    headers: { Prefer: 'return=minimal' },
+    body: JSON.stringify(reviewerIds.map((reviewer_id) => ({ video_id: videoId, reviewer_id, verdict: null }))),
+  })
+}
+
+/** Draft → out for review. The only status write outside `setOutcome`, and it is the admin's. */
+export function publishVideo(videoId: string): Promise<null> {
+  return rest<null>('video publish', `videos?id=eq.${videoId}&status=eq.draft`, {
+    method: 'PATCH',
+    headers: { Prefer: 'return=minimal' },
+    body: JSON.stringify({ status: 'awaiting_review' }),
+  })
+}
+
+/** ⚠️ A SLUG IS IN A URL AND IN AN OBJECT NAME, so a second one is not a cosmetic clash. */
+export async function slugTaken(slug: string): Promise<boolean> {
+  const rows = await rest<{ id: string }[]>('slug check', `videos?select=id&slug=eq.${encodeURIComponent(slug)}&limit=1`)
+  return rows.length > 0
+}
+
+/**
  * The only write the reviewer can cause besides a note. Two legal moves, both on THEIR OWN row:
  *   • "I'm finished, and here's what I think"  → their verdict
  *   • "…except I just thought of something"    → their verdict CLEARED

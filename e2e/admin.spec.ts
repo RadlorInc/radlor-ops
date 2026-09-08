@@ -42,8 +42,18 @@ test('an admin signs in and sees the video list', async ({ page }) => {
   const res = await page.goto('/admin?tab=videos')
   expect(res?.status()).toBe(200)
 
+  /**
+   * ⚠️ EVERY SEEDED VIDEO IS LISTED — NOT "THERE ARE SEVEN ROWS". The count was 7 and it broke the
+   * day an upload spec added a row to the same database, which is the giveaway that it was
+   * reporting how many rows exist rather than whether this table shows what it is for. It was also
+   * the weaker claim: seven passes on a table that dropped `quiet-draft` and rendered something
+   * else twice. Naming the slugs says the thing the count was standing in for, and no other spec
+   * can move it.
+   */
   const rows = page.getByTestId('admin-row')
-  await expect(rows).toHaveCount(7)
+  for (const slug of ['equals-reel-final', 'hook-test-b', 'quiet-draft', 'cta-cut', 'flood-only', 'split-cut', 'overwrite-cut']) {
+    await expect(rows.filter({ hasText: slug })).toHaveCount(1)
+  }
   await expect(rows.filter({ hasText: 'quiet-draft' })).toContainText('draft')
   await expect(rows.filter({ hasText: 'hook-test-b' })).toContainText('v2')
   await expect(rows.filter({ hasText: 'cta-cut' })).toContainText('approved')

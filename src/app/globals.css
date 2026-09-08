@@ -541,3 +541,15 @@ dialog.watchbox { border: 1px solid var(--line); border-radius: 12px; background
 dialog.watchbox::backdrop { background: rgb(0 0 0 / 0.6); }
 dialog.watchbox video { display: block; width: min(46vh, 90vw); aspect-ratio: 9 / 16; border-radius: 8px; background: #000; }
 dialog.watchbox button { margin-top: 10px; width: 100%; }
+
+/* The one native control this app cannot restyle from the outside. Left alone, Chrome's grey
+   "Choose File" button sits on a dark panel looking like a rendering fault rather than a control —
+   and it is the only thing on the upload form somebody has to press first. */
+input[type='file'] { padding: 0; border: 0; background: none; min-height: 0; }
+input[type='file']::file-selector-button {
+  font: inherit; margin-right: 10px; cursor: pointer;
+  background: transparent; color: var(--text); border: 1px solid var(--line);
+  border-radius: var(--radius-sm); padding: 8px 14px;
+  transition: background-color var(--t) ease, border-color var(--t) ease;
+}
+input[type='file']::file-selector-button:hover { background: var(--panel-2); border-color: var(--line-strong); }

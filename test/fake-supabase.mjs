@@ -61,6 +61,12 @@ const HERE = dirname(fileURLToPath(import.meta.url))
 const ROOT = join(HERE, '..')
 const PORT = Number(process.env.FAKE_SUPABASE_PORT || 54329)
 const SECRET = 'fake-storage-secret'
+/** ⚠️ Must match `VIDEO_BUCKET` in src/lib/storage.ts. A shim that primed the wrong bucket would
+ *  404 every seeded video and the failure would read as "signing is broken". */
+const VIDEO_BUCKET = 'review-videos'
+/** The object store: what has actually been PUT (plus the seeded paths), by `bucket/path`. Empty
+ *  for anything else, which is what makes "the file never arrived" a state this harness can be in. */
+const uploaded = new Map()
 const TABLES = new Set(['reviewers', 'videos', 'video_reviewers', 'notes', 'profiles', 'todos', 'issues', 'testing_sessions', 'invite_links'])
 /** These tables live in `review`, not `public` — the shared project's `public` belongs to the
  *  marketing site. The shim ENFORCES the profile header for the same reason real PostgREST does:
@@ -124,6 +130,21 @@ for (const f of (await readdir(join(ROOT, 'supabase/migrations'))).filter((f) =>
 await db.exec(await readFile(join(HERE, 'seed.sql'), 'utf8'))
 
 const fixture = await readFile(join(HERE, 'fixture.webm')).catch(() => null)
+
+/**
+ * ⚠️ THE SEEDED PATHS GET THE FIXTURE BYTES; NOTHING ELSE GETS ANYTHING.
+ *
+ * The first version handed the fixture back for ANY path a signed URL was minted for, which made
+ * "is this object actually there" a question the harness could not answer no to — and that is the
+ * one question the publish step exists to ask. A test that POSTed a row and then published it
+ * WITHOUT ever uploading a file passed: the shim cheerfully served a video for an object nobody
+ * had created. Real storage 404s, so this one does too. Lenient in this direction is how a video
+ * with no file reaches a reviewer.
+ */
+if (fixture) {
+  const seeded = await db.query(`select storage_path from ${SCHEMA}.videos`)
+  for (const r of seeded.rows) uploaded.set(`${VIDEO_BUCKET}/${r.storage_path}`, fixture)
+}
 
 /** `?select=a,b&col=eq.v&col2=is.null&order=a.asc,b.desc&limit=1` → SQL. */
 function buildSelect(table, params) {
@@ -235,6 +256,18 @@ function issue(id, email) {
 
 const server = createServer(async (req, res) => {
   const url = new URL(req.url, 'http://127.0.0.1')
+  /* ⚠️ CORS, BECAUSE ONE REQUEST IN THIS APP IS MADE BY THE BROWSER RATHER THAN BY THE SERVER.
+   * Everything else reaches Supabase from a route handler, where CORS does not exist; the upload
+   * PUT goes straight from the page to storage, cross-origin. Real Supabase Storage answers with
+   * permissive CORS headers, so a shim that did not was a harness-only failure that looked exactly
+   * like a broken feature — the upload spec went red on a build where nothing was wrong. */
+  res.setHeader('Access-Control-Allow-Origin', '*')
+  res.setHeader('Access-Control-Allow-Headers', '*')
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS')
+  if (req.method === 'OPTIONS') {
+    res.writeHead(204)
+    return res.end()
+  }
   try {
     // Readiness only, for the Playwright webServer. Deliberately not a table request: those now
     // require a profile header and answer 404 without one, which the harness would read as "not
@@ -297,8 +330,30 @@ const server = createServer(async (req, res) => {
       }
     }
 
+    /* ---- Storage: mint an UPLOAD url, and redeem it ---------------------------------
+     *
+     * ⚠️ UPLOADED BYTES ARE KEPT, AND THE SIGNED GET BELOW HANDS BACK THE RIGHT ONES. A shim that
+     * accepted a PUT and returned 200 without storing anything would pass an upload test on a
+     * build where the file went nowhere — which is the exact failure the publish step exists to
+     * catch, reproduced inside the thing that is supposed to catch it. */
+    let m = url.pathname.match(/^\/storage\/v1\/object\/upload\/sign\/([^/]+)\/(.+)$/)
+    if (m && req.method === 'POST') {
+      const objPath = `/object/upload/sign/${m[1]}/${m[2]}`
+      const exp = Math.floor(Date.now() / 1000) + 300
+      return json(res, 200, { url: `${objPath}?token=${exp}.${sign(objPath, exp)}` })
+    }
+    if (m && req.method === 'PUT') {
+      const objPath = `/object/upload/sign/${m[1]}/${m[2]}`
+      const [exp, mac] = (url.searchParams.get('token') || '').split('.')
+      if (!mac || mac !== sign(objPath, Number(exp))) return json(res, 400, { error: 'InvalidJWT' })
+      const chunks = []
+      for await (const c of req) chunks.push(c)
+      uploaded.set(`${m[1]}/${m[2]}`, Buffer.concat(chunks))
+      return json(res, 200, { Key: `${m[1]}/${m[2]}` })
+    }
+
     // ---- Storage: mint a signed URL -------------------------------------------------
-    let m = url.pathname.match(/^\/storage\/v1\/object\/sign\/([^/]+)\/(.+)$/)
+    m = url.pathname.match(/^\/storage\/v1\/object\/sign\/([^/]+)\/(.+)$/)
     if (m && req.method === 'POST') {
       const { expiresIn } = await readBody(req)
       const objPath = `/object/sign/${m[1]}/${m[2]}`
@@ -312,9 +367,13 @@ const server = createServer(async (req, res) => {
       if (!mac || mac !== sign(objPath, Number(exp))) return json(res, 400, { error: 'InvalidJWT' })
       // The whole point of the check: an expired URL is dead even though it is otherwise valid.
       if (Number(exp) * 1000 < Date.now()) return json(res, 400, { error: 'jwt expired' })
-      if (!fixture) return json(res, 404, { error: 'no fixture' })
-      res.writeHead(200, { 'Content-Type': 'video/webm', 'Content-Length': fixture.length })
-      return res.end(fixture)
+      // An object that was uploaded in this run wins: "can it be read back" has to be answered
+      // about the bytes that were actually sent, not about the fixture sitting beside them.
+      const body = uploaded.get(`${m[1]}/${m[2]}`)
+      // Real storage answers 404 for an object that is not there. So does this.
+      if (!body) return json(res, 404, { error: 'Object not found' })
+      res.writeHead(200, { 'Content-Type': 'video/webm', 'Content-Length': body.length })
+      return res.end(body)
     }
 
     // ---- PostgREST ------------------------------------------------------------------
@@ -353,12 +412,21 @@ const server = createServer(async (req, res) => {
         return res.end()
       }
       if (req.method === 'POST') {
-        const row = await readBody(req)
-        const keys = Object.keys(row)
+        const body = await readBody(req)
+        /* ⚠️ AN ARRAY IS A BULK INSERT, WHICH IS REAL POSTGREST AND NOT A CONVENIENCE. Assigning
+         * two reviewers to one video is one POST carrying two rows; a shim that only understood a
+         * single object would have turned that into `bad column 0` — an error about the harness,
+         * thrown from inside the feature, with nothing wrong in the app. */
+        const rowsIn = Array.isArray(body) ? body : [body]
+        if (rowsIn.length === 0) return json(res, 201, [])
+        const keys = Object.keys(rowsIn[0])
         for (const k of keys) if (!IDENT.test(k)) throw new Error(`bad column ${k}`)
+        const values = rowsIn
+          .map((_, n) => `(${keys.map((_, i) => `$${n * keys.length + i + 1}`).join(', ')})`)
+          .join(', ')
         const r = await db.query(
-          `insert into ${SCHEMA}.${table} (${keys.join(', ')}) values (${keys.map((_, i) => `$${i + 1}`).join(', ')}) returning *`,
-          keys.map((k) => row[k]),
+          `insert into ${SCHEMA}.${table} (${keys.join(', ')}) values ${values} returning *`,
+          rowsIn.flatMap((row) => keys.map((k) => row[k])),
         )
         // ⚠️ `return=minimal` GETS AN EMPTY 201, NOT `null`. Real PostgREST sends no body at all,
         // and `null` is valid JSON — so answering `null` here made `res.json()` succeed offline on

@@ -8,6 +8,7 @@ import { requireRole } from '@/lib/session'
 import Todos from './Todos'
 import People from './People'
 import Watch from './Watch'
+import Upload from './Upload'
 
 export const dynamic = 'force-dynamic'
 
@@ -171,6 +172,7 @@ export default async function Admin({
           again is noise — but a section with no heading at all is a section a screen reader cannot
           find or skip to, and the document loses its outline. The label moves, it does not go. */}
       <h2 className="sr-only">Marketing material</h2>
+      <Upload people={people} />
       <p className="muted small">
         <a href="/admin/export">Open notes as markdown →</a> ·{' '}
         <a href="/admin/export?all=1">including resolved</a>
