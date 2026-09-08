@@ -22,14 +22,27 @@ test('a to-do can be added, renamed, advanced and reordered — and the row move
   await expect(list.getByText('Register the 1800 number')).toBeVisible()
 
   const mine = page.getByTestId('todo-item').filter({ hasText: 'Register the 1800 number' })
-  await mine.getByTestId('todo-status').click()
+  await mine.getByTestId('todo-status').selectOption('in_progress')
   await expect(mine).toHaveAttribute('data-status', 'in_progress')
 
-  // The claim is about the DATABASE. A chip that changes colour while the row does not is the
+  // The claim is about the DATABASE. A control that changes colour while the row does not is the
   // failure this whole style of test exists for.
-  await expect
-    .poll(async () => (await rows(request, 'todos', '&task=eq.Register%20the%201800%20number'))[0]?.status)
-    .toBe('in_progress')
+  const statusInDb = async () =>
+    (await rows(request, 'todos', '&task=eq.Register%20the%201800%20number'))[0]?.status
+  await expect.poll(statusInDb).toBe('in_progress')
+
+  /**
+   * ⚠️ BACKWARDS, IN ONE MOVE — THE CASE THE OLD CONTROL COULD NOT DO. It was a button that cycled
+   * not_started → in_progress → done → not_started, so "this is not finished after all" meant two
+   * presses and a trip through `not_started` that the database really held on the way. Going
+   * straight from done to in_progress is the assertion a cycling implementation fails, and going
+   * only FORWARDS is the assertion it passes — which is why that is not the one written here.
+   */
+  await mine.getByTestId('todo-status').selectOption('done')
+  await expect.poll(statusInDb).toBe('done')
+  await mine.getByTestId('todo-status').selectOption('in_progress')
+  await expect(mine).toHaveAttribute('data-status', 'in_progress')
+  await expect.poll(statusInDb).toBe('in_progress')
 
   const before = await rows(request, 'todos', '&order=sort_order.asc')
   await mine.getByTestId('todo-up').click()

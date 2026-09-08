@@ -8,11 +8,7 @@ const LABEL: Record<Todo['status'], string> = {
   in_progress: 'In progress',
   done: 'Done',
 }
-const NEXT: Record<Todo['status'], Todo['status']> = {
-  not_started: 'in_progress',
-  in_progress: 'done',
-  done: 'not_started',
-}
+const STATUSES = ['not_started', 'in_progress', 'done'] as const
 const FILTERS = ['all', 'not_started', 'in_progress', 'done'] as const
 type Filter = (typeof FILTERS)[number]
 
@@ -58,8 +54,17 @@ export default function Todos({ initial }: { initial: Todo[] }) {
     }
   }
 
-  async function cycle(t: Todo) {
-    const status = NEXT[t.status]
+  /**
+   * ⚠️ IT WAS A BUTTON THAT CYCLED, AND CYCLING WAS TWO PROBLEMS. It could only go forwards, so
+   * moving something from Done back to In progress meant pressing twice and passing through Not
+   * started on the way — a state the row briefly claimed and the database briefly held. And a pill
+   * that says "Not started" reads as a label, not a control: the whole feature was invisible, and
+   * was reported as missing rather than as awkward.
+   *
+   * A <select> answers both. Any status in one move, and it looks like the thing it is.
+   */
+  async function setStatus(t: Todo, status: Todo['status']) {
+    if (status === t.status) return
     // Optimistic, then reconciled by the reload the next visit does. The server is still the one
     // that decides — a failed call puts the error up rather than pretending.
     setItems((xs) => xs.map((x) => (x.id === t.id ? { ...x, status } : x)))
@@ -203,9 +208,23 @@ export default function Todos({ initial }: { initial: Todo[] }) {
       <ol className="todos" data-testid="todo-list">
         {shown.map((t, i) => (
           <li key={t.id} data-testid="todo-item" data-status={t.status}>
-            <button className="chip" onClick={() => cycle(t)} disabled={busy} data-testid="todo-status">
-              {LABEL[t.status]}
-            </button>
+            {/* ⚠️ `chip` STAYS AS THE CLASS. `li[data-status='done'] .chip` and its in-progress
+                twin colour this control by the row's state, and dropping the class would take the
+                colour with it — the green that says "finished" at a glance down the list. */}
+            <select
+              className="chip"
+              value={t.status}
+              onChange={(e) => setStatus(t, e.target.value as Todo['status'])}
+              disabled={busy}
+              aria-label={`Status of “${t.task}”`}
+              data-testid="todo-status"
+            >
+              {STATUSES.map((st) => (
+                <option key={st} value={st}>
+                  {LABEL[st]}
+                </option>
+              ))}
+            </select>
             {editing === t.id ? (
               <input
                 type="text"
