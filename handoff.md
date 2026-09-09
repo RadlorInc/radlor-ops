@@ -14,8 +14,8 @@ Three people, three screens, one Next.js app on Vercel:
   quietly taken on. The tab, `/api/admin/subscription`, the renewal helpers and eight e2e tests went
   with it. `review.subscriptions` still exists with its row — see *Open findings*.
 - **tester** — `/tester`: files what they found wrong in the app, and reads their own issues back.
-- **reviewer** — `/review`: watches the video assigned to them, leaves timestamped notes, says
-  **Approved** or **Needs changes**.
+- **reviewer** — `/review`: watches **every published cut**, leaves timestamped notes on any of
+  them, and — on the cuts they are the one **approver** of — says **Approved** or **Needs changes**.
 
 Everyone signs in at `/login`. There is no open sign-up and **no email is ever sent** — Rafi's call
 on 2026-09-03. The admin pastes the testers' **email addresses** into the *People* tab; the server
@@ -25,8 +25,11 @@ line; opening it is where that person chooses their password, and it signs them 
 Forgot a password? *New link* beside their name — which also kills any link they were still
 holding. **An admin can open all three surfaces**; a tester and a reviewer see only their own.
 
-**The one rule the whole tool exists for:** a video is cleared to post only when **every** assigned
-reviewer has approved. One "needs changes" is not cleared, however many approvals sit beside it.
+**The one rule the whole tool exists for — CHANGED 2026-09-09, Rafi's call:** everyone with a
+reviewer account, and the admin, sees all marketing material and can give feedback; **one person
+per cut** has the authority to approve or reject it. The upload form picks that person and the
+route refuses two or none. `clearance()` is untouched — with one assignment row it reads "the
+approver approved" — and "needs changes" from that person is still not cleared.
 
 ## Where it is right now
 
@@ -347,7 +350,73 @@ object name, so `rope-reel-v1.mp4` became `rope-reel-v1-mp4` and the file `rope-
 Nothing is broken; the next one is worth typing as a title.
 
 **Not built:** a second version of a cut (`version` is hard-coded `1`), reordering, and any way to
-change who is assigned after upload.
+change who the approver is after upload.
+
+## One approver, everyone watches — 2026-09-09
+
+Rafi: *give the admin and all the people under reviewer access to view all the marketing material
+and give feedback, but only one person has the authorisation for approval and rejection.*
+
+**What moved.** `reviewerVideoBySlug(slug)` no longer takes a reviewer: any `awaiting_review` /
+`reviewed` cut resolves for anyone `requireRole('reviewer','admin')` let in. `videosForReviewer`
+lists them all and marks each `decides` (the assignment row exists) — the list pill says *Your
+decision needed* / *You finished this* / *Feedback welcome*. `/api/notes` and `/api/video-url`
+stopped asking about the assignment; **`/api/review-done` asks `myAssignment()` itself** and 404s
+without a row. The Review page renders no verdict buttons for a non-approver. The upload form's
+chips became a one-of-many pick (*Who approves it?*), and `POST /api/admin/video` answers 400
+`one_approver` for anything but exactly one id. The admin's Watch button now sits on every
+published row; `clearedVideoForAdmin` in `/api/video-url` was deleted, not kept — one lookup now
+answers everyone.
+
+**No migration.** Grants are unchanged: `insert (video_id, reviewer_id)` was already column-level,
+`update (verdict)` is still reached only through `/api/review-done`. Production already has one
+row per cut (`mikuraja2` on both), so it is already in the new shape.
+
+**Same afternoon, second ask — the approver is a PERSON, not a per-cut pick.** Rafi: *when you
+give someone access as a reviewer there should be a way to make any reviewer the person who can
+approve or reject; otherwise the reviewer only gives feedback.* So the per-cut picker lived for a
+few hours and is gone:
+
+- `20260909150000_profiles_can_approve.sql` — `profiles.can_approve boolean not null default
+  false`, `grant update (can_approve) … to service_role`, and a backfill that flags whoever holds
+  an assignment (refuses if that is more than one person). ✔ **APPLIED to `radlor-site` on
+  2026-09-09 through the MCP connector (recorded as `profiles_can_approve`), BEFORE the push** —
+  the new build selects the column, the old one ignored it. Read back, not assumed:
+
+  | `profiles` | update `can_approve` | update `role` | update `name` | select `can_approve` |
+  |---|---|---|---|---|
+  | `service_role` | **t** | f | f | t |
+  | `authenticated` | f | f | f | t |
+  | `anon` | f | f | f | f |
+
+  Flagged by the backfill: `mikuraja2` (reviewer), the one person on both live cuts.
+  `scripts/check-grants.mjs` ran live straight after: **16 of 16**, the two new profile probes
+  included.
+- **People tab**: a fourth choice when pasting addresses — *Reviewer who approves or rejects — one
+  person only* (refused for a list or a tester) — and *Make approver* / *Feedback only* beside every
+  reviewer and admin. Setting it on clears every other holder: **one person, whichever door**.
+  A line above the list says who it is, or that it is nobody.
+- **Upload** reads the flag on the server (`approverIds()`, uncached) and ignores anything the
+  client says about reviewers; the form names who will be asked, and is disabled with the reason
+  when nobody holds it. `POST /api/admin/video` answers 400 `no_approver` in that state.
+- ⚠️ **The flag says who gets ASKED next; the `video_reviewers` row still says who may ANSWER.**
+  Moving the flag from A to B leaves A deciding the cuts already out and puts B on the next one.
+  There is still no reassignment. Flood in the seed is exactly this: feedback-only by flag, and
+  still the approver on `flood-only` by row.
+- `e2e/upload.spec.ts` carries it, mutating tests last in the file, each driving its own
+  precondition; `-g` runs them alone.
+
+⚠️ **Left deliberately:** the multi-row fixtures (`split-cut`, `overwrite-cut`, `doomed-cut`,
+`equals-reel-final`) and everything that reads them — `clearance().disagreement`, the *Reviewers
+disagree* banner, `progressLabel`. The new route cannot create a second row, so in new data these
+are unreachable; they still tell the truth about the old rows and about a row somebody adds by
+SQL. A `unique (video_id)` on `video_reviewers` is the honest enforcement of "one approver" and is
+**not applied**: it is a migration, and it means collapsing those fixtures and the specs on them
+in the same change. Do it as its own act, or leave the route as the enforcement and say so.
+
+⚠️ **Verified offline only.** Nobody has yet opened a cut as a non-approver in production. The
+smallest thing that changes that: sign in as any reviewer who is not `mikuraja2`, open one of the
+two live cuts, leave a note, confirm there are no verdict buttons, and read `/admin`.
 
 ## The screens, and what changed on 2026-09-03
 
@@ -404,9 +473,13 @@ Rafi's row's `area` spelling, and moving it to `all_chapters` with `chapter` nul
 
 ## Multiple reviewers
 
+⚠️ **Read the section above this one first — since 2026-09-09 a cut has ONE approver and the
+assignment no longer gates who can see it.** What follows describes the table and the clearing
+rule, which still hold; the "every reviewer must approve" framing is history.
+
 `review.video_reviewers` — `(video_id, reviewer_id, assigned_at, verdict)` — is the assignment, and
-where `verdict` lives. **No assignment, no video:** before it existed, any valid token opened any
-reviewable video (finding #7).
+where `verdict` lives. It used to mean **no assignment, no video** (finding #7); it now means
+**no assignment, no verdict** — the row names who decides, and everyone with the role watches.
 
 **Cleared to post = every assigned reviewer approved.** `src/lib/clearance.ts` is the only place
 that rule lives; `npm run test:clearance` checks it. ⚠️ Zero assignments is **not** cleared —
@@ -495,6 +568,30 @@ a Supabase project in `ap-south`: a migration, not a config line.
 ⚠️ **The explanation lives HERE and not in `vercel.json`** — the first version put it in the file as
 a `"//"` key and failed the production build.
 
+## ⚠️ The offline suite was reading the previous run's cache — fixed 2026-09-09
+
+`e2e/delete-video.spec.ts` went red twice in a row on a full run and green alone, with no
+change to anything it touches. The row it deletes, `doomed-cut`, was **in the database** (the
+spec's own PostgREST read said so) and **not on `/admin`** — nor in the disagreement banner, nor
+in the DELETE route's `allVideos().find()`, which answered `not_found`. Videos and assignments
+were from another world; notes were current.
+
+**The other world was the previous run.** `next start` persists every `unstable_cache` entry to
+`.next/cache/fetch-cache` (Next's own comment: *"so it can be persisted across deploys"*), keyed on
+`cb.toString()` + the key parts — no build id — and `revalidateTag` state does **not** survive a
+restart. So a fresh harness with a freshly seeded PGlite sat under a Next server whose first reads
+of `videos` and `assignments` came from whatever the last run wrote, and stayed there until a route
+in the run invalidated that tag. The last run had *passed* `delete-video`, so its persisted list had
+no `doomed-cut`. Whether a run failed depended on what the run before it left behind: run 1 red,
+run 2 red, a five-file prefix green, run 3 green, with the tree unchanged throughout.
+
+`playwright.config.ts` now runs `rm -rf .next/cache/fetch-cache` before `next build`. ⚠️ **This
+is a harness property, not an app bug** — production is one deployment with one cache and the
+routes invalidate by tag correctly (the cache checks in `verdict.spec.ts` still prove that). But
+it is the same shape as the rest of CLAUDE.md: a check that passes or fails on history is not a
+check, and this one had been passing for the wrong reason on every run whose predecessor happened
+to leave the right leftovers.
+
 ## Checks
 
 ```bash
@@ -515,7 +612,7 @@ construction. The declared blind spot is at the top of `test/fake-supabase.mjs`.
 authorization coverage is five scripts run by hand against the live project:
 
 ```
-scripts/check-grants.mjs                     what service_role may do — 14 privileges, both ways
+scripts/check-grants.mjs                     what service_role may do — 16 privileges, both ways
 scripts/check-anon-locked-out.mjs            anon is denied, with a service_role control
 scripts/check-tester-cannot-read-admin.mjs   profiles AND issues, with two controls
 scripts/check-signed-url-expiry.mjs          a signed URL really dies
@@ -529,7 +626,8 @@ through PostgREST as `service_role`, because PostgREST cannot call `has_table_pr
 RPC and an RPC added so a checker can pass is a new thing to trust. It asserts the **falses** too:
 a checker that only confirmed the privileges we want would pass on a database where the web tier
 can delete every tester's issue. It writes one throwaway video and deletes it, clearing any
-leftover first. **Run it after any migration.** Last run 2026-09-09: 14 of 14.
+leftover first. **Run it after any migration.** Last run 2026-09-09, after `20260909150000` was
+applied: **16 of 16**.
 
 Re-run them after any change to a grant, a policy, a role, the exposed schemas, or a key.
 `scripts/break-check.sh <spec> "<break>"` runs one spec against a deliberately broken tree and

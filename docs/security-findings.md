@@ -393,6 +393,22 @@ The token itself is unchanged: still a bearer string in a URL, still shareable b
 link. Assignment scopes *what a token reaches*, not *who is holding it*. That is the reviewer-
 accounts work, and it is the next thing.
 
+### ⚠️ Superseded on purpose — 2026-09-09
+
+Visibility is by role again, and this time it was **decided**: Rafi asked that the admin and every
+person with a reviewer account see all marketing material and leave feedback, with one person
+per cut holding approve/reject. The two halves of this finding land differently:
+
+- *"Any valid **token** opened any video"* — closed for good by accounts (2026-09-04). What opens a
+  video now is a session whose profile says `reviewer` or `admin`, and a tester still gets 404.
+- *"Nobody decided the wide rule"* — no longer true. It is the requirement, it is written in
+  `src/lib/db.ts` above `assignmentsFor`, and `e2e/approver.spec.ts` asserts it.
+
+What the assignment gates now is the **verdict**, not the view. `/api/review-done` refuses anyone
+without a `video_reviewers` row; `/api/notes` and `/api/video-url` do not ask. A draft is still
+nothing to everyone. `flood-only` stays in the seed as the fixture that tells the two rules apart
+— it is the cut Dana can now open and still cannot decide.
+
 ---
 
 ## 8. `[].every()` is `true` — an empty assignment set nearly read as "cleared to post" — 2026-09-02

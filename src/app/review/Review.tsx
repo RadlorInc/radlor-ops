@@ -19,12 +19,14 @@ export default function Review(props: {
   slug: string
   title: string
   version: number
+  /** This person is the one approver on this cut. False = feedback only: no verdict buttons. */
+  decides: boolean
   verdict: 'approved' | 'changes_needed' | null
   reviewerName: string
   reviewerEmail: string
   initialNotes: NoteView[]
 }) {
-  const { slug, title, version, reviewerName, reviewerEmail } = props
+  const { slug, title, version, decides, reviewerName, reviewerEmail } = props
   const videoRef = useRef<HTMLVideoElement>(null)
   const bodyRef = useRef<HTMLTextAreaElement>(null)
 
@@ -207,8 +209,10 @@ export default function Review(props: {
           {draftAt === null && (
             <p className="help" style={{ marginBottom: 10 }}>
               Play the video. When you spot something, press <strong>Add a note</strong> — it
-              remembers the moment you were at. When you&apos;re done, choose one of the two buttons
-              at the bottom.
+              remembers the moment you were at.
+              {decides
+                ? ' When you’re done, choose one of the two buttons at the bottom.'
+                : ' Someone else gives the final approve or reject on this one — your notes reach Rafi either way.'}
             </p>
           )}
           <button className="ghost" onClick={startNote} data-testid="add-note">
@@ -287,7 +291,10 @@ export default function Review(props: {
             </p>
           )}
 
-          {!verdict && (
+          {/* ⚠️ `decides` GATES THE BUTTONS, AND THE ROUTE GATES THE WRITE. Hiding them here is the
+              page being honest about whose call it is; /api/review-done refuses anyone without an
+              assignment row regardless of what the page rendered. */}
+          {decides && !verdict && (
             <div style={{ marginTop: 20, paddingTop: 14, borderTop: '1px solid var(--line)' }}>
               <p className="fieldname" style={{ margin: '0 0 8px' }}>When you&apos;re done, tell us what you think</p>
               <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>

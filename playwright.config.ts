@@ -56,7 +56,18 @@ export default defineConfig({
       // A PRODUCTION build, not `next dev`. Two things only the production build can show: the
       // real CSP (the dev header carries an 'unsafe-eval' that never ships) and the real HTTP
       // status of a `notFound()` page, which is what checks #2 and #5 assert.
-      command: `npx next build && npx next start -p ${PORT}`,
+      //
+      // ⚠️ THE DATA CACHE IS WIPED FIRST, AND THE SUITE IS NOT HERMETIC WITHOUT IT. `next start`
+      // persists every `unstable_cache` entry to `.next/cache/fetch-cache` — Next's own comment
+      // says "so it can be persisted across deploys" — keyed on the callback's source text, not on
+      // a build id, and `revalidateTag` state does NOT survive a restart. So run N served run N-1's
+      // `videos` and `assignments` lists until something in run N invalidated the tag, while the
+      // PGlite database underneath was freshly seeded. Found 2026-09-09: `delete-video.spec.ts`
+      // failed twice in a row on a full run and passed alone — the DELETE route looked `doomed-cut`
+      // up in a cached list written by the PREVIOUS run, in which that very spec had deleted it.
+      // Whether a run hit it depended on what the last run left behind, which is the definition of
+      // a suite that reports history rather than behaviour.
+      command: `rm -rf .next/cache/fetch-cache && npx next build && npx next start -p ${PORT}`,
       url: `http://127.0.0.1:${PORT}/api/health`,
       reuseExistingServer: false,
       timeout: 180_000,

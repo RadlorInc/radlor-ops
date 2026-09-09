@@ -9,9 +9,14 @@ insert into auth.users (id, email) values
   ('77777777-7777-4777-8777-777777777777', 'dana@example.com'),
   ('88888888-8888-4888-8888-888888888888', 'flood@example.com');
 
-insert into review.profiles (user_id, role, name) values
-  ('77777777-7777-4777-8777-777777777777', 'reviewer', 'Dana Reviewer'),
-  ('88888888-8888-4888-8888-888888888888', 'reviewer', 'Flood Reviewer');
+-- ⚠️ DANA IS THE APPROVER, FLOOD IS FEEDBACK-ONLY. Since 2026-09-09 the upload route names whoever
+-- holds `can_approve` on every new cut, so `upload.spec.ts` reads its assignment off this flag.
+-- Flood still holds seeded assignment ROWS (flood-only, split-cut, …) and still decides those —
+-- the row gates the answer, the flag gates who gets asked next — which is the fixture that keeps
+-- the two rules distinguishable.
+insert into review.profiles (user_id, role, name, can_approve) values
+  ('77777777-7777-4777-8777-777777777777', 'reviewer', 'Dana Reviewer', true),
+  ('88888888-8888-4888-8888-888888888888', 'reviewer', 'Flood Reviewer', false);
 
 insert into review.videos (id, slug, title, storage_path, version, status, verdict, sort_order) values
   ('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', 'equals-reel-final', 'Equals sign reel (final cut)',

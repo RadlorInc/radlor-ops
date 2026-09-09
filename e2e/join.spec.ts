@@ -81,7 +81,10 @@ test('the admin pastes emails and gets one link each; the link sets the password
   // ⚠️ /review, NOT /tester — the role the admin chose for that address is what routes them, and
   // it is read back through a real sign-in rather than asserted about the request that made it.
   await expect(them).toHaveURL(/\/review$/)
-  await expect(them.getByTestId('nothing-assigned')).toBeVisible()
+  // A brand-new reviewer sees the published cuts straight away — nobody has to assign them
+  // anything — and is the approver of none, so every pill says feedback.
+  await expect(them.getByTestId('video-card').filter({ hasText: 'Hook test B' })).toBeVisible()
+  await expect(them.getByTestId('video-pill').filter({ hasText: 'Your decision needed' })).toHaveCount(0)
 
   // AFTER: the password they chose is the one on file.
   expect(await passwordWorks(request, 'ada@example.com', 'a-long-enough-password')).toBe(true)

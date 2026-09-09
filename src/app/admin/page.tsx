@@ -195,7 +195,7 @@ export default async function Admin({
             <th>Title</th>
             <th>Status</th>
             <th>Version</th>
-            <th>Reviewers</th>
+            <th>Approver</th>
             <th>Cleared to post</th>
             <th>Watch</th>
             <th>Unread notes</th>
@@ -211,9 +211,9 @@ export default async function Admin({
               <td>{v.title}</td>
               <td>{v.status}</td>
               <td>v{v.version}</td>
-              {/* ⚠️ EACH REVIEWER'S ANSWER, BY NAME, NEVER FOLDED INTO ONE LABEL. A single
-                  "verdict" cell is what made a second reviewer's objection invisible behind the
-                  first's approval, and the point of asking two people is that they can differ. */}
+              {/* THE APPROVER'S ANSWER, BY NAME. One row per video since 2026-09-09; the list
+                  shape stays because older fixtures carry two, and two answers must never be folded
+                  into one label — an objection behind an approval is the thing this table is for. */}
               <td data-testid="reviewer-verdicts">
                 {c.assigned === 0 ? (
                   <span className="muted">nobody assigned</span>
@@ -250,12 +250,12 @@ export default async function Admin({
                   </span>
                 )}
               </td>
-              {/* ⚠️ CLEARED ROWS ONLY, and the dash is the answer for the rest rather than an
-                  empty cell — "not approved yet" is information, a blank is a rendering bug you
-                  cannot tell apart from a missing feature. The route enforces this independently;
-                  see the note on `clearedVideoForAdmin`. */}
+              {/* ⚠️ EVERY PUBLISHED CUT, since 2026-09-09 — the admin sees all marketing material,
+                  cleared or not. A draft gets the dash rather than an empty cell: "not out yet" is
+                  information, a blank is a rendering bug you cannot tell apart from a missing
+                  feature. `/api/video-url` refuses a draft independently of what this renders. */}
               <td data-testid="watch-cell">
-                {c.cleared ? <Watch slug={v.slug} title={v.title} /> : <span className="muted">—</span>}
+                {v.status === 'draft' ? <span className="muted">—</span> : <Watch slug={v.slug} title={v.title} />}
               </td>
               <td>{unread.get(v.id) ?? 0}</td>
               <td>

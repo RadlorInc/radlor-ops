@@ -14,7 +14,7 @@ import { revalidateTag } from 'next/cache'
 const NOW = { expire: 0 } as const
 import { callerKey, overLimit } from '../_rateLimit'
 import { reviewerIdentity } from '@/lib/reviewerIdentity'
-import { TAGS, reviewerVideoBySlug, setOutcome } from '@/lib/db'
+import { TAGS, myAssignment, reviewerVideoBySlug, setOutcome } from '@/lib/db'
 
 /**
  * "I'm finished with this one, and here's what I think." Records THIS reviewer's VERDICT —
@@ -25,11 +25,16 @@ import { TAGS, reviewerVideoBySlug, setOutcome } from '@/lib/db'
  * assignment (see `setOutcome`), so one person finishing does not announce the video as reviewed
  * while somebody else still has it open.
  *
- * The reviewer's SESSION authorises this and nothing else: the route resolves it server-side,
- * looks the video up through the same assignment-scoped filter as the page, and can only write the
- * `verdict` column of THEIR OWN assignment row — the grant is column-level, so even a bug here
- * cannot repoint `storage_path`, and the PATCH filter names both keys so it cannot reach another
- * reviewer's verdict. There is no video id in the request; the browser names a slug it can see.
+ * ⚠️ ONLY THE APPROVER. Since 2026-09-09 everyone with a reviewer account can SEE every published
+ * cut and leave notes; the one `video_reviewers` row per video names who decides it. That row is
+ * checked HERE, not in the lookup — the lookup is shared with /api/notes, where a person without a
+ * row is exactly who should get through. No row, same 404 as a draft: nothing tells a reviewer
+ * that a decision exists which is not theirs to make.
+ *
+ * The reviewer's SESSION authorises this and nothing else: the route resolves it server-side, and
+ * can only write the `verdict` column of THEIR OWN assignment row — the grant is column-level, so
+ * even a bug here cannot repoint `storage_path`, and the PATCH filter names both keys so it cannot
+ * reach another reviewer's verdict. There is no video id in the request; the browser names a slug.
  */
 export const dynamic = 'force-dynamic'
 
@@ -58,10 +63,11 @@ export async function POST(req: Request) {
 
   if (!verdict) return NextResponse.json({ error: 'bad_verdict' }, { status: 400 })
 
-  // Scoped by assignment, so a reviewer cannot record a verdict on a video nobody asked them to
-  // review — the 404 is the same one a draft gets.
-  const video = await reviewerVideoBySlug(slug, reviewer.id)
-  if (!video) return NextResponse.json({ error: 'not_found' }, { status: 404 })
+  // A draft is a 404; so is a published cut this person is not the approver of. Same answer.
+  const video = await reviewerVideoBySlug(slug)
+  if (!video || !(await myAssignment(video.id, reviewer.id))) {
+    return NextResponse.json({ error: 'not_found' }, { status: 404 })
+  }
 
   // Idempotent, and re-pressable: changing your mind from approved to changes-needed is a normal
   // thing to do and must not require a note in between. It writes THIS reviewer's row only.

@@ -3,7 +3,7 @@
 import { useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 
-type Person = { user_id: string; name: string; role: string }
+type Person = { user_id: string; name: string; role: string; can_approve: boolean }
 
 /**
  * ADD A CUT AND SEND IT OUT FOR REVIEW.
@@ -20,19 +20,14 @@ export default function Upload({ people }: { people: Person[] }) {
   const router = useRouter()
   const [title, setTitle] = useState('')
   const [file, setFile] = useState<File | null>(null)
-  const [chosen, setChosen] = useState<string[]>([])
   const [step, setStep] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const fileInput = useRef<HTMLInputElement>(null)
 
-  /** ⚠️ REVIEWERS AND ADMINS, NEVER TESTERS. A tester has no reviewer surface, so assigning one
-   *  puts a video in a queue that person cannot open — the interface would be promising something
-   *  the role gate refuses. Admins are here because the one reviewer in production is also one. */
-  const assignable = people.filter((p) => p.role === 'reviewer' || p.role === 'admin')
-
-  function toggle(id: string) {
-    setChosen((xs) => (xs.includes(id) ? xs.filter((x) => x !== id) : [...xs, id]))
-  }
+  /** Who will be asked. Set on the People tab, not here: the picker this form had for a day let the
+   *  admin name a different person per cut, and the ask was the opposite — one person holds it. The
+   *  route reads the same flag itself; this is the form saying so before the button is pressed. */
+  const approvers = people.filter((p) => p.can_approve)
 
   async function send() {
     if (!file || !title.trim()) return
@@ -42,7 +37,7 @@ export default function Upload({ people }: { people: Person[] }) {
       const made = await fetch('/api/admin/video', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ title: title.trim(), filename: file.name, reviewers: chosen }),
+        body: JSON.stringify({ title: title.trim(), filename: file.name }),
       })
       if (!made.ok) {
         const b = (await made.json().catch(() => ({}))) as { error?: string; slug?: string }
@@ -51,7 +46,9 @@ export default function Upload({ people }: { people: Person[] }) {
             ? `There is already a video called “${b.slug}”. Give this one a different title.`
             : b.error === 'bad_format'
               ? 'That file type will not play in a browser. Use .mp4, .webm, .mov or .m4v.'
-              : 'Could not start the upload.',
+              : b.error === 'no_approver'
+                ? 'Nobody is set to approve cuts yet. Pick someone on the People tab first.'
+                : 'Could not start the upload.',
         )
       }
       const { id, storage_path, uploadUrl } = (await made.json()) as {
@@ -76,7 +73,6 @@ export default function Upload({ people }: { people: Person[] }) {
 
       setTitle('')
       setFile(null)
-      setChosen([])
       if (fileInput.current) fileInput.current.value = ''
       setStep(null)
       router.refresh()
@@ -87,12 +83,16 @@ export default function Upload({ people }: { people: Person[] }) {
   }
 
   const busy = step !== null
+  const noApprover = approvers.length === 0
 
   return (
     <div className="card filecard" style={{ marginBottom: 18 }}>
       <h3 style={{ margin: '0 0 4px' }}>Add a cut</h3>
-      <p className="muted small" style={{ margin: '0 0 12px' }}>
-        It goes out to whoever you tick. Nobody ticked means nobody sees it — it waits as a draft.
+      <p className="muted small" style={{ margin: '0 0 12px' }} data-testid="upload-approver">
+        Everyone with a reviewer account can watch it and leave notes.{' '}
+        {noApprover
+          ? 'Nobody is set to approve cuts yet — pick someone on the People tab before sending one out.'
+          : `${approvers.map((p) => p.name).join(' and ')} ${approvers.length === 1 ? 'approves' : 'approve'} or ${approvers.length === 1 ? 'rejects' : 'reject'} it.`}
       </p>
 
       <label className="field">
@@ -120,30 +120,11 @@ export default function Upload({ people }: { people: Person[] }) {
         />
       </label>
 
-      <div className="field" style={{ marginTop: 10 }}>
-        <span className="fieldname">Who should review it?</span>
-        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 4 }}>
-          {assignable.map((p) => (
-            <button
-              key={p.user_id}
-              className="chip"
-              onClick={() => toggle(p.user_id)}
-              disabled={busy}
-              aria-pressed={chosen.includes(p.user_id)}
-              style={chosen.includes(p.user_id) ? { borderColor: 'var(--accent)', color: 'var(--accent)' } : undefined}
-              data-testid={`upload-reviewer-${p.user_id}`}
-            >
-              {p.name}
-            </button>
-          ))}
-        </div>
-      </div>
-
       <button
         className="send"
         style={{ marginTop: 14 }}
         onClick={send}
-        disabled={busy || !file || !title.trim()}
+        disabled={busy || !file || !title.trim() || noApprover}
         data-testid="upload-send"
       >
         {busy ? 'Working…' : 'Send it out'}

@@ -120,11 +120,15 @@ const REVIEWER_VISIBLE = 'status=in.(awaiting_review,reviewed)'
 const VIDEO_COLS = 'id,slug,title,storage_path,version,status,sort_order'
 
 /**
- * ⚠️ STATUS IS NOT AN AUTHORIZATION FILTER, AND FOR A LONG TIME IT WAS THE ONLY ONE HERE. Both
- * functions below used to select on `REVIEWER_VISIBLE` alone, so any valid token listed every
- * reviewable video and opened any reviewable slug. Nothing chose that; there was one video, so it
- * never showed. The assignment is the condition now: `assignedTo()` first, and a video not in it
- * does not exist as far as that reviewer is concerned. Finding #7.
+ * ⚠️ VISIBILITY IS BY ROLE AGAIN, AND THIS TIME SOMEBODY DECIDED IT. Finding #7 recorded that any
+ * valid TOKEN once opened any reviewable video, and nobody had chosen that. On 2026-09-09 Rafi
+ * chose it, for accounts: every reviewer and the admin see every published cut and may leave notes
+ * on it. The token is gone, so "who is holding it" is answered by the session, and the thing the
+ * assignment used to gate — seeing the video — is now gated by `requireRole` on the page.
+ *
+ * What the assignment STILL gates is the verdict. One `video_reviewers` row per video names the
+ * one person who approves or rejects it; everyone else is there for feedback. `/api/review-done`
+ * refuses anyone without a row, and `clearance()` reads that row alone.
  */
 export async function assignmentsFor(reviewerId: string): Promise<Assignment[]> {
   return rest<Assignment[]>(
@@ -133,32 +137,31 @@ export async function assignmentsFor(reviewerId: string): Promise<Assignment[]> 
   )
 }
 
-/** Carries THEIR verdict, not the video's — "you marked this finished" has to mean *you*, and
- *  `videos.status` is now derived from everyone, so it cannot answer that question. */
-export async function videosForReviewer(reviewerId: string): Promise<(Video & { myVerdict: Verdict })[]> {
-  const mine = await assignmentsFor(reviewerId)
-  if (mine.length === 0) return []
-  const videos = await rest<Video[]>(
-    'reviewer video list',
-    `videos?select=${VIDEO_COLS}&${REVIEWER_VISIBLE}&order=sort_order.asc,created_at.asc`,
-  )
+/** Every published cut, each saying whether THIS person is the one who decides it, and what they
+ *  decided. `decides` is the assignment row existing; `myVerdict` is null for everyone else. */
+export async function videosForReviewer(
+  reviewerId: string,
+): Promise<(Video & { decides: boolean; myVerdict: Verdict })[]> {
+  const [mine, videos] = await Promise.all([
+    assignmentsFor(reviewerId),
+    rest<Video[]>('reviewer video list', `videos?select=${VIDEO_COLS}&${REVIEWER_VISIBLE}&order=sort_order.asc,created_at.asc`),
+  ])
   const byId = new Map(mine.map((a) => [a.video_id, a.verdict]))
-  return videos.filter((v) => byId.has(v.id)).map((v) => ({ ...v, myVerdict: byId.get(v.id) ?? null }))
+  return videos.map((v) => ({ ...v, decides: byId.has(v.id), myVerdict: byId.get(v.id) ?? null }))
 }
 
 /**
- * Reviewer-facing lookup: a draft, a cut being revised, OR a video they were never assigned does
- * not exist as far as they know — all three are the same 404, which is the same reason an unknown
- * and a revoked token are.
+ * Reviewer-facing lookup: a draft or a cut being revised does not exist as far as they know —
+ * both are the same 404. Who may look is decided before this is called (`requireRole` on the
+ * page, `reviewerIdentity()` in the routes); who may DECIDE is `myAssignment()`, asked separately
+ * by the one route that writes a verdict.
  */
-export async function reviewerVideoBySlug(slug: string, reviewerId: string): Promise<Video | null> {
+export async function reviewerVideoBySlug(slug: string): Promise<Video | null> {
   const rows = await rest<Video[]>(
     'video lookup',
     `videos?select=${VIDEO_COLS}&slug=eq.${encodeURIComponent(slug)}&${REVIEWER_VISIBLE}&limit=1`,
   )
-  const video = rows[0]
-  if (!video) return null
-  return (await myAssignment(video.id, reviewerId)) ? video : null
+  return rows[0] ?? null
 }
 
 export async function myAssignment(videoId: string, reviewerId: string): Promise<Assignment | null> {
@@ -224,7 +227,10 @@ export async function insertVideo(v: {
 }
 
 /**
- * Who is being asked. One row per reviewer, which is what makes each verdict its own answer.
+ * Who decides. Since 2026-09-09 the upload route sends exactly ONE id here — the approver — and
+ * refuses more; everyone else with a reviewer account sees the cut without a row. The function
+ * still takes a list because the table does, and a second row is what `clearance()` would treat
+ * as a second approval required.
  *
  * ⚠️ IT DOES NOT SEND `verdict`, AND THAT IS LOAD-BEARING RATHER THAN TIDY. The grant this call
  * runs under is COLUMN-LEVEL — `insert (video_id, reviewer_id)` — so naming `verdict` at all, even
@@ -383,6 +389,43 @@ async function allNotesUncached(): Promise<(Note & { reviewer_id: string })[]> {
   )
 }
 
+/**
+ * WHO GETS ASKED ON THE NEXT CUT. The one profile (the route keeps it to one) with `can_approve`.
+ * Not cached: the admin flips it and uploads in the same minute, and a stale answer here would put
+ * the cut in front of the person they just took it away from.
+ */
+export function approverIds(): Promise<string[]> {
+  return rest<{ user_id: string }[]>('approver lookup', 'profiles?select=user_id&can_approve=eq.true').then((rows) =>
+    rows.map((r) => r.user_id),
+  )
+}
+
+/**
+ * MAKE ONE PERSON THE APPROVER, OR MAKE THEM FEEDBACK-ONLY.
+ *
+ * ⚠️ ONE HOLDER: setting it on clears everyone else first, because that is what "only one person
+ * has the authority" means and the alternative is a People list the admin has to police. Two
+ * PATCHes, not one transaction — PostgREST has none — so a failure between them leaves NOBODY
+ * flagged, which the upload form reports in words rather than silently assigning nobody.
+ *
+ * ⚠️ IT TOUCHES THE FLAG AND NOTHING ELSE. `update (can_approve)` is the only UPDATE the web tier
+ * holds on `profiles`; naming `role` here would be refused with 42501, and that is the point.
+ */
+export async function setApprover(userId: string, on: boolean): Promise<void> {
+  if (on) {
+    await rest<null>('approver clear', 'profiles?can_approve=eq.true', {
+      method: 'PATCH',
+      headers: { Prefer: 'return=minimal' },
+      body: JSON.stringify({ can_approve: false }),
+    })
+  }
+  await rest<null>('approver set', `profiles?user_id=eq.${userId}`, {
+    method: 'PATCH',
+    headers: { Prefer: 'return=minimal' },
+    body: JSON.stringify({ can_approve: on }),
+  })
+}
+
 export const allVideos = cached(allVideosUncached, TAGS.videos, 'all-videos')
 export const allNotes = cached(allNotesUncached, TAGS.notes, 'all-notes')
 export const allAssignments = cached(allAssignmentsUncached, TAGS.assignments, 'all-assignments')
@@ -433,7 +476,12 @@ export async function setUserPassword(userId: string, password: string): Promise
 
 /** The role row. Service key: `profiles` is insertable by `service_role` only, on purpose — an
  *  admin's own session cannot hand out roles, only a route running on the server can. */
-export function insertProfile(row: { user_id: string; role: 'admin' | 'tester' | 'reviewer'; name: string }): Promise<null> {
+export function insertProfile(row: {
+  user_id: string
+  role: 'admin' | 'tester' | 'reviewer'
+  name: string
+  can_approve?: boolean
+}): Promise<null> {
   return rest<null>('profile insert', 'profiles', {
     method: 'POST',
     headers: { Prefer: 'return=minimal' },

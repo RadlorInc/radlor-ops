@@ -15,12 +15,14 @@ async function notesOf(request: import('@playwright/test').APIRequestContext, re
   return (await res.json()) as { body: string; t_seconds: number; reviewer_id: string }[]
 }
 
-test('a signed-in reviewer lands on their own list, scoped by assignment', async ({ page }) => {
+test('a signed-in reviewer lands on the list of every published cut', async ({ page }) => {
   await signIn(page, 'dana')
   await expect(page).toHaveURL(/\/review$/)
   await expect(page.getByTestId('video-card').filter({ hasText: 'Hook test B' })).toBeVisible()
-  // `flood-only` is awaiting review and is somebody else's. Status alone would have listed it.
-  await expect(page.getByText('Flood only')).toHaveCount(0)
+  // ⚠️ `flood-only` is somebody else's to APPROVE and is listed anyway — since 2026-09-09 the
+  // assignment decides who decides, not who sees. A draft is still absent for everyone.
+  await expect(page.getByTestId('video-card').filter({ hasText: 'Flood only' })).toBeVisible()
+  await expect(page.getByText('Quiet draft')).toHaveCount(0)
 })
 
 test('every other surface 404s for a reviewer, and the admin still gets 200', async ({ page, browser }) => {
@@ -54,14 +56,18 @@ test('signed out, /review sends you to the login form rather than 404ing', async
   await expect(page.getByTestId('email')).toBeVisible()
 })
 
-test('an admin opens the reviewer surface and sees THEIR assignments, not everyone’s', async ({ page }) => {
+test('an admin opens the reviewer surface and sees every published cut, marked by whose call it is', async ({ page }) => {
   await signIn(page, 'admin')
   await page.goto('/review')
-  // ⚠️ This is the "why can the admin see a reviewer page" answer, as an assertion. The admin is
-  // assigned to flood-only and to nothing else, so seeing Dana's hook-test-b here would mean the
-  // surface is gated by role instead of scoped by assignment.
-  await expect(page.getByTestId('video-card').filter({ hasText: 'Flood only' })).toBeVisible()
-  await expect(page.getByText('Hook test B')).toHaveCount(0)
+  // The admin is the approver on flood-only and nothing else. Both cuts are listed; the pill is
+  // what tells them apart — an admin-sees-only-their-assignments build fails the second line, and
+  // a build that lost the `decides` flag fails the pills.
+  const floodOnly = page.getByTestId('video-card').filter({ hasText: 'Flood only' })
+  const hookTestB = page.getByTestId('video-card').filter({ hasText: 'Hook test B' })
+  await expect(floodOnly).toBeVisible()
+  await expect(hookTestB).toBeVisible()
+  await expect(floodOnly.getByTestId('video-pill')).toHaveText('Your decision needed')
+  await expect(hookTestB.getByTestId('video-pill')).toHaveText('Feedback welcome')
 })
 
 test('a reviewer notes and finishes WITHOUT a token, and it lands on their own row', async ({ page, request }) => {

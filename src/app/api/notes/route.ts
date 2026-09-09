@@ -59,7 +59,10 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'bad_timestamp' }, { status: 400 })
   }
 
-  const video = await reviewerVideoBySlug(slug, reviewer.id)
+  // Any published cut. Notes are FEEDBACK, and since 2026-09-09 every reviewer and the admin may
+  // leave them on every cut — only the verdict is one person's, and that is /api/review-done's
+  // check, not this route's.
+  const video = await reviewerVideoBySlug(slug)
   if (!video) return NextResponse.json({ error: 'not_found' }, { status: 404 })
 
   // The version is stamped from the video row HERE, not sent by the client: it is what tells v1
@@ -79,7 +82,8 @@ export async function POST(req: Request) {
   // is told, so the page can say what happened rather than changing underneath them.
   // ⚠️ THEIR OWN VERDICT, AND ONLY THEIRS. A note is this reviewer changing their mind, not a
   // reason to reopen anybody else's finished review — and emphatically not a way for a note to
-  // clear somebody else's `changes_needed`.
+  // clear somebody else's `changes_needed`. A person with no row (feedback only) has nothing to
+  // reopen, so `mine` is null and nothing moves.
   const mine = await myAssignment(video.id, reviewer.id)
   const reopened = mine?.verdict != null
   if (reopened) await setOutcome(video.id, reviewer.id, null)

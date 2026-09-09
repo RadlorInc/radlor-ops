@@ -7,6 +7,9 @@ type Person = {
   user_id: string
   name: string
   role: string
+  /** The one person the next cut is sent to for approve/reject. Everyone else with a reviewer
+   *  account watches and leaves notes. */
+  can_approve: boolean
   /** `waiting` = a link is out and unopened · `expired` = it ran out · `null` = joined, or made
    *  by hand with no link at all. Computed on the server in `page.tsx`, where the link table is
    *  readable — the browser has no way to see it and must not be given one. */
@@ -91,6 +94,8 @@ function writeStore(links: Made[] | null) {
 export default function People({ initial }: { initial: Person[] }) {
   const router = useRouter()
   const [emails, setEmails] = useState('')
+  /** `approver` is not a role: it is `reviewer` plus the flag, folded into one choice because
+   *  "what they do" is the question the admin is answering and this is one of the answers. */
   const [role, setRole] = useState('tester')
   const [busy, setBusy] = useState(false)
   const madeJson = useSyncExternalStore(subscribe, readStore, () => '[]')
@@ -132,7 +137,10 @@ export default function People({ initial }: { initial: Person[] }) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
       })
-      if (!res.ok) throw new Error('That did not work. Try again.')
+      if (!res.ok) {
+        const b = (await res.json().catch(() => ({}))) as { error?: string }
+        throw new Error(b.error === 'one_approver' ? 'Only one person can be the approver — paste one address for that, and add the others as reviewers.' : 'That did not work. Try again.')
+      }
       const out = (await res.json()) as { links: Made[]; skipped: Skipped[] }
       writeStore(out.links)
       setSkipped(out.skipped)
@@ -145,6 +153,28 @@ export default function People({ initial }: { initial: Person[] }) {
   }
 
   const parsed = emails.split(/[\s,;]+/).map((e) => e.trim()).filter(Boolean)
+
+  /** Approver on / off for one person. Setting it on takes it from whoever had it — the server
+   *  does that, and the list below redraws from the server's answer, not from a guess made here. */
+  async function approve(user_id: string, can_approve: boolean) {
+    setBusy(true)
+    setError(null)
+    try {
+      const res = await fetch('/api/admin/people', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ user_id, can_approve }),
+      })
+      if (!res.ok) throw new Error('That did not work. Try again.')
+      router.refresh()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'That did not work. Try again.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const approver = initial.find((p) => p.can_approve)
 
   return (
     <section style={{ marginTop: 24 }}>
@@ -172,12 +202,17 @@ export default function People({ initial }: { initial: Person[] }) {
             <select value={role} onChange={(e) => setRole(e.target.value)} data-testid="bulk-role">
               <option value="tester">Tester — tries the app and files problems</option>
               <option value="reviewer">Reviewer — watches videos and leaves notes</option>
+              <option value="approver">Reviewer who approves or rejects — one person only</option>
               <option value="admin">Admin — sees everything</option>
             </select>
           </label>
         </div>
         <div className="actions">
-          <button onClick={() => post({ emails: parsed, role })} disabled={busy || parsed.length === 0} data-testid="bulk-make">
+          <button
+            onClick={() => post(role === 'approver' ? { emails: parsed, role: 'reviewer', can_approve: true } : { emails: parsed, role })}
+            disabled={busy || parsed.length === 0}
+            data-testid="bulk-make"
+          >
             {busy ? 'Making links…' : parsed.length === 1 ? 'Make 1 link' : `Make ${parsed.length || ''} links`}
           </button>
           {error && (
@@ -236,11 +271,35 @@ export default function People({ initial }: { initial: Person[] }) {
       )}
 
       <h2 style={{ marginTop: 28 }}>Who has access</h2>
+      {/* Said once, above the list, because the list only shows it per row and the absence of a
+          row saying "Approver" is not something a reader notices. */}
+      <p className="help" data-testid="approver-summary">
+        {approver
+          ? `${approver.name} approves or rejects each cut. Everyone else with a reviewer account watches and leaves notes.`
+          : 'Nobody is set to approve cuts yet. Press Make approver beside one reviewer — nothing can be sent out until you do.'}
+      </p>
       <ol className="todos" data-testid="people-list">
         {initial.map((p) => (
-          <li key={p.user_id} data-testid="person">
+          <li key={p.user_id} data-testid="person" data-approver={p.can_approve ? 'yes' : 'no'}>
             <span className="chip" data-testid="person-role">{ROLE_LABEL[p.role] ?? p.role}</span>
             <span>{p.name}</span>
+            {p.can_approve && (
+              <span className="chip" data-testid="person-approver">
+                Approver
+              </span>
+            )}
+            {/* Reviewers and admins only: a tester cannot open the page a decision lives on. One
+                button per row, reading as the action it performs from this state. */}
+            {p.role !== 'tester' && (
+              <button
+                className="linky"
+                onClick={() => approve(p.user_id, !p.can_approve)}
+                disabled={busy}
+                data-testid="person-approve"
+              >
+                {p.can_approve ? 'Feedback only' : 'Make approver'}
+              </button>
+            )}
             {/* ⚠️ THE LIST IS "ACCOUNTS MADE", NOT "PEOPLE WHO JOINED" — the row appears the moment
                 the link is made, days before anybody opens it. Without this chip a rollout of
                 twenty looks identical whether nineteen are stuck or none are. */}

@@ -137,6 +137,16 @@ try {
   judge('profiles: delete an account', 'refused', await rest('profiles?user_id=eq.00000000-0000-4000-8000-000000000000', {
     method: 'DELETE', headers: { Prefer: 'return=minimal' },
   }))
+  /* ⚠️ A NONEXISTENT ID ON PURPOSE. Postgres checks column privileges at plan time, so a PATCH
+   * that matches zero rows still answers 42501 without the grant and 204 with it — which makes
+   * the probe side-effect free on a table of real people. Two columns, two answers: the flag the
+   * People button moves (20260909150000) and the role nothing signed in may ever change. */
+  judge('profiles: move `can_approve`', 'allowed', await rest('profiles?user_id=eq.00000000-0000-4000-8000-000000000000', {
+    method: 'PATCH', headers: { Prefer: 'return=minimal' }, body: JSON.stringify({ can_approve: true }),
+  }))
+  judge('profiles: change `role`', 'refused', await rest('profiles?user_id=eq.00000000-0000-4000-8000-000000000000', {
+    method: 'PATCH', headers: { Prefer: 'return=minimal' }, body: JSON.stringify({ role: 'admin' }),
+  }))
   judge('invite_links: delete one', 'refused', await rest('invite_links?id=eq.00000000-0000-4000-8000-000000000000', {
     method: 'DELETE', headers: { Prefer: 'return=minimal' },
   }))

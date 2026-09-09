@@ -19,14 +19,14 @@ const FILE = { name: 'a-new-cut.mp4', mimeType: 'video/mp4', buffer: Buffer.from
  * URL that is never redeemed, a row that stays `draft`, an assignment that is never written — and
  * a spec that read the success message would pass through all three.
  */
-test('an uploaded cut reaches the reviewer it was assigned to', async ({ page, request, browser }) => {
+test('an uploaded cut reaches the approver, who is named by the flag and not by the form', async ({ page, request, browser }) => {
   await signIn(page, 'admin')
   await page.goto('/admin?tab=videos')
 
+  // The form says who will be asked before anything is sent. Dana holds `can_approve` in the seed.
+  await expect(page.getByTestId('upload-approver')).toContainText('Dana Reviewer approves or rejects it')
   await page.getByTestId('upload-title').fill('A New Cut')
   await page.getByTestId('upload-file').setInputFiles(FILE)
-  // Dana, the reviewer every other spec uses.
-  await page.getByTestId(`upload-reviewer-${USERS.dana}`).click()
   await page.getByTestId('upload-send').click()
 
   /**
@@ -68,10 +68,9 @@ test('an uploaded cut reaches the reviewer it was assigned to', async ({ page, r
   expect(assigned[0].verdict).toBe(null)
 
   /**
-   * ⚠️ AND THE BYTES COME BACK — READ AS DANA, WHICH IS THE POINT OF THE WHOLE FEATURE. The admin
-   * cannot sign this one and should not be able to: `/api/video-url`'s admin door only opens for a
-   * CLEARED cut, and this one has not been reviewed yet. Asserting it as the admin was the first
-   * version of this and it 404s correctly — the assertion was wrong, not the route.
+   * ⚠️ AND THE BYTES COME BACK — READ AS DANA, THE APPROVER, WHICH IS THE POINT OF THE WHOLE
+   * FEATURE. (The admin could sign it too since 2026-09-09; reading it as the person the cut was
+   * sent to is still the stronger claim, because it goes through a different session.)
    *
    * ⚠️ A SECOND BROWSER CONTEXT, NOT A SECOND SIGN-IN ON THIS PAGE. Two sessions in one cookie jar
    * leave the login form unable to land, which fails as "sign-in broke" four lines from the thing
@@ -146,7 +145,7 @@ test('a video whose file never arrived stays a draft', async ({ page, request, b
   await signIn(page, 'admin')
 
   const made = await page.request.post('/api/admin/video', {
-    data: { title: 'Never Uploaded', filename: 'never.mp4', reviewers: [USERS.dana] },
+    data: { title: 'Never Uploaded', filename: 'never.mp4' },
   })
   expect(made.status()).toBe(200)
   const { id, storage_path } = (await made.json()) as { id: string; storage_path: string }
@@ -170,4 +169,80 @@ test('a video whose file never arrived stays a draft', async ({ page, request, b
   } finally {
     await asDana.close()
   }
+})
+
+/**
+ * ── WHO APPROVES IS A PROPERTY OF THE PERSON ────────────────────────────────────────────────────
+ *
+ * Rafi, 2026-09-09: when somebody is given access as a reviewer there must be a way to make them
+ * the person who approves or rejects; otherwise they only give feedback. One holder at a time.
+ *
+ * ⚠️ THESE TWO MUTATE THE FLAG AND RUN LAST IN THIS FILE, AND NOTHING AFTER THIS FILE UPLOADS.
+ * Every test above reads Dana off the seed; these move the flag away from her and do not put it
+ * back — a restore step is the thing CLAUDE.md warns against, and the honest alternative is that
+ * no later spec depends on it. `verdict.spec.ts` is the only file after this one alphabetically
+ * and it never uploads. Each test sets its own precondition, so `-g` runs it alone.
+ *
+ * ⚠️ THE ROUTE IS DRIVEN WITH A `reviewers` BODY IT MUST IGNORE. The client used to name the
+ * assignee; a route that still honoured it would let a request body put a decision in front of
+ * somebody the admin never chose. Sending Dana and asserting Flood is what proves it is ignored.
+ */
+test('Make approver moves the flag to one person, and the next upload is theirs — not the form’s', async ({ page, request }) => {
+  await signIn(page, 'admin')
+  await page.goto('/admin?tab=people')
+  const row = (name: string) => page.getByTestId('person').filter({ hasText: name })
+
+  await expect(row('Dana Reviewer')).toHaveAttribute('data-approver', 'yes')
+  await expect(row('Flood Reviewer')).toHaveAttribute('data-approver', 'no')
+  // A tester gets no button at all: a decision cannot sit with somebody who cannot open the page.
+  await expect(row('Harness Tester').getByTestId('person-approve')).toHaveCount(0)
+
+  await row('Flood Reviewer').getByTestId('person-approve').click()
+  // ⚠️ BOTH ROWS. "Flood is the approver" is satisfied by a build that flags two people; Dana
+  // losing it is the one-holder rule, and it is the half a naive implementation forgets.
+  await expect(row('Flood Reviewer')).toHaveAttribute('data-approver', 'yes')
+  await expect(row('Dana Reviewer')).toHaveAttribute('data-approver', 'no')
+  await expect(page.getByTestId('approver-summary')).toContainText('Flood Reviewer approves or rejects')
+
+  const made = await page.request.post('/api/admin/video', {
+    data: { title: 'Floods Cut', filename: 'floods.mp4', reviewers: [USERS.dana] },
+  })
+  expect(made.status()).toBe(200)
+  const { id } = (await made.json()) as { id: string }
+  const assigned = await rows(request, 'video_reviewers', `&video_id=eq.${id}`)
+  expect(assigned.map((a) => a.reviewer_id)).toEqual([USERS.flood])
+})
+
+test('with nobody set to approve, nothing can be sent out — form and route agree', async ({ page, request }) => {
+  await signIn(page, 'admin')
+  await page.goto('/admin?tab=people')
+  const holder = page.getByTestId('person').filter({ has: page.getByTestId('person-approver') })
+  // Own precondition: whoever holds it now (Flood after the test above, Dana alone) is switched off.
+  if ((await holder.count()) > 0) await holder.first().getByTestId('person-approve').click()
+  await expect(page.getByTestId('person-approver')).toHaveCount(0)
+  await expect(page.getByTestId('approver-summary')).toContainText('Nobody is set to approve')
+
+  await page.goto('/admin?tab=videos')
+  await expect(page.getByTestId('upload-approver')).toContainText('Nobody is set to approve cuts yet')
+  await page.getByTestId('upload-title').fill('Orphan Cut')
+  await page.getByTestId('upload-file').setInputFiles(FILE)
+  await expect(page.getByTestId('upload-send')).toBeDisabled()
+
+  const before = (await rows(request, 'videos')).length
+  const res = await page.request.post('/api/admin/video', { data: { title: 'Orphan Cut', filename: 'orphan.mp4' } })
+  expect(res.status()).toBe(400)
+  expect(((await res.json()) as { error: string }).error).toBe('no_approver')
+  expect((await rows(request, 'videos')).length).toBe(before)
+
+  // And giving somebody access AS the approver is the same one-holder rule through the other door:
+  // one address only, and it lands flagged.
+  await page.goto('/admin?tab=people')
+  await page.getByTestId('bulk-emails').fill('lead@example.com\nsecond@example.com')
+  await page.getByTestId('bulk-role').selectOption('approver')
+  await page.getByTestId('bulk-make').click()
+  await expect(page.getByTestId('links-error')).toContainText('Only one person can be the approver')
+  await page.getByTestId('bulk-emails').fill('lead@example.com')
+  await page.getByTestId('bulk-make').click()
+  await expect(page.getByTestId('person').filter({ hasText: 'lead' })).toHaveAttribute('data-approver', 'yes')
+  await expect(page.getByTestId('person-approver')).toHaveCount(1)
 })

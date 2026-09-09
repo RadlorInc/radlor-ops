@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { revalidateTag } from 'next/cache'
 import { requireRoleApi } from '@/lib/session'
-import { TAGS, allVideos, assignReviewers, deleteVideo, insertVideo, publishVideo, slugTaken } from '@/lib/db'
+import { TAGS, allVideos, approverIds, assignReviewers, deleteVideo, insertVideo, publishVideo, slugTaken } from '@/lib/db'
 import { deleteVideoObject, signedUploadUrl, videoIsReadable } from '@/lib/storage'
 
 /**
@@ -44,17 +44,22 @@ export async function POST(req: Request) {
   const gate = await requireRoleApi('admin')
   if ('deny' in gate) return gate.deny
 
-  const body = (await req.json().catch(() => null)) as
-    | { title?: unknown; filename?: unknown; reviewers?: unknown }
-    | null
+  const body = (await req.json().catch(() => null)) as { title?: unknown; filename?: unknown } | null
   const title = typeof body?.title === 'string' ? body.title.trim() : ''
   const filename = typeof body?.filename === 'string' ? body.filename : ''
-  const reviewers = Array.isArray(body?.reviewers) ? body.reviewers.filter((r): r is string => typeof r === 'string') : []
 
   if (!title) return NextResponse.json({ error: 'no_title' }, { status: 400 })
 
   const ext = filename.split('.').pop()?.toLowerCase() ?? ''
   if (!EXTENSIONS.has(ext)) return NextResponse.json({ error: 'bad_format', ext }, { status: 400 })
+
+  // ⚠️ THE APPROVER IS READ FROM `profiles.can_approve`, NEVER FROM THE REQUEST. The client used
+  // to name who reviews a cut; since 2026-09-09 that is a property of the person, set on the People
+  // tab, so a request body cannot put a decision in front of somebody the admin did not choose.
+  // Zero means the admin has not picked anyone yet — refused, because a published cut with no
+  // approver can never clear and nothing here can add one afterwards.
+  const reviewers = await approverIds()
+  if (reviewers.length === 0) return NextResponse.json({ error: 'no_approver' }, { status: 400 })
 
   const slug = slugify(title)
   // ⚠️ A TITLE OF PURE PUNCTUATION SLUGIFIES TO NOTHING, and an empty slug is an empty URL segment
@@ -68,7 +73,7 @@ export async function POST(req: Request) {
 
   const storage_path = `${slug}-v1.${ext}`
   const { id } = await insertVideo({ slug, title, storage_path, sort_order })
-  if (reviewers.length > 0) await assignReviewers(id, reviewers)
+  await assignReviewers(id, reviewers)
 
   revalidateTag(TAGS.videos, { expire: 0 })
   revalidateTag(TAGS.assignments, { expire: 0 })

@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { createUser, insertProfile, newInviteLink, userEmail } from '@/lib/db'
+import { createUser, insertProfile, newInviteLink, setApprover, userEmail } from '@/lib/db'
 import { requireRoleApi } from '@/lib/session'
 import { hashToken, mintToken } from '@/lib/inviteToken'
 
@@ -42,7 +42,7 @@ export async function POST(req: Request) {
   if ('deny' in gate) return gate.deny
 
   const body = (await req.json().catch(() => null)) as
-    | { emails?: unknown; role?: unknown; user_id?: unknown }
+    | { emails?: unknown; role?: unknown; user_id?: unknown; can_approve?: unknown }
     | null
 
   // The "one more link for a person who already exists" shape.
@@ -63,6 +63,13 @@ export async function POST(req: Request) {
   const raw = Array.isArray(body?.emails) ? body.emails : []
   if (!ROLES.has(role) || raw.length === 0 || raw.length > MAX_EMAILS) {
     return NextResponse.json({ error: 'invalid' }, { status: 400 })
+  }
+  // ⚠️ "THE APPROVER" IS ONE PERSON, so it is refused for a pasted list and for a tester. Making
+  // the first address the approver and the rest reviewers would be a guess about a list somebody
+  // pasted, and the People row can set it afterwards in one click.
+  const canApprove = body?.can_approve === true
+  if (canApprove && (raw.length !== 1 || role === 'tester')) {
+    return NextResponse.json({ error: 'one_approver' }, { status: 400 })
   }
 
   const links: { email: string; path: string }[] = []
@@ -90,6 +97,9 @@ export async function POST(req: Request) {
     }
     try {
       await insertProfile({ user_id: id, role: role as 'admin' | 'tester' | 'reviewer', name: nameFrom(email) })
+      // After the row exists, and through the same helper the People button uses, so the previous
+      // holder is cleared here too — one holder, whichever door set it.
+      if (canApprove) await setApprover(id, true)
       const token = mintToken()
       await newInviteLink(id, hashToken(token), DAYS)
       links.push({ email, path: `/join/${token}` })

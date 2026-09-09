@@ -89,10 +89,10 @@ test('the route refuses a signed-out caller, a bad verdict, and a video the revi
   const draft = await page.request.post('/api/review-done', { data: { slug: 'quiet-draft', verdict: 'approved' } })
   expect(draft.status()).toBe(404)
 
-  // ⚠️ AND A VIDEO THAT IS PERFECTLY REVIEWABLE, JUST NOT HERS. `quiet-draft` above is refused by
-  // `status`, which is a filter that has always been there — on its own it proves nothing about
-  // the assignment. `flood-only` is `awaiting_review` and assigned to somebody else, so the
-  // assignment is the only thing that can refuse it.
+  // ⚠️ AND A VIDEO SHE CAN SEE BUT MAY NOT DECIDE. `quiet-draft` above is refused by `status`,
+  // which is a filter that has always been there — on its own it proves nothing about who may
+  // decide. `flood-only` is `awaiting_review`, open to Dana to watch and note since 2026-09-09,
+  // and somebody else's to approve — so the assignment is the only thing that can refuse it.
   const notMine = await page.request.post('/api/review-done', { data: { slug: 'flood-only', verdict: 'approved' } })
   expect(notMine.status()).toBe(404)
 
@@ -102,25 +102,11 @@ test('the route refuses a signed-out caller, a bad verdict, and a video the revi
   expect(await rowOf(request, 'flood-only', FLOOD)).toEqual({ status: 'awaiting_review', verdict: null })
 })
 
-test('a reviewer sees only the videos they were assigned — page AND list', async ({ page, browser }) => {
-  await signIn(page, 'dana')
-  await page.goto('/review')
-  // The list: `flood-only` is awaiting review, so status alone would have shown it.
-  await expect(page.getByText('Hook test B')).toBeVisible()
-  await expect(page.getByText('Flood only')).toHaveCount(0)
-
-  // The page, and the route that hands out a signed URL for the object itself.
-  expect((await page.goto('/review/flood-only'))?.status()).toBe(404)
-  const url = await page.request.get('/api/video-url?slug=flood-only')
-  expect(url.status()).toBe(404)
-
-  // ⚠️ THE POSITIVE CONTROL. Every assertion above is satisfied by a build where nothing resolves
-  // at all — the other reviewer getting 200 on the same slug is what makes them mean "not yours".
-  const other = await browser.newPage()
-  await signIn(other, 'flood')
-  expect((await other.goto('/review/flood-only'))?.status()).toBe(200)
-  await other.close()
-})
+/** ⚠️ THIS USED TO ASSERT THE OPPOSITE — "a reviewer sees only the videos they were assigned". On
+ *  2026-09-09 Rafi decided every reviewer sees every published cut; the assignment now names who
+ *  DECIDES. `e2e/approver.spec.ts` carries the new property with its own fixtures. What survives
+ *  here is the half that did not move: a draft is still nobody's, and the verdict route still
+ *  refuses a person without the row — the test above. */
 
 /** ⚠️ `overwrite-cut`, NOT `split-cut`. This spec writes verdicts, and the /admin spec below reads
  *  a seeded disagreement; pointing both at one row made that one pass or fail on test order. */

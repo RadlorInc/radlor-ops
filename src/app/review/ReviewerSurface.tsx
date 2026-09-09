@@ -16,7 +16,8 @@ import Review from './Review'
 
 export async function ReviewerList({ identity, role }: { identity: ReviewerIdentity; role: Role }) {
   const videos = await videosForReviewer(identity.id)
-  const unfinished = videos.filter((v) => v.myVerdict === null).length
+  // Waiting on YOU means a decision you have not given — feedback-only cuts never wait on anyone.
+  const unfinished = videos.filter((v) => v.decides && v.myVerdict === null).length
 
   return (
     <main className="wrap">
@@ -33,13 +34,15 @@ export async function ReviewerList({ identity, role }: { identity: ReviewerIdent
       <h1>Videos to review</h1>
       <p className="help" data-testid="signout-inline">
         {videos.length === 0
-          ? 'Nothing assigned to you.'
-          : `${unfinished} of ${videos.length} still waiting on you. Tap a video to watch it and leave your notes.`}
+          ? 'Nothing to review yet.'
+          : unfinished > 0
+            ? `${unfinished} waiting on your decision. Tap any video to watch it and leave your notes.`
+            : 'Tap any video to watch it and leave your notes.'}
       </p>
 
       {videos.length === 0 ? (
         <p className="muted" style={{ marginTop: 24 }} data-testid="nothing-assigned">
-          Nothing waiting on you right now. This page will fill up when the next cut is ready.
+          Nothing to review right now. This page will fill up when the next cut is ready.
         </p>
       ) : (
         <div style={{ marginTop: 20 }}>
@@ -50,9 +53,13 @@ export async function ReviewerList({ identity, role }: { identity: ReviewerIdent
                 <div className="muted small">Version {v.version}</div>
               </div>
               {/* The state in words, not only in the count above: "waiting for you" is the thing
-                  to tap, "you finished this" is the thing you can leave alone. */}
-              <span className={v.myVerdict ? 'pill pill-ok' : 'pill pill-waiting'}>
-                {v.myVerdict ? 'You finished this' : 'Waiting for you'}
+                  to tap, "you finished this" is the thing you can leave alone, and "feedback" says
+                  up front that this one is somebody else's call. */}
+              <span
+                className={!v.decides ? 'pill' : v.myVerdict ? 'pill pill-ok' : 'pill pill-waiting'}
+                data-testid="video-pill"
+              >
+                {!v.decides ? 'Feedback welcome' : v.myVerdict ? 'You finished this' : 'Your decision needed'}
               </span>
             </Link>
           ))}
@@ -65,7 +72,7 @@ export async function ReviewerList({ identity, role }: { identity: ReviewerIdent
 export async function ReviewerVideo({ identity, slug }: { identity: ReviewerIdentity; slug: string }) {
   // Filters on the ASSIGNMENT and on status, so three different things are the same 404: a draft,
   // a cut being revised, and a video this reviewer was never assigned.
-  const video = await reviewerVideoBySlug(slug, identity.id)
+  const video = await reviewerVideoBySlug(slug)
   if (!video) notFound()
 
   const [notes, mine] = await Promise.all([
@@ -78,7 +85,9 @@ export async function ReviewerVideo({ identity, slug }: { identity: ReviewerIden
       slug={video.slug}
       title={video.title}
       version={video.version}
-      // Their OWN verdict, never the video's — there may be another reviewer with a different one.
+      // Their OWN verdict, never the video's. `decides` is the assignment row existing: without it
+      // the page is a player and a notepad, and the two verdict buttons are not rendered at all.
+      decides={mine !== null}
       verdict={mine?.verdict ?? null}
       reviewerName={identity.name}
       reviewerEmail={identity.email}
