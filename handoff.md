@@ -420,6 +420,36 @@ in the same change. Do it as its own act, or leave the route as the enforcement 
 smallest thing that changes that: sign in as any reviewer who is not `mikuraja2`, open one of the
 two live cuts, leave a note, confirm there are no verdict buttons, and read `/admin`.
 
+## ⚠️ The dashboard counted the notes and would not show them — fixed 2026-09-10
+
+Rafi: *"as an admin, the notes the reviewer left for changes — I can't see them at all."* He was
+right, and three real notes were in the database while he said it (`rope-reel-v1-mp4`,
+`equals-reel-v1`, `tower-reel-v1-mp4`, all from `mikuraja2`, all open).
+
+**Nothing was broken.** *Marketing material* had an *Unread notes* column showing a NUMBER, and the
+only place the words existed was `/admin/export` — plain text, behind a small grey
+*Open notes as markdown →* link above the table. So the tool said "there is feedback waiting" and
+provided no way to read it from there.
+
+> **A count with no way to reach the thing it counts is worse than no count.** It spends the
+> reader's attention telling them something exists and then withholds it. The export was not the
+> wrong artifact — it is for pasting into a chat — it was the wrong *only* door.
+
+`src/app/admin/ReviewerNotes.tsx` renders them under the table: native `<details>` per cut, open
+when anything is unread, grouped by `video_version`, each note showing its timestamp, its text, and
+**who wrote it** — which matters more since 2026-09-09, because every reviewer can now leave notes
+on every cut. Resolved ones are struck through. It is server-rendered from `allNotes()`, which the
+page already fetched for the two counts, so it adds **no query**.
+
+⚠️ **Still no way to mark a note resolved from the interface** — `resolved_at` is set by hand in
+SQL, and the /admin cache table below still lists that write as TTL-only. Now that the notes are
+readable, that is the obvious next ask; it was not this one.
+
+`e2e/admin-notes.spec.ts` writes the note bodies out rather than importing the seed, and asserts
+before any click (the complaint was about what the tab shows on arrival). Break-checked three ways:
+section not rendered, versions collapsed onto the current one, resolved styling dropped — the last
+asserts the **computed** `line-through`, not the class name.
+
 ## The screens, and what changed on 2026-09-03
 
 **One flat tab strip**, on every surface, showing only what the role can actually open:

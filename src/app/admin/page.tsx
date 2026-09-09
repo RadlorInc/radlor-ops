@@ -10,6 +10,7 @@ import People from './People'
 import Watch from './Watch'
 import Upload from './Upload'
 import DeleteVideo from './DeleteVideo'
+import ReviewerNotes from './ReviewerNotes'
 
 export const dynamic = 'force-dynamic'
 
@@ -266,6 +267,9 @@ export default async function Admin({
           </tbody>
         </table>
       </div>
+      {/* ⚠️ THE NOTES THEMSELVES, NOT ONLY THE COUNT IN THE COLUMN ABOVE. See ReviewerNotes.tsx:
+          the table counted feedback the admin had no way to read from here. */}
+      <ReviewerNotes videos={videos} notes={notes} reviewerName={reviewerName} />
         </section>
       )}
 
