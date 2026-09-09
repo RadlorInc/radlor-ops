@@ -175,7 +175,8 @@ test('a video whose file never arrived stays a draft', async ({ page, request, b
  * ── WHO APPROVES IS A PROPERTY OF THE PERSON ────────────────────────────────────────────────────
  *
  * Rafi, 2026-09-09: when somebody is given access as a reviewer there must be a way to make them
- * the person who approves or rejects; otherwise they only give feedback. One holder at a time.
+ * a person who approves or rejects; otherwise they only give feedback. Several may hold it — his
+ * second word the same evening — and a cut is cleared only when all of them have approved.
  *
  * ⚠️ THESE TWO MUTATE THE FLAG AND RUN LAST IN THIS FILE, AND NOTHING AFTER THIS FILE UPLOADS.
  * Every test above reads Dana off the seed; these move the flag away from her and do not put it
@@ -187,7 +188,7 @@ test('a video whose file never arrived stays a draft', async ({ page, request, b
  * assignee; a route that still honoured it would let a request body put a decision in front of
  * somebody the admin never chose. Sending Dana and asserting Flood is what proves it is ignored.
  */
-test('Make approver moves the flag to one person, and the next upload is theirs — not the form’s', async ({ page, request }) => {
+test('Make approver adds a second approver, and the next upload asks both — not whoever the form names', async ({ page, request }) => {
   await signIn(page, 'admin')
   await page.goto('/admin?tab=people')
   const row = (name: string) => page.getByTestId('person').filter({ hasText: name })
@@ -198,11 +199,11 @@ test('Make approver moves the flag to one person, and the next upload is theirs 
   await expect(row('Harness Tester').getByTestId('person-approve')).toHaveCount(0)
 
   await row('Flood Reviewer').getByTestId('person-approve').click()
-  // ⚠️ BOTH ROWS. "Flood is the approver" is satisfied by a build that flags two people; Dana
-  // losing it is the one-holder rule, and it is the half a naive implementation forgets.
+  // ⚠️ BOTH ROWS. "Flood is an approver" is satisfied by a build that still moves the flag; Dana
+  // KEEPING it is what "we can create multiple" means, and the summary has to say all must approve.
   await expect(row('Flood Reviewer')).toHaveAttribute('data-approver', 'yes')
-  await expect(row('Dana Reviewer')).toHaveAttribute('data-approver', 'no')
-  await expect(page.getByTestId('approver-summary')).toContainText('Flood Reviewer approves or rejects')
+  await expect(row('Dana Reviewer')).toHaveAttribute('data-approver', 'yes')
+  await expect(page.getByTestId('approver-summary')).toContainText('cleared only when all of them have approved')
 
   const made = await page.request.post('/api/admin/video', {
     data: { title: 'Floods Cut', filename: 'floods.mp4', reviewers: [USERS.dana] },
@@ -210,15 +211,19 @@ test('Make approver moves the flag to one person, and the next upload is theirs 
   expect(made.status()).toBe(200)
   const { id } = (await made.json()) as { id: string }
   const assigned = await rows(request, 'video_reviewers', `&video_id=eq.${id}`)
-  expect(assigned.map((a) => a.reviewer_id)).toEqual([USERS.flood])
+  expect(assigned.map((a) => a.reviewer_id).sort()).toEqual([USERS.dana, USERS.flood].sort())
 })
 
 test('with nobody set to approve, nothing can be sent out — form and route agree', async ({ page, request }) => {
   await signIn(page, 'admin')
   await page.goto('/admin?tab=people')
-  const holder = page.getByTestId('person').filter({ has: page.getByTestId('person-approver') })
-  // Own precondition: whoever holds it now (Flood after the test above, Dana alone) is switched off.
-  if ((await holder.count()) > 0) await holder.first().getByTestId('person-approve').click()
+  // Own precondition: every holder (Dana and Flood after the test above, Dana alone otherwise) is
+  // switched off, one click each, re-querying because the list redraws after every click.
+  const holders = () => page.getByTestId('person').filter({ has: page.getByTestId('person-approver') })
+  for (let n = await holders().count(); n > 0; n = await holders().count()) {
+    await holders().first().getByTestId('person-approve').click()
+    await expect(holders()).toHaveCount(n - 1)
+  }
   await expect(page.getByTestId('person-approver')).toHaveCount(0)
   await expect(page.getByTestId('approver-summary')).toContainText('Nobody is set to approve')
 
@@ -234,15 +239,17 @@ test('with nobody set to approve, nothing can be sent out — form and route agr
   expect(((await res.json()) as { error: string }).error).toBe('no_approver')
   expect((await rows(request, 'videos')).length).toBe(before)
 
-  // And giving somebody access AS the approver is the same one-holder rule through the other door:
-  // one address only, and it lands flagged.
+  // And giving people access AS approvers, through the other door: a pasted list of two lands as
+  // two flagged rows, which is what "we can create multiple" has to mean at the point of entry.
   await page.goto('/admin?tab=people')
   await page.getByTestId('bulk-emails').fill('lead@example.com\nsecond@example.com')
   await page.getByTestId('bulk-role').selectOption('approver')
   await page.getByTestId('bulk-make').click()
-  await expect(page.getByTestId('links-error')).toContainText('Only one person can be the approver')
-  await page.getByTestId('bulk-emails').fill('lead@example.com')
-  await page.getByTestId('bulk-make').click()
+  await expect(page.getByTestId('links-out')).toBeVisible()
   await expect(page.getByTestId('person').filter({ hasText: 'lead' })).toHaveAttribute('data-approver', 'yes')
-  await expect(page.getByTestId('person-approver')).toHaveCount(1)
+  await expect(page.getByTestId('person').filter({ hasText: 'second' })).toHaveAttribute('data-approver', 'yes')
+  await expect(page.getByTestId('person-approver')).toHaveCount(2)
+  // The one refusal that stays: a tester cannot be an approver.
+  const tester = await page.request.post('/api/admin/links', { data: { emails: ['t@example.com'], role: 'tester', can_approve: true } })
+  expect(tester.status()).toBe(400)
 })

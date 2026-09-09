@@ -26,10 +26,10 @@ Forgot a password? *New link* beside their name — which also kills any link th
 holding. **An admin can open all three surfaces**; a tester and a reviewer see only their own.
 
 **The one rule the whole tool exists for — CHANGED 2026-09-09, Rafi's call:** everyone with a
-reviewer account, and the admin, sees all marketing material and can give feedback; **one person
-per cut** has the authority to approve or reject it. The upload form picks that person and the
-route refuses two or none. `clearance()` is untouched — with one assignment row it reads "the
-approver approved" — and "needs changes" from that person is still not cleared.
+reviewer account, and the admin, sees all marketing material and can give feedback; only the
+people flagged as **approvers** on the People tab can approve or reject. Every new cut is sent to
+all of them, and it is **cleared only when every approver has approved** — `clearance()` is
+untouched, and one "needs changes" is still not cleared however many approvals sit beside it.
 
 ## Where it is right now
 
@@ -392,10 +392,12 @@ few hours and is gone:
   Flagged by the backfill: `mikuraja2` (reviewer), the one person on both live cuts.
   `scripts/check-grants.mjs` ran live straight after: **16 of 16**, the two new profile probes
   included.
-- **People tab**: a fourth choice when pasting addresses — *Reviewer who approves or rejects — one
-  person only* (refused for a list or a tester) — and *Make approver* / *Feedback only* beside every
-  reviewer and admin. Setting it on clears every other holder: **one person, whichever door**.
-  A line above the list says who it is, or that it is nobody.
+- **People tab**: a fourth choice when pasting addresses — *Reviewer who approves or rejects*
+  (refused only for a tester) — and *Make approver* / *Feedback only* beside every reviewer and
+  admin. ⚠️ **Several people may hold it** — Rafi's second word the same evening, *"don't restrict
+  it to one, we can create multiple"*; for about an hour setting one cleared the others. Every
+  holder is named on each new cut and **a cut clears only when all of them approved**, which is
+  the rule `clearance()` always had. A line above the list says who they are, or that it is nobody.
 - **Upload** reads the flag on the server (`approverIds()`, uncached) and ignores anything the
   client says about reviewers; the form names who will be asked, and is disabled with the reason
   when nobody holds it. `POST /api/admin/video` answers 400 `no_approver` in that state.

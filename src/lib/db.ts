@@ -126,9 +126,10 @@ const VIDEO_COLS = 'id,slug,title,storage_path,version,status,sort_order'
  * on it. The token is gone, so "who is holding it" is answered by the session, and the thing the
  * assignment used to gate — seeing the video — is now gated by `requireRole` on the page.
  *
- * What the assignment STILL gates is the verdict. One `video_reviewers` row per video names the
- * one person who approves or rejects it; everyone else is there for feedback. `/api/review-done`
- * refuses anyone without a row, and `clearance()` reads that row alone.
+ * What the assignment STILL gates is the verdict. A `video_reviewers` row names a person who
+ * approves or rejects that cut — one per approver flagged on People at upload time; everyone else
+ * is there for feedback. `/api/review-done` refuses anyone without a row, and `clearance()` clears
+ * the cut only when every row says approved.
  */
 export async function assignmentsFor(reviewerId: string): Promise<Assignment[]> {
   return rest<Assignment[]>(
@@ -227,10 +228,8 @@ export async function insertVideo(v: {
 }
 
 /**
- * Who decides. Since 2026-09-09 the upload route sends exactly ONE id here — the approver — and
- * refuses more; everyone else with a reviewer account sees the cut without a row. The function
- * still takes a list because the table does, and a second row is what `clearance()` would treat
- * as a second approval required.
+ * Who decides: one row per approver flagged on People at upload time. Everyone else with a
+ * reviewer account sees the cut without a row. Each row is one approval `clearance()` waits for.
  *
  * ⚠️ IT DOES NOT SEND `verdict`, AND THAT IS LOAD-BEARING RATHER THAN TIDY. The grant this call
  * runs under is COLUMN-LEVEL — `insert (video_id, reviewer_id)` — so naming `verdict` at all, even
@@ -390,9 +389,11 @@ async function allNotesUncached(): Promise<(Note & { reviewer_id: string })[]> {
 }
 
 /**
- * WHO GETS ASKED ON THE NEXT CUT. The one profile (the route keeps it to one) with `can_approve`.
+ * WHO GETS ASKED ON THE NEXT CUT: every profile with `can_approve`. There may be several — Rafi,
+ * 2026-09-09, second thought: "don't restrict it to one, we can create multiple" — and a cut is
+ * cleared only when ALL of them have approved, which is the rule `clearance()` has always had.
  * Not cached: the admin flips it and uploads in the same minute, and a stale answer here would put
- * the cut in front of the person they just took it away from.
+ * the cut in front of the person they just took it away from, or leave out the one they just added.
  */
 export function approverIds(): Promise<string[]> {
   return rest<{ user_id: string }[]>('approver lookup', 'profiles?select=user_id&can_approve=eq.true').then((rows) =>
@@ -401,24 +402,16 @@ export function approverIds(): Promise<string[]> {
 }
 
 /**
- * MAKE ONE PERSON THE APPROVER, OR MAKE THEM FEEDBACK-ONLY.
+ * MAKE SOMEBODY AN APPROVER, OR MAKE THEM FEEDBACK-ONLY. One row, one flag.
  *
- * ⚠️ ONE HOLDER: setting it on clears everyone else first, because that is what "only one person
- * has the authority" means and the alternative is a People list the admin has to police. Two
- * PATCHes, not one transaction — PostgREST has none — so a failure between them leaves NOBODY
- * flagged, which the upload form reports in words rather than silently assigning nobody.
+ * ⚠️ IT USED TO CLEAR EVERYONE ELSE FIRST — "one holder" — for about an hour on 2026-09-09. That
+ * rule is gone on Rafi's word; several people may hold it, and every one of them is asked on each
+ * new cut. Nothing here reads or writes any other row.
  *
  * ⚠️ IT TOUCHES THE FLAG AND NOTHING ELSE. `update (can_approve)` is the only UPDATE the web tier
  * holds on `profiles`; naming `role` here would be refused with 42501, and that is the point.
  */
 export async function setApprover(userId: string, on: boolean): Promise<void> {
-  if (on) {
-    await rest<null>('approver clear', 'profiles?can_approve=eq.true', {
-      method: 'PATCH',
-      headers: { Prefer: 'return=minimal' },
-      body: JSON.stringify({ can_approve: false }),
-    })
-  }
   await rest<null>('approver set', `profiles?user_id=eq.${userId}`, {
     method: 'PATCH',
     headers: { Prefer: 'return=minimal' },

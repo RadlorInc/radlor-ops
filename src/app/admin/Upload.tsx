@@ -24,9 +24,9 @@ export default function Upload({ people }: { people: Person[] }) {
   const [error, setError] = useState<string | null>(null)
   const fileInput = useRef<HTMLInputElement>(null)
 
-  /** Who will be asked. Set on the People tab, not here: the picker this form had for a day let the
-   *  admin name a different person per cut, and the ask was the opposite — one person holds it. The
-   *  route reads the same flag itself; this is the form saying so before the button is pressed. */
+  /** Who will be asked: everyone flagged on the People tab. The picker this form had for a day let
+   *  the admin name a different person per cut; the flag is per person instead, and every holder is
+   *  asked. The route reads the same flag itself; this is the form saying so before the button. */
   const approvers = people.filter((p) => p.can_approve)
 
   async function send() {
@@ -92,7 +92,9 @@ export default function Upload({ people }: { people: Person[] }) {
         Everyone with a reviewer account can watch it and leave notes.{' '}
         {noApprover
           ? 'Nobody is set to approve cuts yet — pick someone on the People tab before sending one out.'
-          : `${approvers.map((p) => p.name).join(' and ')} ${approvers.length === 1 ? 'approves' : 'approve'} or ${approvers.length === 1 ? 'rejects' : 'reject'} it.`}
+          : approvers.length === 1
+            ? `${approvers[0].name} approves or rejects it.`
+            : `${approvers.map((p) => p.name).join(' and ')} are each asked, and it is cleared only when all of them approve.`}
       </p>
 
       <label className="field">

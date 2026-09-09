@@ -7,8 +7,8 @@ type Person = {
   user_id: string
   name: string
   role: string
-  /** The one person the next cut is sent to for approve/reject. Everyone else with a reviewer
-   *  account watches and leaves notes. */
+  /** Asked to approve or reject every new cut. Several people can be; everyone else with a
+   *  reviewer account watches and leaves notes. */
   can_approve: boolean
   /** `waiting` = a link is out and unopened · `expired` = it ran out · `null` = joined, or made
    *  by hand with no link at all. Computed on the server in `page.tsx`, where the link table is
@@ -139,7 +139,7 @@ export default function People({ initial }: { initial: Person[] }) {
       })
       if (!res.ok) {
         const b = (await res.json().catch(() => ({}))) as { error?: string }
-        throw new Error(b.error === 'one_approver' ? 'Only one person can be the approver — paste one address for that, and add the others as reviewers.' : 'That did not work. Try again.')
+        throw new Error(b.error === 'approver_role' ? 'A tester cannot approve cuts — add them as a reviewer who approves instead.' : 'That did not work. Try again.')
       }
       const out = (await res.json()) as { links: Made[]; skipped: Skipped[] }
       writeStore(out.links)
@@ -154,8 +154,8 @@ export default function People({ initial }: { initial: Person[] }) {
 
   const parsed = emails.split(/[\s,;]+/).map((e) => e.trim()).filter(Boolean)
 
-  /** Approver on / off for one person. Setting it on takes it from whoever had it — the server
-   *  does that, and the list below redraws from the server's answer, not from a guess made here. */
+  /** Approver on / off for one person. Several people can hold it; the list below redraws from the
+   *  server's answer, not from a guess made here. */
   async function approve(user_id: string, can_approve: boolean) {
     setBusy(true)
     setError(null)
@@ -174,7 +174,7 @@ export default function People({ initial }: { initial: Person[] }) {
     }
   }
 
-  const approver = initial.find((p) => p.can_approve)
+  const approvers = initial.filter((p) => p.can_approve)
 
   return (
     <section style={{ marginTop: 24 }}>
@@ -202,7 +202,7 @@ export default function People({ initial }: { initial: Person[] }) {
             <select value={role} onChange={(e) => setRole(e.target.value)} data-testid="bulk-role">
               <option value="tester">Tester — tries the app and files problems</option>
               <option value="reviewer">Reviewer — watches videos and leaves notes</option>
-              <option value="approver">Reviewer who approves or rejects — one person only</option>
+              <option value="approver">Reviewer who approves or rejects</option>
               <option value="admin">Admin — sees everything</option>
             </select>
           </label>
@@ -274,9 +274,11 @@ export default function People({ initial }: { initial: Person[] }) {
       {/* Said once, above the list, because the list only shows it per row and the absence of a
           row saying "Approver" is not something a reader notices. */}
       <p className="help" data-testid="approver-summary">
-        {approver
-          ? `${approver.name} approves or rejects each cut. Everyone else with a reviewer account watches and leaves notes.`
-          : 'Nobody is set to approve cuts yet. Press Make approver beside one reviewer — nothing can be sent out until you do.'}
+        {approvers.length === 0
+          ? 'Nobody is set to approve cuts yet. Press Make approver beside a reviewer — nothing can be sent out until you do.'
+          : approvers.length === 1
+            ? `${approvers[0].name} approves or rejects each cut. Everyone else with a reviewer account watches and leaves notes.`
+            : `${approvers.map((p) => p.name).join(', ')} are each asked on every cut, and a cut is cleared only when all of them have approved. Everyone else with a reviewer account watches and leaves notes.`}
       </p>
       <ol className="todos" data-testid="people-list">
         {initial.map((p) => (

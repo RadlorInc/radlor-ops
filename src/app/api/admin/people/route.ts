@@ -5,7 +5,8 @@ import { listProfiles } from '@/lib/adminDb'
 import { TAGS, setApprover } from '@/lib/db'
 
 /**
- * WHO APPROVES OR REJECTS. `PATCH { user_id, can_approve }`, admin only.
+ * WHO APPROVES OR REJECTS. `PATCH { user_id, can_approve }`, admin only. Any number of people may
+ * hold it; each new cut is sent to all of them and clears only when all have approved.
  *
  * ⚠️ REVIEWERS AND ADMINS ONLY. A tester cannot open /review, so flagging one would put the
  * decision on somebody who cannot reach the page — the same reason the old upload picker never

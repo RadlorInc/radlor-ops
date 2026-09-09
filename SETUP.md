@@ -160,9 +160,9 @@ values ('<user_id from Authentication → Users>', 'reviewer', 'Their Name');
 ```
 
 **Step 3 — make them the approver, if they are.** ⚠️ Since 2026-09-09 this is a button, not SQL:
-*People → Make approver* beside their name flags `profiles.can_approve` and takes it from whoever
-had it. Every cut uploaded from then on is sent to them; everyone else with a reviewer account sees
-it with *Feedback welcome*. The row below is what the upload writes for them per cut — writing one
+*People → Make approver* beside their name flags `profiles.can_approve`; any number of people can
+hold it. Every cut uploaded from then on is sent to all of them and clears only when all have
+approved; everyone else with a reviewer account sees it with *Feedback welcome*. The row below is what the upload writes for them per cut — writing one
 by hand is only for a cut that already exists.
 
 ```sql

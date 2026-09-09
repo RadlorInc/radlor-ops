@@ -64,12 +64,12 @@ export async function POST(req: Request) {
   if (!ROLES.has(role) || raw.length === 0 || raw.length > MAX_EMAILS) {
     return NextResponse.json({ error: 'invalid' }, { status: 400 })
   }
-  // ⚠️ "THE APPROVER" IS ONE PERSON, so it is refused for a pasted list and for a tester. Making
-  // the first address the approver and the rest reviewers would be a guess about a list somebody
-  // pasted, and the People row can set it afterwards in one click.
+  // Approvers can be several (Rafi, 2026-09-09: "we can create multiple"), so a pasted list is
+  // fine — every address lands flagged. A TESTER cannot be one: they cannot open the page a
+  // decision lives on.
   const canApprove = body?.can_approve === true
-  if (canApprove && (raw.length !== 1 || role === 'tester')) {
-    return NextResponse.json({ error: 'one_approver' }, { status: 400 })
+  if (canApprove && role === 'tester') {
+    return NextResponse.json({ error: 'approver_role' }, { status: 400 })
   }
 
   const links: { email: string; path: string }[] = []
@@ -97,8 +97,7 @@ export async function POST(req: Request) {
     }
     try {
       await insertProfile({ user_id: id, role: role as 'admin' | 'tester' | 'reviewer', name: nameFrom(email) })
-      // After the row exists, and through the same helper the People button uses, so the previous
-      // holder is cleared here too — one holder, whichever door set it.
+      // After the row exists, through the same helper the People button uses.
       if (canApprove) await setApprover(id, true)
       const token = mintToken()
       await newInviteLink(id, hashToken(token), DAYS)

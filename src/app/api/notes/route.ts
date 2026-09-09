@@ -60,8 +60,8 @@ export async function POST(req: Request) {
   }
 
   // Any published cut. Notes are FEEDBACK, and since 2026-09-09 every reviewer and the admin may
-  // leave them on every cut — only the verdict is one person's, and that is /api/review-done's
-  // check, not this route's.
+  // leave them on every cut — only the verdict belongs to the approvers, and that is
+  // /api/review-done's check, not this route's.
   const video = await reviewerVideoBySlug(slug)
   if (!video) return NextResponse.json({ error: 'not_found' }, { status: 404 })
 

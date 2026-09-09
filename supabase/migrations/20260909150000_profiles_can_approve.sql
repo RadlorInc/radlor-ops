@@ -10,10 +10,11 @@
 -- Moving the flag from A to B does not take A's in-flight cuts away and does not hand them to B;
 -- there is no reassignment in this tool, and inventing one here would be a second feature.
 --
--- ⚠️ EXACTLY ONE PERSON HOLDS IT, enforced by the route (it clears every other row before setting
--- one), not by the database: a partial unique index `where can_approve` would make "set B" fail
--- until "clear A" had landed, and the two are separate PostgREST calls. The cost of the route
--- being wrong is two approvers, which `clearance()` handles (both must approve) and /admin shows.
+-- ⚠️ ANY NUMBER OF PEOPLE MAY HOLD IT. (This comment said "exactly one, enforced by the route" when
+-- the migration was applied on 2026-09-09; Rafi lifted that the same evening — "we can create
+-- multiple" — and the route stopped clearing other holders. The SQL below never enforced one, so
+-- nothing about the database changed.) Every holder is named on each new cut, and `clearance()`
+-- clears it only when all of them have approved.
 --
 -- ⚠️ THE GRANT IS COLUMN-LEVEL AND EXPLICIT. Default privileges in this schema hand `service_role`
 -- select+insert on every new table and nothing on new columns' UPDATE; without the line below the
