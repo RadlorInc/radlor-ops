@@ -8,7 +8,11 @@
 
 Three people, three screens, one Next.js app on Vercel:
 
-- **admin** (Rafi) — `/admin`: what things cost, the to-do list, which videos are cleared to post.
+- **admin** (Rafi) — `/admin`: the to-do list, who has access, and *Marketing material* — upload a
+  cut, tick who reviews it, watch a cleared one, delete one. ⚠️ **Costs and renewals is gone**
+  (2026-09-08, Rafi's call): tracking what Higgsfield and Vercel bill was a second job this tool had
+  quietly taken on. The tab, `/api/admin/subscription`, the renewal helpers and eight e2e tests went
+  with it. `review.subscriptions` still exists with its row — see *Open findings*.
 - **tester** — `/tester`: files what they found wrong in the app, and reads their own issues back.
 - **reviewer** — `/review`: watches the video assigned to them, leaves timestamped notes, says
   **Approved** or **Needs changes**.
@@ -26,7 +30,19 @@ reviewer has approved. One "needs changes" is not cleared, however many approval
 
 ## Where it is right now
 
-**Live** at **`https://ops.radlor.com`**, from **`RadlorInc/radlor-ops`** (PRIVATE).
+**Live** at **`https://ops.radlor.com`**, from **`RadlorInc/radlor-ops`**.
+
+⚠️⚠️ **THE REPO IS PUBLIC, AND HAS BEEN SINCE AT LEAST 2026-09-04.** This line said PRIVATE, CLAUDE.md
+said PRIVATE, and GitHub said otherwise every time it was actually asked — finding #10, still open
+on 2026-09-09. `docs/security-findings.md` is public with it. The fix is one command and it is
+**Rafi's to run**, because it is his repo and his call:
+
+```bash
+gh repo view RadlorInc/radlor-ops --json visibility   # ask, never assume — it costs a second
+gh repo edit RadlorInc/radlor-ops --visibility private
+```
+
+⚠️ Private-again is mitigation, not erasure: the history was already out.
 `video-reviewer-liard.vercel.app` still answers as the project's generated domain; **use the
 custom one for anything a person sees**, and especially for making `/join` links.
 Vercel deploys on push to `main`.
@@ -60,86 +76,41 @@ namespace, not a boundary; see [docs/security-findings.md](docs/security-finding
 ⚠️ **The schema is still `review`, not `ops`.** A rename 404s the live tool from the moment it runs
 until a human edits *API → Exposed schemas*, which no migration can reach.
 
-## The Vercel project is still called `video-reviewer` — and since 2026-09-04 that no longer matters
+## The custom domain, and the deploy that silently stopped — both closed 2026-09-04
 
-The app was renamed to **Radlor Ops** on 2026-09-04: browser title, `package.json`, README, and the
-GitHub repo (`RadlorInc/video-reviewer` → `RadlorInc/radlor-ops`). **The Vercel project and its
-`video-reviewer-liard.vercel.app` domain were deliberately left alone.** It is a dashboard job —
-*Project → Settings → General → Project Name* — and nothing in this repo can do it.
+Kept short on 2026-09-09: the risks are gone and only the reusable shapes are worth carrying.
 
-⚠️⚠️ **THAT RISK IS GONE, AND THE REASON IS WORTH KEEPING.** `ops.radlor.com` was added on
-2026-09-04 (GoDaddy holds `radlor.com`'s DNS — `ns11/ns12.domaincontrol.com` — so it is a plain
-CNAME there to the target Vercel printed for THIS project; verified as
+**`ops.radlor.com` is the domain to use.** GoDaddy holds `radlor.com`'s DNS — a plain CNAME to
 `097fda5c5f8bccec.vercel-dns-017.com`, deliberately not the `19e7809ba6b0ec76…` that `www` uses,
-which belongs to the marketing site). A link built from `location.origin` on a custom domain does
-not care what the Vercel project is called, so **renaming the project is now cosmetic and safe at
-any time**. The fix for "renaming breaks the links" was not to schedule the rename carefully — it
-was to stop the links depending on the generated name at all.
+which belongs to the marketing site. `video-reviewer-liard.vercel.app` still answers as the
+generated domain.
 
-Read back off the running deployment, not the dashboard: `ops.radlor.com` serves `Radlor Ops` over
-https with `/api/health` → `{"status":"ok","auth_configured":true,"region":"pdx1"}` and
-`/join/<junk>` → 404; `radlor.com` still serves the marketing site, which is the neighbour a wrong
-DNS record would have taken down.
+⚠️ **The Vercel project is still named `video-reviewer`, and that is now cosmetic.** `/join` links
+are built from `location.origin`, so on a custom domain they do not care what the project is
+called. The fix for "renaming breaks outstanding links" was not to schedule the rename carefully —
+it was to stop the links depending on the generated name. **If a domain ever moves again**, the
+rule that mattered is: outstanding `/join` links point at the OLD host and die instantly, and the
+person holding one gets a dead host rather than anything this app can explain. Move first, make
+links after.
 
-The paragraph below is kept for the mechanism, and still applies to any future domain move:
+⚠️⚠️ **A PUSH THAT SILENTLY DID NOT DEPLOY — the shape to recognise.** On 2026-09-04 the Git
+connection went stale after the repo rename. Nothing errored: `git push` succeeded, GitHub held the
+commit, the site served 200s, `npm run check` was green. The only thing that disagreed was asking
+production for a value the change moves — the same shape as `/api/waitlist` answering 303 either
+way. Reconnected in *Settings → Git*; `/api/health`'s `commit` field exists because of this.
 
-⚠️ **Do it only while no `/join/<token>` link is outstanding.** Those links are built from
-`location.origin` at the moment the admin copies them, so every link already forwarded to a tester
-points at the OLD domain and dies the moment the project is renamed. The person holding one gets a
-dead host, not a 404 from this app — there is no way to explain it to them from inside the tool.
-The safe window is: rename first, THEN make the links. There is no reason to rename it at all
-except tidiness, so if links are out, it waits.
-
-⚠️ **And check the Git connection after the repo rename.** Vercel usually follows a GitHub rename
-on its own, but "usually" is not a check: open *Project → Settings → Git* and confirm it names
-`RadlorInc/radlor-ops`. A stale connection does not error — it just quietly stops deploying, and
-the first symptom is a push that changes nothing.
-
-⚠️⚠️ **THAT IS NO LONGER A WARNING — IT HAPPENED, AND IS NOW FIXED.** Reconnected by hand in
-*Settings → Git* on 2026-09-04; the next push (`3ea7959`) built, and production's title is
-**Radlor Ops**, with `/login`'s copy, `/api/health` and the `/join/<junk>` 404 all still right.
-Kept below because the failure mode is the reusable part, not the outage.
-
-**What it looked like. Checked 2026-09-04 01:03 IST:** production still served
-`<title>Radlor video review</title>`, twenty minutes after `7c30c24` (which changes exactly
-that string) was pushed. `13c7a24`'s login copy — *"New here? Use the link you were given."* — IS
-live, so the pipeline was working and stopped somewhere after it. Earlier deploys in this project
-landed in under two minutes, so this is not slowness. **`7c30c24` is on GitHub and is not in
-production.**
-
-The tell was the one the paragraph above predicted: nothing errored anywhere. `git push` reported
-success, GitHub holds the commit, the site serves 200s, and `npm run check` is green. The only
-thing that says otherwise is asking production what its title actually is — the same shape as
-`/api/waitlist` answering 303 whether or not it worked, and the same fix: **ask the running
-deployment for a value the change moves**, not the dashboard, not git.
-
-**Fix, in this order** (all of it is dashboard work — the Vercel MCP connector cannot see this
-project at all: `get_project` 404s on the id in `.vercel/project.json` and `list_deployments`
-answers 403, so it lives outside whatever that token is scoped to):
-
-1. *Settings → Git* — reconnect to `RadlorInc/radlor-ops`. ⚠️ **Reconnecting does not deploy
-   anything by itself**, and the dashboard's *Redeploy* button does not test it either: Redeploy
-   builds the commit you point it at, through a path that never touches the webhook. **Only a
-   fresh push tests the hook.** So after reconnecting, push something real and watch for the
-   value it changes — if you press Redeploy instead, you get the code AND you still do not know
-   whether the next push will build.
-2. *Settings → General → Project Name* → `radlor-ops`. ⚠️ The domain changes here; do it before
-   any real link goes out, not after.
-3. *Deployments → latest → Redeploy*, so `7c30c24` actually builds.
-4. Confirm from the running deployment that the tab now says **Radlor Ops** — that string is the
-   whole point of the commit, so it is the value to check.
-
-⚠️ And `.vercel/project.json` already says `"projectName": "radlor-ops"` while Vercel 404s the id
-beside it. **An artifact's self-description is a claim** (CLAUDE.md) — that file is not evidence
-the rename happened, and it was not treated as any.
-
-Nothing else needs the name: Supabase's Site URL and redirect URLs play no part in this design
-(no mail is sent), and `next.config.ts` derives its media origin from `SUPABASE_URL`, not from the
-app's own host.
+⚠️ **Reconnecting does not deploy, and *Redeploy* does not test the hook** — it builds through a
+path that never touches it. Only a fresh push does. ⚠️ **The Vercel MCP connector cannot see this
+project**: `get_project` 404s the id in `.vercel/project.json`, `list_deployments` and the runtime
+logs answer 403. It is outside whatever that token is scoped to, so diagnosing a production error
+means probing the real dependencies from a script, not reading logs. ⚠️ And that same
+`project.json` says `"projectName": "radlor-ops"` while Vercel 404s the id beside it — **an
+artifact's self-description is a claim** (CLAUDE.md), not evidence.
 
 **Accounts in production:** `kuwari84@gmail.com` (admin), `kuwarirafi@gmail.com` (tester). Both real
 — **never delete either.** Throwaway accounts for checks use `@example.com` and are deleted against
 an explicit allow-list, never "everything except the ones I remember".
+
 
 ## Accounts by link — LIVE since 2026-09-04, migration applied and in production use
 
@@ -248,6 +219,9 @@ in the state that a routine re-render throws away.**
   the wrong link reaches the wrong person.
 - The chip said *"expires in 6 days"* on a link made seconds earlier — a stray `- 1` undoing the
   server's `Math.ceil`. Under-reporting an expiry is the direction somebody plans around.
+  ⚠️ **The window is 21 days since 2026-09-07, not 7** — and `e2e/join.spec.ts` writes `21` out
+  rather than importing `DAYS`, which is why changing it went red instead of through. Three
+  sentences in the interface say how long a link lasts; all three have to move together.
 
 ⚠️ **Two assertions had to move, and both had been passing for the wrong reason:**
 
@@ -265,7 +239,19 @@ refresh. Two variables, one conclusion — it happened to be right and could as 
 been. **Change one thing.** The second probe drove it exactly as a person does and sampled at 1s,
 4s and 9s.
 
-## ✔ Waiting on Rafi — nothing
+## ⚠️ Waiting on Rafi — two decisions
+
+1. **Make the repo private** (see *Where it is right now*). It is his repo; nobody else should
+   change its visibility.
+2. **`review.subscriptions` — drop it, or keep it?** Nothing in the app has read or written it
+   since Costs was removed on 2026-09-08, but the table, its RLS policies and its row are all still
+   there, and that row is one of the two triggers `check-blast-radius.mjs` reports. Dropping a table
+   holding real billing figures is not a side effect of deleting a tab; it needs its own migration
+   and somebody deciding the row is not wanted.
+
+**Nothing else is blocked on him.** The section below is the last thing that was.
+
+### ✔ The tester-vs-admin RLS check — done
 
 **The tester-vs-admin RLS check RAN AND PASSED, 2026-09-04**, against the live project:
 
@@ -303,11 +289,75 @@ not `source` env files (CLAUDE.md). `.env.local` is gitignored (`.gitignore:8`).
 clear its credentials out of `.env.local`**; a live account whose password sits in a file is a
 worse thing than the gap the check closed.
 
+## Marketing material got an upload, a player and a delete — 2026-09-05 → 09
+
+The tab that was a read-only table is now the whole loop. ✔ **All three parts have run in
+production**, which for once is not a claim about the offline suite.
+
+**Upload.** Title, file, tick who reviews it. ⚠️ **The file never passes through this app** — a
+serverless request body caps at a few megabytes and a cut is tens, so the route mints a one-shot
+signed URL and the browser PUTs straight to Supabase. ⚠️ **The row is written FIRST, as a `draft`**,
+which is the one status reviewers cannot see: an upload that dies half way then leaves something
+only the admin looks at, rather than bytes in a bucket nothing knows about. ⚠️ **And publishing
+reads the object back through the reviewer's own path** — sign, then fetch one byte with `Range` —
+never through the API that wrote it, because a write to this very bucket has returned success for
+an object that was afterwards unreachable (finding #4).
+
+**Watch**, on cleared cuts only. `/api/video-url` grew a second door: an admin who is not an
+assigned reviewer can sign a cut that is **CLEARED**, computed from every assignment — not
+`videos.status`, which says `reviewed` the moment ONE reviewer answers and would open a cut
+somebody is still objecting to. The reviewer path runs first and is untouched.
+
+**Delete**, with a `<dialog>` that counts what goes: *"and 3 notes from 2 reviewers"*. ⚠️ **The row
+goes first and the object second**, because the two leftovers are not equally bad — an object with
+no row is litter nobody sees; a row whose file has gone is a reviewer opening a dead player. A
+failed object delete is **reported**, not swallowed: the slug is free again and the next upload
+under the same title aims at a path that still exists.
+
+⚠️ **THE FIRST UPLOAD IN PRODUCTION 500'd, AND NOTHING OFFLINE COULD HAVE SAID SO.** `42501
+permission denied for table video_reviewers` — a revoke from 2026-09-02 whose stated reason
+(*"Nothing in `src/` inserts here"*) had stopped being true the day before. Full write-up in
+CLAUDE.md; `scripts/check-grants.mjs` is what now watches it. **A privilege is a claim about the
+system, so it goes stale exactly like a comment does.**
+
+**Also in this stretch**, all deployed and each confirmed from `/api/health`:
+
+- **To-do**: filter chips by status, and the status pill is a **`<select>`** rather than a button
+  that cycled. Cycling could only go forwards, so Done → In progress meant two presses *through*
+  `not_started` — a state the database really held on the way past. ⚠️ The area meters keep reading
+  the WHOLE list while a filter is on, and the reorder arrows are **withdrawn** while it is:
+  position belongs to the whole list, so "up" would swap with a row you cannot see.
+- **Chapter testing**: the form asks the short questions first and the prose last, and *"Plain words
+  are perfect"* moved into the textarea's placeholder. `Age Group` · `Chapter Name` ·
+  `Where in the chapter?` · `Select Problem Type`, then the details box above *Send it in*.
+- **Join links last 21 days, not 7** (`DAYS` in `/api/admin/links`). A week was the wrong end of the
+  trade: three of the first round were still unopened on day four. ⚠️ Three links **already sent**
+  were extended in the database so the URLs people were holding kept working — *New link* would
+  have done the opposite and killed them.
+
+⚠️ **What is in production right now** (read back 2026-09-09, do not trust this list, re-read it):
+two cuts, `rope-reel-v1-mp4` and `equals-reel-v1`, both `awaiting_review`, both assigned to
+**mikuraja2** alone, both with their objects really in the bucket (2.8 MB and 4.8 MB). ⚠️ **The two
+earlier videos — `equals-reel` and `rope-reel` — were DELETED**, with `equals-reel`'s notes and
+Rafi's approval, and their files went from storage too. That is the delete path verified end to end
+against real Supabase; it was not a test.
+
+⚠️ **The titles are filenames.** `slug` is derived from the title and ends up in a URL *and* in the
+object name, so `rope-reel-v1.mp4` became `rope-reel-v1-mp4` and the file `rope-reel-v1-mp4-v1.mp4`.
+Nothing is broken; the next one is worth typing as a title.
+
+**Not built:** a second version of a cut (`version` is hard-coded `1`), reordering, and any way to
+change who is assigned after upload.
+
 ## The screens, and what changed on 2026-09-03
 
 **One flat tab strip**, on every surface, showing only what the role can actually open:
 
-`Dashboard · Costs 1 · To-do 3 · Videos 5 · Chapter testing 2 · My reviews 1`
+`Dashboard · To-do 3 · Marketing material 5 · People · Chapter testing 2 · My reviews 1`
+
+⚠️ **The tab KEY for Marketing material is still `videos`** — `/admin?tab=videos`. Only the word a
+person reads changed (2026-09-06), so every bookmark and all seven specs that drive that URL still
+land. Renaming the key is a separate, larger act.
 
 A tester and a reviewer have one destination each, so they get no strip at all. Badges count **what
 needs something**, never how many rows exist — a badge stuck at 25 stops being read.
@@ -363,8 +413,23 @@ that rule lives; `npm run test:clearance` checks it. ⚠️ Zero assignments is 
 `[].every()` is `true`, which is how "cleared to post" would land on a video nobody has opened
 (finding #8). `/admin` shows each reviewer's answer by name and disagreement as disagreement.
 
-**Assignment is a SQL statement Rafi runs**, like adding a video — no reassignment UI, no due dates,
-no reminders, and the web tier has no INSERT or DELETE on the table.
+⚠️ **THAT LAST SENTENCE USED TO READ "assignment is a SQL statement Rafi runs … the web tier has no
+INSERT or DELETE on the table". BOTH HALVES ARE NOW FALSE.** *Marketing material* uploads a cut and
+ticks who reviews it, which is an INSERT here from a route. There is still **no reassignment UI**:
+nothing changes who is on a video after it is created, and nothing unassigns — `delete` on this
+table is still refused, and the only way an assignment disappears is with its video.
+
+The privilege was reopened **column-level**, which is the part to keep:
+
+```sql
+grant insert (video_id, reviewer_id) on review.video_reviewers to service_role;
+```
+
+The web tier can ask somebody to review a cut and can **never**, through any bug in any route,
+write what they concluded — `verdict` is not in the grant, it is nullable with no default, so an
+assignment lands as "not finished". Writing a verdict is still `update (verdict)` through
+`/api/review-done`, filtered to one reviewer's own row. ⚠️ `assignReviewers` therefore does **not**
+send `verdict: null`; naming the column at all is refused with `42501`.
 
 ⚠️ **`review.reviewers` is vestigial** — nothing in `src/` reads it, names come from `profiles`.
 Left standing for one release; dropping it is one line, on its own.
@@ -397,14 +462,23 @@ and RLS decides, so the same query returns different rows to different people.
 | a note that REOPENS a review | `allAssignments`, `allVideos` | `/api/notes` | ✅ both, conditionally |
 | a verdict set | `allAssignments` | `/api/review-done` | ✅ `assignments` |
 | the video status it derives | `allVideos` | `/api/review-done` | ✅ `videos` |
-| a video or an assignment added | `allVideos`, `allAssignments` | **SQL by hand** | ❌ TTL only |
+| a video and its assignments added | `allVideos`, `allAssignments` | `/api/admin/video` POST | ✅ both |
+| a video published out of draft | `allVideos` | `/api/admin/video` PATCH | ✅ `videos` |
+| a video deleted | all three | `/api/admin/video` DELETE | ✅ `videos`, `assignments`, `notes` |
 | a note marked resolved | `allNotes` | **SQL by hand** | ❌ TTL only |
 | a profile added or renamed | `allReviewers` | **SQL by hand** | ❌ TTL only |
 
-⚠️ **The bottom three are why the 60s TTL is not a nicety.** All four app paths are proven by
-break-check, each against a spec that drives its own precondition — see the two CLAUDE.md sections
-that exist because the first version had the cache unwatched and then had break-check certify two
-checks that did not bind.
+⚠️ **The rows still marked "SQL by hand" are why the 60s TTL is not a nicety.** There used to be
+three of them and adding a video was one; since 2026-09-08 that goes through a route which
+invalidates properly.
+
+The four `/api/notes` and `/api/review-done` paths are each proven by break-check, against a spec
+that drives its own precondition — see the two CLAUDE.md sections that exist because the first
+version had the cache unwatched and then had break-check certify two checks that did not bind.
+⚠️ **The three `/api/admin/video` rows are NOT break-checked for invalidation.** `e2e/upload.spec.ts`
+and `e2e/delete-video.spec.ts` both cross from the write to the screen, so a deleted `revalidateTag`
+would be caught — but that was never proven by watching it fail, which is the only thing that makes
+the claim worth anything. Prove it or reword it; do not leave it reading as verified.
 
 ## Why the function region is pdx1
 
@@ -425,24 +499,37 @@ a `"//"` key and failed the production build.
 
 ```bash
 npm run check           # everything below, in one go — run this before you push
-npm run test:e2e        # 61 Playwright, fully offline against test/fake-supabase.mjs
+npm run test:e2e        # 68 Playwright, fully offline against test/fake-supabase.mjs
 npm run check:config    # vercel.json validated in full against Vercel's published schema
 npm run test:clearance  # when a video is cleared to post
 npm run test:verdict    # the break-check verdict logic
-node --test test/renewal.test.mjs
 ```
+
+⚠️ **`node --test test/renewal.test.mjs` used to be on that list and the file is gone** — it went
+with Costs and renewals on 2026-09-08. A command in a handoff that no longer runs is the same
+species of stale as a grant comment: it reads as a step somebody skipped.
 
 ⚠️ **A green suite covers behaviour, not permission.** PGlite runs as one superuser with no role
 switching, so grants, RLS and anything that depends on *who is asking* are invisible to it by
 construction. The declared blind spot is at the top of `test/fake-supabase.mjs`. The only
-authorization coverage is four scripts run by hand against the live project:
+authorization coverage is five scripts run by hand against the live project:
 
 ```
+scripts/check-grants.mjs                     what service_role may do — 14 privileges, both ways
 scripts/check-anon-locked-out.mjs            anon is denied, with a service_role control
 scripts/check-tester-cannot-read-admin.mjs   profiles AND issues, with two controls
 scripts/check-signed-url-expiry.mjs          a signed URL really dies
 scripts/check-blast-radius.mjs               the documented exposure is still what the docs say
 ```
+
+⚠️ **`check-grants.mjs` is new on 2026-09-09 and it exists because this class cost a second time.**
+The upload form answered **500 in production on its first use** — `42501 permission denied for
+table video_reviewers` — with all 68 offline tests green. It asks **behaviourally**, real verbs
+through PostgREST as `service_role`, because PostgREST cannot call `has_table_privilege` without an
+RPC and an RPC added so a checker can pass is a new thing to trust. It asserts the **falses** too:
+a checker that only confirmed the privileges we want would pass on a database where the web tier
+can delete every tester's issue. It writes one throwaway video and deletes it, clearing any
+leftover first. **Run it after any migration.** Last run 2026-09-09: 14 of 14.
 
 Re-run them after any change to a grant, a policy, a role, the exposed schemas, or a key.
 `scripts/break-check.sh <spec> "<break>"` runs one spec against a deliberately broken tree and
@@ -460,15 +547,20 @@ All in [docs/security-findings.md](docs/security-findings.md). Two are scheduled
 
 - **Review tool's role separation** — ⚠️ **both triggers fired 2026-09-01**: `public.waitlist` holds
   a real row (the trade was accepted about an **empty** table) and `review.subscriptions` holds
-  financial data. **Re-decided the same day, unchanged: defer both** — but the old argument is gone,
+  financial data. ⚠️ The second trigger is now odd in a way worth naming: the app no longer READS
+  that table, but the key it holds still reaches it, so the exposure is unchanged while the reason
+  to have the data here has gone. Dropping the table would retire the trigger outright. **Re-decided the same day, unchanged: defer both** — but the old argument is gone,
   since `radlor-site`'s `/api/waitlist` no longer holds `service_role`. What defers it now is only
   the price. **Next revisit: when Milo takes real money**, not on the next row.
-- **Higgsfield balance automation** — revisit at **four or more tools**, or when a balance has gone
-  stale enough to mislead. Typed and honestly labelled beats automated and quietly wrong.
+- **Higgsfield balance automation** — ⚠️ **moot in this tool since 2026-09-08**: Costs and renewals
+  was removed, so there is no balance here to automate or to go stale. The finding is kept because
+  the *data* did not go anywhere — `review.subscriptions` still holds it, and whatever tracks
+  spending next inherits the same choice. Typed and honestly labelled beats automated and quietly
+  wrong.
 
 `scripts/check-blast-radius.mjs` prints the row counts those triggers turn on, every run.
 
-## Verified nowhere, as of 2026-09-03
+## Verified nowhere, as of 2026-09-09
 
 - ⚠️ **The strong tester-vs-admin comparison — still NOT RUN, and the way to run it CHANGED on
   2026-09-04.** The data got better: `kuwarirafi@gmail.com` came in through a `/join` link, set
@@ -488,10 +580,18 @@ All in [docs/security-findings.md](docs/security-findings.md). Two are scheduled
   reason `issueVocabulary()` uses the service key, and the offline harness cannot see it: PGlite has
   no policies, so a list of everyone's values is indistinguishable from a list of the caller's own.
   An assertion would go green on exactly the broken build.
-- **Multiple reviewers against the live project.** Production has one reviewer and one video, so
-  only the 1:1 case is exercised there. The disagreement banner, the progress label and the clearing
-  rule have been driven only against the offline fixture. Assigning a second reviewer to
-  `equals-reel` is the smallest thing that changes that.
+- **Multiple reviewers against the live project — STILL 1:1, and now easier to fix.** Production has
+  two cuts and **one reviewer on each** (`mikuraja2`), so the disagreement banner, the progress
+  label and the clearing rule have still only ever been driven against the offline fixture. ⚠️ The
+  smallest thing that changes this used to be a SQL statement; it is now **one more chip ticked at
+  upload time** — but only at upload time, because nothing reassigns an existing video. So: upload a
+  throwaway cut with two people ticked, have both answer differently, and read `/admin`.
+- ⚠️ **The upload → assign → publish path IS verified in production (2026-09-08), and so is
+  delete.** Two cuts went up through the form and their objects are really in the bucket; two
+  earlier ones were destroyed by the Delete button, rows, notes, verdicts and files. What that does
+  **not** cover: a failed object delete (the branch that tells the admin the file is still in
+  storage) has never happened for real, and neither has an upload that gets a signed URL and then
+  fails to PUT. Both are handled and both are unwitnessed.
 - **Nobody has driven `/admin` or `/tester` as themselves beyond filing one issue.** The reviewer
   surface has been: Rafi signed in at `/review` on 2026-09-02 and confirmed it, which is what
   allowed the token path to be deleted. ✔ **Partly retired 2026-09-04:** a second person now has
