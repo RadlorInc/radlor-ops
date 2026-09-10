@@ -67,7 +67,7 @@ const VIDEO_BUCKET = 'review-videos'
 /** The object store: what has actually been PUT (plus the seeded paths), by `bucket/path`. Empty
  *  for anything else, which is what makes "the file never arrived" a state this harness can be in. */
 const uploaded = new Map()
-const TABLES = new Set(['reviewers', 'videos', 'video_reviewers', 'notes', 'profiles', 'todos', 'issues', 'testing_sessions', 'invite_links'])
+const TABLES = new Set(['reviewers', 'videos', 'video_reviewers', 'notes', 'profiles', 'todos', 'issues', 'testing_sessions', 'invite_links', 'material'])
 /** These tables live in `review`, not `public` — the shared project's `public` belongs to the
  *  marketing site. The shim ENFORCES the profile header for the same reason real PostgREST does:
  *  without it the app would be asking for `public.reviewers`, which does not exist. If this were
@@ -218,6 +218,9 @@ async function readBody(req) {
  */
 const ACCOUNTS = {
   'admin@harness.test': { password: 'harness-admin-pw', id: '55555555-5555-4555-8555-555555555555' },
+  // An admin who is NOT the owner. See test/seed.sql: without this account, "only the owner may
+  // remove somebody" cannot be told apart from "any admin may".
+  'deputy@harness.test': { password: 'harness-deputy-pw', id: '44444444-4444-4444-8444-444444444444' },
   'tester@harness.test': { password: 'harness-tester-pw', id: '66666666-6666-4666-8666-666666666666' },
   // The reviewer accounts. Dana holds assignments; Flood is the second reviewer on the split
   // videos, and is also the one the rate-limit spec floods through the token door.
@@ -327,6 +330,24 @@ const server = createServer(async (req, res) => {
         if (typeof body.password !== 'string' || body.password.length < 6) return json(res, 422, { msg: 'Password should be at least 6 characters' })
         acct.password = body.password
         return json(res, 200, { id, email })
+      }
+      /**
+       * ⚠️ THIS ROUTE WAS MISSING UNTIL 2026-09-10 AND THE ABSENCE READ AS A BROKEN FEATURE. The
+       * People tab's Remove goes through the auth admin API rather than through PostgREST, because
+       * `review.profiles` has no delete grant and never will — the account is deleted and the
+       * profile row follows it by `on delete cascade`. With no handler here the shim answered its
+       * own `{"error":"no route"}` 404, and the spec failed as if the app were wrong.
+       *
+       * ⚠️ IT DELETES FROM `auth.users` RATHER THAN FROM `review.profiles`, WHICH IS THE WHOLE
+       * POINT. PGlite runs the real migration, so the real cascade runs: profile, then that
+       * person's notes, verdicts and invite links. A shim that deleted the profile row directly
+       * would pass this suite while proving nothing about the path production takes.
+       */
+      if (req.method === 'DELETE') {
+        await db.query('delete from auth.users where id = $1', [id])
+        delete ACCOUNTS[email]
+        // Real GoTrue answers 200 with an empty object.
+        return json(res, 200, {})
       }
     }
 

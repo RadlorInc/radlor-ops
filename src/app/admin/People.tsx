@@ -10,6 +10,13 @@ type Person = {
   /** Asked to approve or reject every new cut. Several people can be; everyone else with a
    *  reviewer account watches and leaves notes. */
   can_approve: boolean
+  /** The founder. Set by one SQL statement per environment and writable by nothing in this app —
+   *  see 20260910110000. It is the only thing that decides who sees a Remove button. */
+  is_owner: boolean
+  /** What removing them would destroy, counted on the server from the rows themselves. A confirm
+   *  that does not say this is a confirm people click through. */
+  notes: number
+  verdicts: number
   /** `waiting` = a link is out and unopened · `expired` = it ran out · `null` = joined, or made
    *  by hand with no link at all. Computed on the server in `page.tsx`, where the link table is
    *  readable — the browser has no way to see it and must not be given one. */
@@ -18,7 +25,6 @@ type Person = {
 }
 type Made = { email: string; path: string }
 type Skipped = { email: string; why: string }
-const ROLE_LABEL: Record<string, string> = { admin: 'Admin', tester: 'Tester', reviewer: 'Reviewer' }
 
 /** Days, in words. "expires in 0 days" is what a bare number gives you on the last day, which is
  *  both wrong-sounding and the day it matters most. */
@@ -91,8 +97,20 @@ function writeStore(links: Made[] | null) {
  * block before leaving the page. Losing it costs nothing: *New link* below makes a fresh one, and
  * making one kills the one that was lost.
  */
-export default function People({ initial }: { initial: Person[] }) {
+export default function People({
+  initial,
+  viewerId,
+  viewerIsOwner,
+}: {
+  initial: Person[]
+  /** ⚠️ SO THE INTERFACE CAN REFUSE TO LET YOU CHANGE YOUR OWN ROW. The route refuses it too; this
+   *  is what stops the admin discovering the rule by being told no. */
+  viewerId: string
+  viewerIsOwner: boolean
+}) {
   const router = useRouter()
+  /** Which person is being asked about. One at a time, so a second press is always deliberate. */
+  const [removing, setRemoving] = useState<string | null>(null)
   const [emails, setEmails] = useState('')
   /** `approver` is not a role: it is `reviewer` plus the flag, folded into one choice because
    *  "what they do" is the question the admin is answering and this is one of the answers. */
@@ -175,6 +193,61 @@ export default function People({ initial }: { initial: Person[] }) {
   }
 
   const approvers = initial.filter((p) => p.can_approve)
+
+  /** Change what somebody is. Refused by the route for your own row, the owner's, and any change
+   *  that would leave nobody able to open /admin at all. */
+  async function changeRole(user_id: string, role: string) {
+    setBusy(true)
+    setError(null)
+    try {
+      const res = await fetch('/api/admin/people', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ user_id, role }),
+      })
+      if (!res.ok) {
+        const b = (await res.json().catch(() => ({}))) as { error?: string }
+        throw new Error(
+          b.error === 'owner'
+            ? 'The owner stays an admin.'
+            : b.error === 'not_yourself'
+              ? 'Somebody else has to change your own role — that way a mistake is never yours alone to undo.'
+              : 'That did not work. Try again.',
+        )
+      }
+      router.refresh()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'That did not work. Try again.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  /** ⚠️ IRREVERSIBLE, AND IT TAKES THEIR WORK. The owner's button only; the route checks that
+   *  independently and answers 404 to everybody else. */
+  async function removePerson(user_id: string) {
+    setBusy(true)
+    setError(null)
+    try {
+      const res = await fetch('/api/admin/people', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ user_id }),
+      })
+      if (!res.ok) {
+        const b = (await res.json().catch(() => ({}))) as { error?: string }
+        throw new Error(
+          b.error === 'owner' ? 'The owner’s account cannot be removed from in here.' : 'Could not remove them.',
+        )
+      }
+      setRemoving(null)
+      router.refresh()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not remove them.')
+    } finally {
+      setBusy(false)
+    }
+  }
 
   return (
     <section style={{ marginTop: 24 }}>
@@ -282,9 +355,36 @@ export default function People({ initial }: { initial: Person[] }) {
       </p>
       <ol className="todos" data-testid="people-list">
         {initial.map((p) => (
-          <li key={p.user_id} data-testid="person" data-approver={p.can_approve ? 'yes' : 'no'}>
-            <span className="chip" data-testid="person-role">{ROLE_LABEL[p.role] ?? p.role}</span>
+          <li
+            key={p.user_id}
+            data-testid="person"
+            data-approver={p.can_approve ? 'yes' : 'no'}
+            data-role={p.role}
+            style={removing === p.user_id ? { flexWrap: 'wrap' } : undefined}
+          >
+            {/* ⚠️ A CONTROL, NOT A LABEL. This was a chip printing the role; changing somebody's
+                role meant opening Supabase, which is the same shape as the to-do status that used
+                to be a button you pressed until the value came round again. Disabled rather than
+                hidden on the rows it may not move, so the rule is visible instead of mysterious:
+                your own row (somebody else has to do it) and the owner's (they stay an admin). */}
+            <select
+              className="chip"
+              value={p.role}
+              disabled={busy || p.user_id === viewerId || p.is_owner}
+              onChange={(e) => changeRole(p.user_id, e.target.value)}
+              aria-label={`What ${p.name} is`}
+              data-testid="person-role"
+            >
+              <option value="admin">Admin</option>
+              <option value="reviewer">Reviewer</option>
+              <option value="tester">Tester</option>
+            </select>
             <span>{p.name}</span>
+            {p.is_owner && (
+              <span className="chip" data-testid="person-owner">
+                Owner
+              </span>
+            )}
             {p.can_approve && (
               <span className="chip" data-testid="person-approver">
                 Approver
@@ -320,6 +420,39 @@ export default function People({ initial }: { initial: Person[] }) {
             <button className="linky" onClick={() => post({ user_id: p.user_id })} disabled={busy} data-testid="person-newlink">
               New link
             </button>
+
+            {/* ⚠️ THE OWNER'S BUTTON AND NOBODY ELSE'S — Rafi, 2026-09-10. Not rendered for other
+                admins at all, and the route refuses them independently with a 404. Never on the
+                owner's own row: the account holding this control is the one the product must not
+                be able to destroy. */}
+            {viewerIsOwner && !p.is_owner && p.user_id !== viewerId && (
+              <button
+                className="linky"
+                onClick={() => setRemoving(removing === p.user_id ? null : p.user_id)}
+                disabled={busy}
+                data-testid="person-remove"
+              >
+                {removing === p.user_id ? 'Cancel' : 'Remove'}
+              </button>
+            )}
+
+            {/* ⚠️ THE INVENTORY, IN PLAIN WORDS, BEFORE THE SECOND PRESS. Deleting somebody
+                cascades every note they wrote and every verdict they gave; "cascade" is not a word
+                to put in front of a person at the moment they are deciding. Their filed issues
+                survive — `issues.reporter` is `on delete set null` — and that is worth saying too,
+                because otherwise the sentence reads as "everything they ever did". */}
+            {removing === p.user_id && (
+              <div style={{ flexBasis: '100%', paddingTop: 8 }} data-testid="person-remove-confirm">
+                <p className="small" style={{ margin: '0 0 8px' }}>
+                  Remove <strong>{p.name}</strong> — their account, {p.notes} note{p.notes === 1 ? '' : 's'} and{' '}
+                  {p.verdicts} verdict{p.verdicts === 1 ? '' : 's'} they left. Any problems they filed stay.
+                  {' '}This cannot be undone.
+                </p>
+                <button className="linky" onClick={() => removePerson(p.user_id)} disabled={busy} data-testid="person-remove-really">
+                  Yes, remove them
+                </button>
+              </div>
+            )}
           </li>
         ))}
       </ol>

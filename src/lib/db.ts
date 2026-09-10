@@ -419,6 +419,153 @@ export async function setApprover(userId: string, on: boolean): Promise<void> {
   })
 }
 
+/**
+ * ── SOURCE MATERIAL ─────────────────────────────────────────────────────────────────────────────
+ *
+ * What a cut gets made FROM: a link somebody found, or a file of any kind at all. Deliberately not
+ * `videos` with a flag — see 20260910100000.
+ *
+ * ⚠️ NONE OF IT IS CACHED, UNLIKE THE FOUR LISTS ABOVE, AND THAT IS A DECISION RATHER THAN AN
+ * OMISSION. Those four are cached because /admin reads all of them on every tab and the round
+ * trips stack; this one is read only when the Source material tab is open. Caching it would buy
+ * one round trip on one tab and cost an invalidation path per write — three more places for the
+ * dashboard to show somebody the library as it was a minute ago, which for a page whose whole job
+ * is "did my upload land" is the one thing it must never do.
+ */
+export type Material = {
+  id: string
+  title: string
+  kind: 'link' | 'file'
+  url: string | null
+  storage_path: string | null
+  filename: string | null
+  ready: boolean
+  added_by: string | null
+  created_at: string
+}
+
+const MATERIAL_COLS = 'id,title,kind,url,storage_path,filename,ready,added_by,created_at'
+
+/** Newest first: a library is read from the top, and the thing you just added is the thing you
+ *  are looking for. */
+export function listMaterial(): Promise<Material[]> {
+  return rest<Material[]>('material list', `material?select=${MATERIAL_COLS}&order=created_at.desc`)
+}
+
+export async function materialById(id: string): Promise<Material | null> {
+  const rows = await rest<Material[]>('material lookup', `material?select=${MATERIAL_COLS}&id=eq.${encodeURIComponent(id)}&limit=1`)
+  return rows[0] ?? null
+}
+
+/**
+ * ⚠️ A FILE ROW IS WRITTEN BEFORE ITS BYTES EXIST, AND ARRIVES `ready: false`. Same order and same
+ * reason as a video draft: an upload that dies half way then leaves a row the admin can see and
+ * remove, rather than bytes in a bucket that nothing in the database knows about. A LINK has
+ * nothing to upload, so it is ready on arrival.
+ */
+export async function insertMaterial(m: {
+  title: string
+  kind: 'link' | 'file'
+  url: string | null
+  storage_path: string | null
+  filename: string | null
+  ready: boolean
+  added_by: string
+}): Promise<{ id: string }> {
+  const rows = await rest<{ id: string }[]>('material insert', 'material', {
+    method: 'POST',
+    headers: { Prefer: 'return=representation' },
+    body: JSON.stringify(m),
+  })
+  return rows[0]
+}
+
+/** The one column the web tier may move, and only after it has read the bytes back itself. */
+export function markMaterialReady(id: string): Promise<null> {
+  return rest<null>('material ready', `material?id=eq.${encodeURIComponent(id)}`, {
+    method: 'PATCH',
+    headers: { Prefer: 'return=minimal' },
+    body: JSON.stringify({ ready: true }),
+  })
+}
+
+export function deleteMaterial(id: string): Promise<null> {
+  return rest<null>('material delete', `material?id=eq.${encodeURIComponent(id)}`, {
+    method: 'DELETE',
+    headers: { Prefer: 'return=minimal' },
+  })
+}
+
+/**
+ * ── PEOPLE ──────────────────────────────────────────────────────────────────────────────────────
+ */
+
+/**
+ * HOW MUCH OF SOMEBODY'S WORK REMOVING THEM WOULD DESTROY. Notes they wrote, verdicts they gave.
+ *
+ * ⚠️ UNCACHED, AND IT HAS TO BE — THIS IS THE ONE NUMBER THAT MUST NOT BE A MINUTE OLD. The obvious
+ * implementation counts `allNotes()` and `allAssignments()`, which /admin already holds; both go
+ * through a 60-second cache, so the confirm on an IRREVERSIBLE control would cheerfully say "0
+ * notes" about a reviewer who wrote three of them a moment ago. Caught by the test that asserted
+ * the number rather than the sentence. Two small reads, on one tab, is the correct price.
+ */
+export async function workCountsByPerson(): Promise<{ notes: Map<string, number>; verdicts: Map<string, number> }> {
+  const [notes, assignments] = await Promise.all([
+    rest<{ reviewer_id: string }[]>('note authors', 'notes?select=reviewer_id'),
+    rest<{ reviewer_id: string; verdict: Verdict }[]>('verdict authors', 'video_reviewers?select=reviewer_id,verdict'),
+  ])
+  const count = <T extends { reviewer_id: string }>(rows: T[]) => {
+    const m = new Map<string, number>()
+    for (const r of rows) m.set(r.reviewer_id, (m.get(r.reviewer_id) ?? 0) + 1)
+    return m
+  }
+  return { notes: count(notes), verdicts: count(assignments.filter((a) => a.verdict !== null)) }
+}
+
+/**
+ * Change somebody's role.
+ *
+ * ⚠️ THE GRANT THIS RUNS UNDER WAS WITHHELD ON PURPOSE UNTIL 2026-09-10 (20260910110000), and the
+ * guards that replace it live in `/api/admin/people`, not here: not your own row, not the owner's,
+ * and never the change that leaves zero admins. This function is the write, not the policy.
+ */
+export function setRole(userId: string, role: 'admin' | 'tester' | 'reviewer'): Promise<null> {
+  return rest<null>('role update', `profiles?user_id=eq.${encodeURIComponent(userId)}`, {
+    method: 'PATCH',
+    headers: { Prefer: 'return=minimal' },
+    body: JSON.stringify({ role }),
+  })
+}
+
+/**
+ * REMOVE A PERSON, ACCOUNT AND ALL.
+ *
+ * ⚠️ IT DELETES THE AUTH USER, NOT THE PROFILE ROW, AND THE DIFFERENCE IS THE WHOLE FUNCTION.
+ * `review.profiles` has NO delete grant — scripts/check-grants.mjs asserts that refusal — so this
+ * cannot go through PostgREST at all. It goes through the auth admin API, and
+ * `profiles.user_id references auth.users(id) on delete cascade` carries it the rest of the way.
+ * Deleting only the profile row would leave an account that can still sign in and has no role,
+ * which lands on /login for ever with nothing to explain why.
+ *
+ * ⚠️ AND THE CASCADE TAKES MORE THAN THE ACCOUNT. Every note they wrote and every verdict they
+ * gave go with them (`on delete cascade` on both), because a note with no author is not feedback.
+ * Their filed issues do NOT — `issues.reporter` is `on delete set null`, so a tester's bug reports
+ * outlive the tester. The interface has to say all of this before it calls this; nothing
+ * downstream can put any of it back.
+ */
+export async function deleteUser(userId: string): Promise<void> {
+  const { url, key } = assertConfigured()
+  const res = await fetch(`${url}/auth/v1/admin/users/${encodeURIComponent(userId)}`, {
+    method: 'DELETE',
+    cache: 'no-store',
+    headers: { apikey: key, Authorization: `Bearer ${key}` },
+  })
+  if (!res.ok) {
+    const detail = (await res.text().catch(() => '')).slice(0, 300)
+    throw new Error(`delete user failed ${res.status}: ${detail}`)
+  }
+}
+
 export const allVideos = cached(allVideosUncached, TAGS.videos, 'all-videos')
 export const allNotes = cached(allNotesUncached, TAGS.notes, 'all-notes')
 export const allAssignments = cached(allAssignmentsUncached, TAGS.assignments, 'all-assignments')

@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import { callerKey, overLimit } from '../_rateLimit'
 import { reviewerIdentity } from '@/lib/reviewerIdentity'
 import { reviewerVideoBySlug } from '@/lib/db'
-import { SIGNED_URL_TTL_SECONDS, signedVideoUrl } from '@/lib/storage'
+import { SIGNED_URL_TTL_SECONDS, signedObjectUrl } from '@/lib/storage'
 
 /**
  * Mint a short-lived signed URL for one private-bucket object.
@@ -43,7 +43,7 @@ export async function GET(req: Request) {
   const video = await reviewerVideoBySlug(slug)
   if (!video) return NextResponse.json({ error: 'not_found' }, { status: 404 })
 
-  const url = await signedVideoUrl(video.storage_path)
+  const url = await signedObjectUrl(video.storage_path)
   return NextResponse.json(
     { url, expires_in: SIGNED_URL_TTL_SECONDS },
     // The URL in this body is a bearer credential for the object. Nothing may cache it.

@@ -21,6 +21,11 @@ const TABS: Record<Role, Tab[]> = {
     { href: '/admin', label: 'Dashboard' },
     { href: '/admin?tab=todo', label: 'To-do', badge: 'todo' },
     { href: '/admin?tab=videos', label: 'Marketing material', badge: 'videos' },
+    /* ⚠️ NO BADGE, AND THAT IS NOT AN OVERSIGHT. Every other badge here counts what NEEDS
+       something — open to-dos, cuts not cleared, reviews waiting on you. A library has no such
+       number: a count of how many things are in it would sit at 40 for ever and teach the reader
+       to stop looking at the row of numbers entirely. */
+    { href: '/admin?tab=source', label: 'Source material' },
     { href: '/admin?tab=people', label: 'People' },
     { href: '/tester', label: 'Chapter testing', badge: 'issues' },
     { href: '/review', label: 'My reviews', badge: 'review' },

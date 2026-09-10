@@ -1,7 +1,7 @@
 import RoleNav from '../RoleNav'
 import Summary from './Summary'
 import { badgesFrom } from '@/lib/navBadges'
-import { allAssignments, allNotes, allReviewers, allVideos, inviteLinkStates } from '@/lib/db'
+import { allAssignments, allNotes, allReviewers, allVideos, inviteLinkStates, listMaterial, workCountsByPerson } from '@/lib/db'
 import { clearance, progressLabel } from '@/lib/clearance'
 import { listIssues, listTodos, listProfiles } from '@/lib/adminDb'
 import { requireRole } from '@/lib/session'
@@ -11,6 +11,7 @@ import Watch from './Watch'
 import Upload from './Upload'
 import DeleteVideo from './DeleteVideo'
 import ReviewerNotes from './ReviewerNotes'
+import Material from './Material'
 
 export const dynamic = 'force-dynamic'
 
@@ -18,6 +19,11 @@ const TABS = [
   { key: 'summary', label: 'Dashboard' },
   { key: 'todo', label: 'To-do' },
   { key: 'videos', label: 'Marketing material' },
+  /* ⚠️ A DIFFERENT THING FROM THE TAB ABOVE, AND THE LABELS HAVE TO KEEP SAYING SO. *Marketing
+     material* is finished cuts, with approvers and a clearing rule. *Source material* is what a cut
+     gets made FROM, and nobody reviews it. Two tabs whose labels both end in "material" is the one
+     risk this pair carries; "Marketing" and "Source" are the whole of the distinction. */
+  { key: 'source', label: 'Source material' },
   { key: 'people', label: 'People' },
 ] as const
 type TabKey = (typeof TABS)[number]['key']
@@ -59,9 +65,23 @@ export default async function Admin({
 }) {
   const me = await requireRole('admin')
 
+  /**
+   * ⚠️ THE TAB IS RESOLVED BEFORE THE READS, NOT AFTER, AND THAT IS THE REASON IT MOVED. Every
+   * list below is fetched on every tab, because the dashboard cards and the nav badges need them
+   * all. Source material is the exception — one tab reads it and nothing else does — so it is
+   * fetched only when that tab is open, rather than adding a round trip to the other four for a
+   * list they never render.
+   *
+   * The tab lives in the URL, not in client state: `/admin?tab=videos` is a link Rafi can send
+   * himself, a bookmark, and a back button that works. An unknown value falls back to the first tab
+   * rather than rendering nothing — a mistyped query string should not produce a blank dashboard.
+   */
+  const raw = (await searchParams).tab
+  const tab: TabKey = TABS.some((t) => t.key === raw) ? (raw as TabKey) : 'summary'
+
   // ⚠️ The two admin tables are read AS THE USER (RLS decides); videos and notes still go through
   // the service key, because reviewers have no account for a policy to be written against.
-  const [videos, notes, assignments, reviewers, todos, issues, people, links] = await Promise.all([
+  const [videos, notes, assignments, reviewers, todos, issues, people, links, material, work] = await Promise.all([
     allVideos(),
     allNotes(),
     allAssignments(),
@@ -70,9 +90,24 @@ export default async function Admin({
     listIssues(),
     listProfiles(),
     inviteLinkStates(),
+    tab === 'source' ? listMaterial() : Promise.resolve([]),
+    // Same reasoning as `material` above: read by one tab, so fetched by one tab.
+    tab === 'people' ? workCountsByPerson() : Promise.resolve({ notes: new Map(), verdicts: new Map() }),
   ])
 
-  const peopleWithJoin = withJoinState(people, links)
+  /**
+   * ⚠️ WHAT REMOVING SOMEBODY WOULD DESTROY, FROM `workCountsByPerson()` AND NOT FROM THE LISTS
+   * ABOVE. `notes.reviewer_id` and `video_reviewers.reviewer_id` both cascade from `profiles`, so
+   * removing a person takes every note they wrote and every verdict they gave — and `allNotes()`
+   * and `allAssignments()`, which are right there and would have done, are cached for a minute.
+   * A confirm on an irreversible control saying "0 notes" about somebody who has three is worse
+   * than one that says nothing at all.
+   */
+  const peopleWithJoin = withJoinState(people, links).map((p) => ({
+    ...p,
+    notes: work.notes.get(p.user_id) ?? 0,
+    verdicts: work.verdicts.get(p.user_id) ?? 0,
+  }))
 
   // ⚠️ EVERY NOTE, NOT JUST THE UNREAD ONES. The delete confirm counts what would be destroyed,
   // and a resolved note is still somebody's work — "and 0 notes" over a video carrying six
@@ -99,17 +134,6 @@ export default async function Admin({
   // called for, not a second warning bolted next to it.
   const clearedWithOpenNotes = rows.filter((r) => r.c.cleared && (unread.get(r.video.id) ?? 0) > 0)
   const split = rows.filter((r) => r.c.disagreement)
-
-  /**
-   * ⚠️ THE TAB IS IN THE URL, NOT IN CLIENT STATE. `/admin?tab=videos` is a link Rafi can send
-   * himself, a bookmark, and a back button that works. It also means the server renders one
-   * section instead of four, so the page a tab shows is the page it built.
-   *
-   * An unknown value falls back to the first tab rather than rendering nothing — a typo'd query
-   * string should not produce a blank dashboard.
-   */
-  const raw = (await searchParams).tab
-  const tab: TabKey = TABS.some((t) => t.key === raw) ? (raw as TabKey) : 'summary'
 
   /**
    * ⚠️ THE SHARED RULE, FED FROM ROWS THIS PAGE ALREADY HAS. Counting them here in four lines
@@ -173,7 +197,32 @@ export default async function Admin({
         <Summary todos={todos} issues={issues} rows={rows} unread={unread} />
       )}
       {tab === 'todo' && <Todos initial={todos} />}
-      {tab === 'people' && <People initial={peopleWithJoin} />}
+      {tab === 'people' && (
+        <People
+          initial={peopleWithJoin}
+          viewerId={me.user_id}
+          /* Read off the row, not off the session: `is_owner` is deliberately not in the session
+             profile, because the only thing that grants it is a statement against the database. */
+          viewerIsOwner={people.find((p) => p.user_id === me.user_id)?.is_owner === true}
+        />
+      )}
+      {tab === 'source' && (
+        <Material
+          initial={material.map((m) => ({
+            id: m.id,
+            title: m.title,
+            kind: m.kind,
+            url: m.url,
+            filename: m.filename,
+            ready: m.ready,
+            /* Resolved here, where the profile list already is. A row whose author has since been
+               removed says so rather than rendering a bare uuid — `added_by` is `on delete set
+               null`, because the library outlives whoever happened to paste something into it. */
+            addedBy: people.find((p) => p.user_id === m.added_by)?.name ?? 'somebody since removed',
+            created_at: m.created_at,
+          }))}
+        />
+      )}
       {tab === 'videos' && (
         <section>
       {/* ⚠️ VISUALLY HIDDEN, NOT DELETED. The tab above already says "Videos", so printing it

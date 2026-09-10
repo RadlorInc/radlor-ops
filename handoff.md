@@ -8,8 +8,8 @@
 
 Three people, three screens, one Next.js app on Vercel:
 
-- **admin** (Rafi) — `/admin`: the to-do list, who has access, and *Marketing material* — upload a
-  cut, tick who reviews it, watch a cleared one, delete one. ⚠️ **Costs and renewals is gone**
+- **admin** (Rafi) — `/admin`: the to-do list, who has access, *Marketing material* — upload a
+  cut, watch one, delete one — and *Source material*, the library a cut gets made FROM. ⚠️ **Costs and renewals is gone**
   (2026-09-08, Rafi's call): tracking what Higgsfield and Vercel bill was a second job this tool had
   quietly taken on. The tab, `/api/admin/subscription`, the renewal helpers and eight e2e tests went
   with it. `review.subscriptions` still exists with its row — see *Open findings*.
@@ -450,6 +450,109 @@ before any click (the complaint was about what the tab shows on arrival). Break-
 section not rendered, versions collapsed onto the current one, resolved styling dropped — the last
 asserts the **computed** `line-through`, not the class name.
 
+## Source material, and the People tab grew teeth — 2026-09-10
+
+Two asks, one afternoon.
+
+### 1. *Source material* — a tab for what a cut is made FROM
+
+`review.material` (20260910100000) plus its own private bucket `review-material`
+(20260910100100). One row is either a **link** or a **file**, and **no format is refused** — Rafi's
+words were "kuch bhi ho sakhta hai video, link, pdf kuch bhi". That is the opposite of
+*Marketing material*, which whitelists four playable extensions because a reviewer has to press
+play; nobody presses play on a font file.
+
+⚠️ **It is deliberately NOT `review.videos` with a flag.** A row there has a version, a status,
+assigned approvers, notes and a clearing rule. Sharing the table would put an "and not material"
+clause into every reviewer query — the condition that gets forgotten once and shows an unreleased
+brand deck to an outside reviewer.
+
+- **The bucket is in its own migration file**, and the table's file must never say the words
+  `storage` + `.` even in a comment: the offline harness SKIPS any migration matching that, because
+  PGlite has no such schema, and one stray mention would take the whole table with it.
+- **Files: row first, upload second, verify third**, exactly like a cut. `ready` stays false until
+  the route has fetched a byte back through the reader's own path — finding #4 is why. An upload
+  that died half way shows as *Upload did not finish* and offers no link, rather than a link that
+  404s on the first click. A **link** is ready on arrival; there is nothing to verify.
+- **Open is a plain `<a>` at `/api/admin/material?id=…`, which 302s to a freshly signed URL.**
+  Nothing signed is ever rendered into the page, and there is no popup-blocker dance.
+- ⚠️ **Only `http`/`https` links are saved.** Parsed with `new URL`, not pattern-matched: a
+  `javascript:` URL rendered as an anchor on the admin's own page is a stored redirect into
+  whatever the author of the pasted string wanted.
+- **Admins only.** Whether reviewers should see the library is an open question, not an oversight —
+  it is one line in `RoleNav` plus a role gate if the answer turns out to be yes.
+
+### 2. People: change a role, and — for Rafi alone — remove somebody
+
+`20260910110000` adds `profiles.is_owner` and grants `update (role)`.
+
+⚠️ **`is_owner` HAS NO GRANT, AND THE ABSENCE IS THE FEATURE.** Nothing in the web tier can write
+it, so ownership is not something this application can hand to anybody including itself. **The repo
+does not say who the owner is** — no email, no uuid, no backfill — because this repo is public and
+who holds the destructive button is environment data. It is one statement per environment:
+
+```sql
+update review.profiles set is_owner = true where user_id = '<the founder>';
+```
+
+Until that runs, **nobody** is the owner and the Remove control does not exist for anyone. That is
+the correct way for it to fail.
+
+⚠️ **`grant update (role)` REVERSES A STATED PROPERTY OF THE SCHEMA, KNOWINGLY.** 20260901120000
+shipped saying "Nothing signed in can grant itself a role, which is the one write that would
+matter", and `check-grants.mjs` asserted that refusal until today. It is given up because a tool
+where fixing "I picked Tester by mistake" means opening Supabase has a decorative People tab. What
+carries the weight instead: `name` and `is_owner` stay un-updatable, and `/api/admin/people`
+refuses your own row and the owner's. **The grant check flips that row to `allowed` in the same
+commit**, and gains two new refusals beside it (`is_owner`, `name`) so the row cannot be read as
+"profiles became writable".
+
+⚠️ **A "never leave zero admins" guard was written here and then DELETED as unreachable.** The
+caller is always an admin and may never target their own row, so any admin being demoted or removed
+is a *second* admin — at least two before the write, at least one after, always. A guard that
+cannot fire is worse than none: it reads as the protection and is exercised by nothing. The
+invariant is real; the not-yourself rule is what enforces it.
+
+**Removing somebody deletes the AUTH USER, not the profile row.** `review.profiles` has no delete
+grant and never will, so this cannot go through PostgREST at all; the profile follows by
+`on delete cascade`, and so do their notes and verdicts. Their filed **issues survive** —
+`issues.reporter` is `on delete set null`. The confirm says all three, with the real numbers.
+
+⚠️ **And the real numbers are read UNCACHED, which is a bug this work created and a test caught.**
+The obvious implementation counts `allNotes()` and `allAssignments()`, both right there and both
+behind the 60-second cache — so the confirm on an irreversible control told a test "0 notes" about
+somebody who had one. `workCountsByPerson()` reads them fresh, on the People tab only.
+
+⚠️ **`Deputy Admin` exists in the seed for one property**: an admin who is *not* the owner. Without
+it, "only the owner may remove somebody" cannot be told apart from "any admin may". It was called
+`Second Admin` for an hour, until `filter({ hasText: 'second' })` in the upload spec matched it as
+well — **a fixture's name has to be unique against every other fixture's name**, not merely
+descriptive.
+
+⚠️ **The offline harness had no `DELETE /auth/v1/admin/users/<id>` at all**, so Remove failed
+against it with the shim's own `{"error":"no route"}` and read as a broken feature. Added, and it
+deletes from `auth.users` so the REAL cascade runs — a shim that deleted the profile row directly
+would pass the suite while proving nothing about the path production takes.
+
+**Break-checked, ten ways** — unfinished uploads offered anyway, any URL scheme accepted, one-press
+remove, the material route letting a reviewer in, the role write made a no-op, any admin removing
+people, demotion leaving the approval flag on, the confirm's counts unread, your own row re-rolable,
+and the owner's row re-rolable.
+
+⚠️ **AND BREAK-CHECK CAUGHT A TEST THAT COULD NOT TELL TWO RULES APART.** "Your own row cannot be
+re-roled" was asserted by having the harness admin PATCH themselves — but that account is both the
+caller AND the owner, so deleting the not-yourself rule still produced a 400, from the owner rule,
+and the check went green on the broken build. `Deputy Admin` is the only fixture where the two give
+different answers, and the spec now asserts the **error code** rather than the status. Same family
+as the `WHERE` clause that names the column under test: **when two rules can refuse the same
+request, a test aimed where both fire is measuring neither.**
+
+⚠️ **Two of the ten first came back `rc=5` — "the break stopped the suite".** `if (false) return
+gate.deny` does not compile, so `next build` failed and every spec was red for a reason that had
+nothing to do with the check. The verdict script refused to certify it, which is exactly what it
+exists for. The breaks were narrowed to ones that COMPILE and change behaviour: let a reviewer
+through the role gate, and make the role write target the row's existing value.
+
 ## The screens, and what changed on 2026-09-03
 
 **One flat tab strip**, on every surface, showing only what the role can actually open:
@@ -644,8 +747,8 @@ construction. The declared blind spot is at the top of `test/fake-supabase.mjs`.
 authorization coverage is five scripts run by hand against the live project:
 
 ```
-scripts/check-grants.mjs                     what service_role may do — 16 privileges, both ways
-scripts/check-anon-locked-out.mjs            anon is denied, with a service_role control
+scripts/check-grants.mjs                     what service_role may do — 23 privileges, both ways
+scripts/check-anon-locked-out.mjs            anon is denied, with a service_role control (now incl. material)
 scripts/check-tester-cannot-read-admin.mjs   profiles AND issues, with two controls
 scripts/check-signed-url-expiry.mjs          a signed URL really dies
 scripts/check-blast-radius.mjs               the documented exposure is still what the docs say
@@ -659,7 +762,11 @@ RPC and an RPC added so a checker can pass is a new thing to trust. It asserts t
 a checker that only confirmed the privileges we want would pass on a database where the web tier
 can delete every tester's issue. It writes one throwaway video and deletes it, clearing any
 leftover first. **Run it after any migration.** Last run 2026-09-09, after `20260909150000` was
-applied: **16 of 16**.
+applied: **16 of 16**. ⚠️ It grew to **23** on 2026-09-10 with the source-material table and the
+profile columns, and one existing row FLIPPED from `refused` to `allowed` (`profiles: change
+role`) — read the comment beside it before believing the change was accidental. Not yet run
+against the live project: `20260910100000` / `20260910100100` / `20260910110000` are **not
+applied**.
 
 Re-run them after any change to a grant, a policy, a role, the exposed schemas, or a key.
 `scripts/break-check.sh <spec> "<break>"` runs one spec against a deliberately broken tree and

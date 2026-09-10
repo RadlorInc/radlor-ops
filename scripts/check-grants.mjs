@@ -144,9 +144,49 @@ try {
   judge('profiles: move `can_approve`', 'allowed', await rest('profiles?user_id=eq.00000000-0000-4000-8000-000000000000', {
     method: 'PATCH', headers: { Prefer: 'return=minimal' }, body: JSON.stringify({ can_approve: true }),
   }))
-  judge('profiles: change `role`', 'refused', await rest('profiles?user_id=eq.00000000-0000-4000-8000-000000000000', {
+  /* ⚠️ THIS ROW FLIPPED FROM `refused` TO `allowed` ON 2026-09-10, AND THAT IS A REAL LOSS BEING
+   * RECORDED RATHER THAN HIDDEN. Until then the schema's stated property was "nothing signed in can
+   * grant itself a role, which is the one write that would matter". The People tab now changes
+   * roles, so `grant update (role)` exists (20260910110000) and this probe would go red on a
+   * correct build if it still asserted the old answer. What replaces the grant is in
+   * /api/admin/people: never your own row, never the owner's, and never the change that leaves
+   * zero admins. Those are route rules, and no script here can see them — see the handoff. */
+  judge('profiles: change `role`', 'allowed', await rest('profiles?user_id=eq.00000000-0000-4000-8000-000000000000', {
     method: 'PATCH', headers: { Prefer: 'return=minimal' }, body: JSON.stringify({ role: 'admin' }),
   }))
+  /* ⚠️ AND THE TWO THAT DID NOT MOVE, ASKED IN THE SAME BREATH. A grant of one column is only
+   * meaningful if the columns beside it are still refused; without these the row above reads as
+   * "profiles became writable" and nobody would know the difference. `is_owner` is the one that
+   * decides who can destroy an account, and NOTHING in the web tier may write it. */
+  judge('profiles: change `is_owner`', 'refused', await rest('profiles?user_id=eq.00000000-0000-4000-8000-000000000000', {
+    method: 'PATCH', headers: { Prefer: 'return=minimal' }, body: JSON.stringify({ is_owner: true }),
+  }))
+  judge('profiles: rename somebody', 'refused', await rest('profiles?user_id=eq.00000000-0000-4000-8000-000000000000', {
+    method: 'PATCH', headers: { Prefer: 'return=minimal' }, body: JSON.stringify({ name: 'not their name' }),
+  }))
+
+  /* ── Source material (20260910100000) ─────────────────────────────────────────────────────── */
+  const material = await rest('material', {
+    method: 'POST', headers: { Prefer: 'return=representation' },
+    body: JSON.stringify({ title: 'grant check', kind: 'link', url: 'https://example.com/grant-check', ready: true }),
+  })
+  judge('material: insert a row', 'allowed', material)
+  const materialId = JSON.parse(material.body || '[]')[0]?.id
+  if (materialId) {
+    judge('material: read the list', 'allowed', await rest('material?select=id&limit=1'))
+    judge('material: flip `ready`', 'allowed', await rest(`material?id=eq.${materialId}`, {
+      method: 'PATCH', headers: { Prefer: 'return=minimal' }, body: JSON.stringify({ ready: false }),
+    }))
+    /* ⚠️ THE ONE THAT WOULD LET A ROUTE BUG REPOINT AN ITEM SOMEBODY HAS ALREADY OPENED. Same
+     * shape as `videos: repoint storage_path` above: the update grant names one column, so every
+     * other column on this table is read-only to the web tier once the row exists. */
+    judge('material: repoint `url`', 'refused', await rest(`material?id=eq.${materialId}`, {
+      method: 'PATCH', headers: { Prefer: 'return=minimal' }, body: JSON.stringify({ url: 'https://example.com/elsewhere' }),
+    }))
+    judge('material: delete a row', 'allowed', await rest(`material?id=eq.${materialId}`, {
+      method: 'DELETE', headers: { Prefer: 'return=minimal' },
+    }))
+  }
   judge('invite_links: delete one', 'refused', await rest('invite_links?id=eq.00000000-0000-4000-8000-000000000000', {
     method: 'DELETE', headers: { Prefer: 'return=minimal' },
   }))

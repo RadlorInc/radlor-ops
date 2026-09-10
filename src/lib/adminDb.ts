@@ -151,6 +151,13 @@ export function listSessions(testerId?: string): Promise<
 }
 
 /** Names for the reporter column. An admin can read every profile — `profiles_read_all_if_admin`. */
-export function listProfiles(): Promise<{ user_id: string; name: string; role: string; can_approve: boolean }[]> {
-  return asUser('profiles', 'profiles?select=user_id,name,role,can_approve&order=name.asc')
+/**
+ * ⚠️ `is_owner` IS READ HERE AND WRITTEN NOWHERE. The web tier holds no `update` on that column —
+ * see 20260910110000 — so the flag can only ever have been set by a human against the database.
+ * This is the read that decides whether the People tab renders a Remove control at all.
+ */
+export function listProfiles(): Promise<
+  { user_id: string; name: string; role: string; can_approve: boolean; is_owner: boolean }[]
+> {
+  return asUser('profiles', 'profiles?select=user_id,name,role,can_approve,is_owner&order=name.asc')
 }

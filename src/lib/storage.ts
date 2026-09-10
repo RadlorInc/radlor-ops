@@ -16,6 +16,13 @@ import 'server-only'
  */
 export const VIDEO_BUCKET = 'review-videos'
 
+/**
+ * Source material — anything a cut gets made FROM. Its own bucket for the same reason `review-videos`
+ * has its own: a bucket called `review-videos` holding a PDF is a name a later reader has to
+ * distrust, and a name you cannot trust costs more than a second bucket ever will.
+ */
+export const MATERIAL_BUCKET = 'review-material'
+
 /** Five minutes. Long enough to watch a 60-second vertical cut twice and to scrub back; short
  *  enough that a URL pasted into a chat is dead by the time anyone opens it. The player asks for a
  *  fresh one on every page load, so raising this buys nothing. */
@@ -28,10 +35,21 @@ function env() {
   return { url, key }
 }
 
-export async function signedVideoUrl(storagePath: string, ttl = SIGNED_URL_TTL_SECONDS): Promise<string> {
+/**
+ * ⚠️ THE FOUR FUNCTIONS BELOW TOOK NO BUCKET UNTIL 2026-09-10, AND WERE NAMED `…Video…` FOR IT.
+ * Source material added a second private bucket, so the bucket became an argument and the names
+ * stopped saying "video" — a `signedVideoUrl()` handing back a link to a PDF is the same species of
+ * lie as the bucket name it would have been reading from. The default is the video bucket, so every
+ * existing caller means exactly what it meant before.
+ */
+export async function signedObjectUrl(
+  storagePath: string,
+  ttl = SIGNED_URL_TTL_SECONDS,
+  bucket = VIDEO_BUCKET,
+): Promise<string> {
   const { url, key } = env()
 
-  const res = await fetch(`${url}/storage/v1/object/sign/${VIDEO_BUCKET}/${encodeURI(storagePath)}`, {
+  const res = await fetch(`${url}/storage/v1/object/sign/${bucket}/${encodeURI(storagePath)}`, {
     method: 'POST',
     cache: 'no-store',
     headers: { apikey: key, Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
@@ -59,9 +77,9 @@ export async function signedVideoUrl(storagePath: string, ttl = SIGNED_URL_TTL_S
  * was minted for, so a caller cannot redirect their upload over `equals-reel-v1.mp4` by asking
  * nicely — but only because the server, not the form, decides what the path says.
  */
-export async function signedUploadUrl(storagePath: string): Promise<string> {
+export async function signedUploadUrl(storagePath: string, bucket = VIDEO_BUCKET): Promise<string> {
   const { url, key } = env()
-  const res = await fetch(`${url}/storage/v1/object/upload/sign/${VIDEO_BUCKET}/${encodeURI(storagePath)}`, {
+  const res = await fetch(`${url}/storage/v1/object/upload/sign/${bucket}/${encodeURI(storagePath)}`, {
     method: 'POST',
     cache: 'no-store',
     headers: { apikey: key, Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
@@ -85,7 +103,7 @@ export async function signedUploadUrl(storagePath: string): Promise<string> {
  * and the first person to find out would have been a reviewer looking at a dead player. See
  * docs/security-findings.md #4.
  */
-export async function videoIsReadable(storagePath: string): Promise<boolean> {
+export async function objectIsReadable(storagePath: string, bucket = VIDEO_BUCKET): Promise<boolean> {
   try {
     /* ⚠️ ONE BYTE, VIA `Range`, AND THE BODY IS READ RATHER THAN CANCELLED. Two reasons, both
      * found the hard way. A plain GET pulls the whole cut through a route handler to answer a
@@ -93,7 +111,7 @@ export async function videoIsReadable(storagePath: string): Promise<boolean> {
      * the tidy-looking way to avoid that, never settled against the offline harness: the publish
      * step hung with the form still saying "Checking it plays back…" and nothing to see. Asking
      * for a single byte makes the body small enough to just read. */
-    const res = await fetch(await signedVideoUrl(storagePath, 60), {
+    const res = await fetch(await signedObjectUrl(storagePath, 60, bucket), {
       cache: 'no-store',
       headers: { Range: 'bytes=0-0' },
     })
@@ -114,10 +132,10 @@ export async function videoIsReadable(storagePath: string): Promise<boolean> {
  * staring at a dead player. Failure is returned rather than thrown so the admin is told which of
  * the two happened.
  */
-export async function deleteVideoObject(storagePath: string): Promise<boolean> {
+export async function deleteObject(storagePath: string, bucket = VIDEO_BUCKET): Promise<boolean> {
   const { url, key } = env()
   try {
-    const res = await fetch(`${url}/storage/v1/object/${VIDEO_BUCKET}/${encodeURI(storagePath)}`, {
+    const res = await fetch(`${url}/storage/v1/object/${bucket}/${encodeURI(storagePath)}`, {
       method: 'DELETE',
       cache: 'no-store',
       headers: { apikey: key, Authorization: `Bearer ${key}` },

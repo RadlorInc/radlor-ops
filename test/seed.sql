@@ -115,11 +115,41 @@ insert into review.notes (video_id, reviewer_id, t_seconds, body, video_version,
 -- live in `test/fake-supabase.mjs`, which is the only thing that checks them.
 insert into auth.users (id, email) values
   ('55555555-5555-4555-8555-555555555555', 'admin@harness.test'),
-  ('66666666-6666-4666-8666-666666666666', 'tester@harness.test');
+  ('66666666-6666-4666-8666-666666666666', 'tester@harness.test'),
+  -- ⚠️ A SECOND ADMIN, AND IT EXISTS FOR ONE PROPERTY ONLY: "only the owner may remove a person".
+  -- With a single admin row that claim is untestable in the direction that matters — every
+  -- assertion about the owner being able to would pass just as well on a build where EVERY admin
+  -- can, which is precisely the build Rafi asked not to have. This account is an admin and is not
+  -- the owner, so it is the one that has to be refused.
+  ('44444444-4444-4444-8444-444444444444', 'deputy@harness.test');
 
-insert into review.profiles (user_id, role, name) values
-  ('55555555-5555-4555-8555-555555555555', 'admin',  'Harness Admin'),
-  ('66666666-6666-4666-8666-666666666666', 'tester', 'Harness Tester');
+insert into review.profiles (user_id, role, name, is_owner) values
+  -- ⚠️ THE OWNER FLAG IS SEEDED, NOT SET THROUGH THE APP, BECAUSE THE APP CANNOT SET IT. There is
+  -- no `grant update (is_owner)` anywhere (20260910110000): ownership is one statement a human runs
+  -- per environment. PGlite is a single superuser and would happily let a test write it, which is
+  -- exactly why no test does — a fixture built through a door that does not exist in production
+  -- proves something about the harness instead of about the product.
+  ('55555555-5555-4555-8555-555555555555', 'admin',  'Harness Admin',  true),
+  -- ⚠️ "DEPUTY", NOT "SECOND". The name is a fixture too: `e2e/upload.spec.ts` adds an approver at
+  -- `second@example.com`, and `filter({ hasText: 'second' })` then matched this row as well —
+  -- Playwright's hasText is a case-insensitive SUBSTRING, so two rows resolved and the run died in
+  -- strict mode, in a spec that has nothing to do with this account. A fixture's name has to be
+  -- unique against every other fixture's name, not just descriptive.
+  ('44444444-4444-4444-8444-444444444444', 'admin',  'Deputy Admin',   false),
+  ('66666666-6666-4666-8666-666666666666', 'tester', 'Harness Tester', false);
+
+-- ⚠️ SOURCE MATERIAL: A LINK AND AN UNFINISHED UPLOAD, AND NO FINISHED FILE ON PURPOSE.
+-- A seeded "ready" file row would claim bytes the fake object store has never been given, so the
+-- Open link would 404 and the fixture would be a lie. The finished-file case is created by
+-- `e2e/material.spec.ts` uploading a real one, which is the stronger test anyway: it drives the
+-- three steps a person drives. What is seeded is the state that CANNOT be produced by a working
+-- upload — a row whose file never arrived — because that is the one the interface has to be honest
+-- about rather than offer as if it were there.
+insert into review.material (id, title, kind, url, storage_path, filename, ready, added_by) values
+  ('22222222-2222-4222-8222-222222222222', 'Competitor hook teardown', 'link',
+   'https://example.com/teardown', null, null, true, '55555555-5555-4555-8555-555555555555'),
+  ('33333333-3333-4333-8333-333333333333', 'Brand deck', 'file',
+   null, 'brand-deck-deadbeef.pdf', 'brand deck.pdf', false, '55555555-5555-4555-8555-555555555555');
 
 -- ⚠️ THE ADMIN, ASSIGNED TO ONE VIDEO — the fixture for "roles gate the surface, assignments decide
 -- what is on it". The admin opens /review and sees THIS video and not Dana's, which an

@@ -346,6 +346,43 @@ unknowingly.
 
 ---
 
+## 11. `service_role` can now change a role — a stated property given up on purpose — 2026-09-10
+
+**Not an incident. Recorded because a property this file has relied on stopped being true, and the
+worst version of that is nobody writing it down.**
+
+`review.profiles` shipped on 2026-09-01 with the comment *"Nothing signed in can grant itself a
+role, which is the one write that would matter"*, and `scripts/check-grants.mjs` asserted
+`profiles: change role → refused` from the day it was written. `20260910110000` grants
+`update (role)` to `service_role`, because Rafi asked for role changes from the People tab and the
+alternative was an admin opening Supabase to fix a mistyped dropdown.
+
+**What an attacker gains**, stated no wider than it is: anything that can already make an
+authenticated ADMIN request to `/api/admin/people` can move somebody between `admin`, `reviewer`
+and `tester`. It could already create a brand-new admin from the paste box on the same tab, so the
+new capability is *editing* rather than *minting*. Compromising a non-admin session gains nothing —
+the route is behind `requireRoleApi('admin')`.
+
+**What did not move, and is asserted in the same commit:**
+
+| `review.profiles` | `service_role` |
+|---|---|
+| `update (role)` | **allowed — new** |
+| `update (can_approve)` | allowed (2026-09-09) |
+| `update (is_owner)` | **refused** |
+| `update (name)` | **refused** |
+| `delete` | **refused** |
+
+`is_owner` is the one that matters most: it decides who may destroy an account, and no route can
+write it in any environment. Ownership is one SQL statement a human runs.
+
+⚠️ **The route-level guards are invisible to every check in `scripts/`.** "Never your own row" and
+"never the owner's" are application rules; a grant matrix cannot see them, and neither can the
+offline suite see the grant. The two halves are covered by different things and neither covers the
+other — `e2e/people-admin.spec.ts` for the rules, `check-grants.mjs` for the privilege.
+
+---
+
 ## 7. Any valid reviewer token opened any reviewable video — 2026-09-02
 
 **Fixed the same day, by `review.video_reviewers`. Nothing was exposed; that is the point of

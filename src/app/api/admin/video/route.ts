@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import { revalidateTag } from 'next/cache'
 import { requireRoleApi } from '@/lib/session'
 import { TAGS, allVideos, approverIds, assignReviewers, deleteVideo, insertVideo, publishVideo, slugTaken } from '@/lib/db'
-import { deleteVideoObject, signedUploadUrl, videoIsReadable } from '@/lib/storage'
+import { deleteObject, signedUploadUrl, objectIsReadable } from '@/lib/storage'
 
 /**
  * PUTTING A CUT IN FRONT OF REVIEWERS, IN TWO CALLS WITH THE UPLOAD BETWEEN THEM.
@@ -88,7 +88,7 @@ export async function POST(req: Request) {
 /**
  * "The upload finished — let the reviewers see it."
  *
- * ⚠️ IT DOES NOT TAKE THE CLIENT'S WORD FOR THAT. `videoIsReadable` signs a URL and fetches it,
+ * ⚠️ IT DOES NOT TAKE THE CLIENT'S WORD FOR THAT. `objectIsReadable` signs a URL and fetches it,
  * which is the reviewer's own read path and NOT the API that wrote the bytes. A storage write to
  * this very bucket has returned success for an object that could not afterwards be read, listed,
  * signed or deleted (finding #4); a publish that trusted the uploader's 200 would have moved that
@@ -103,7 +103,7 @@ export async function PATCH(req: Request) {
   const storagePath = typeof body?.storage_path === 'string' ? body.storage_path : ''
   if (!id || !storagePath) return NextResponse.json({ error: 'no_id' }, { status: 400 })
 
-  if (!(await videoIsReadable(storagePath))) {
+  if (!(await objectIsReadable(storagePath))) {
     return NextResponse.json({ error: 'not_readable' }, { status: 502 })
   }
 
@@ -142,7 +142,7 @@ export async function DELETE(req: Request) {
   if (!video) return NextResponse.json({ error: 'not_found' }, { status: 404 })
 
   await deleteVideo(id)
-  const objectGone = await deleteVideoObject(video.storage_path)
+  const objectGone = await deleteObject(video.storage_path)
 
   revalidateTag(TAGS.videos, { expire: 0 })
   revalidateTag(TAGS.assignments, { expire: 0 })

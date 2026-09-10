@@ -55,7 +55,7 @@ if (!base || !anon || !service) {
 // ⚠️ `invite_links` is here because a leak of it is a leak of every unopened account link's
 // hash — and because RLS on it has no policies at all, which is the configuration most likely to
 // be undone by somebody "fixing" a permission error the wrong way.
-const TABLES = ['reviewers', 'videos', 'notes', 'invite_links']
+const TABLES = ['reviewers', 'videos', 'notes', 'invite_links', 'material']
 
 /**
  * The identical request in both roles. `Accept-Profile: review` because these tables live in the

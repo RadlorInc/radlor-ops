@@ -159,6 +159,16 @@ insert into review.profiles (user_id, role, name)
 values ('<user_id from Authentication → Users>', 'reviewer', 'Their Name');
 ```
 
+**Step 2b — say who owns the project, once per environment.** The *Remove* button on the People tab
+belongs to one person and the repo deliberately does not say who. Nothing in the app can set this:
+
+```sql
+update review.profiles set is_owner = true where user_id = '<the founder>';
+```
+
+Until it runs nobody can remove anybody, which is the intended way for it to fail. Changing a
+person's ROLE needs no such statement — any admin can, from the People tab.
+
 **Step 3 — make them the approver, if they are.** ⚠️ Since 2026-09-09 this is a button, not SQL:
 *People → Make approver* beside their name flags `profiles.can_approve`; any number of people can
 hold it. Every cut uploaded from then on is sent to all of them and clears only when all have
