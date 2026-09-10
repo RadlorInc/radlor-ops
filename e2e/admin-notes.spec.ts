@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test'
+import { SUPABASE_URL, USERS } from './tokens'
 import { signIn } from './signIn'
 
 /**
@@ -68,4 +69,68 @@ test('an earlier cut’s notes stay under the earlier cut, and an acted-on note 
 test('a reviewer cannot open the page these notes are on', async ({ page }) => {
   await signIn(page, 'dana')
   expect((await page.goto('/admin?tab=videos'))?.status()).toBe(404)
+})
+
+/**
+ * ── THE ADMIN SENDS FEEDBACK TOO ────────────────────────────────────────────────────────────────
+ *
+ * Rafi, 2026-09-10. The capability was always there — `/review` accepts an admin and `/api/notes`
+ * stopped asking about assignments on 2026-09-09 — but the only door was the *My reviews* tab, and
+ * **no test proved an admin could write a note at all**: every spec that saves one signs in as a
+ * reviewer. So this covers two things that were separately unproven, the identity and the door.
+ *
+ * ⚠️ IT USES `flood-only`. The admin is that cut's approver, so it is the one the dashboard's
+ * player is most likely to be opened on — and its note count is asserted by nothing, unlike
+ * `cta-cut`, whose single open note is named in two other specs' banners.
+ */
+test('the admin leaves a timestamped note from the player, and it lands under their own name', async ({ page, request }) => {
+  await signIn(page, 'admin')
+  await page.goto('/admin?tab=videos')
+
+  const row = page.getByTestId('admin-row').filter({ has: page.locator('code', { hasText: 'flood-only' }) })
+  await row.getByTestId('admin-watch').click()
+  await expect(row.getByTestId('admin-player')).toBeVisible()
+
+  // ⚠️ PLAY FIRST, SO A CAPTURED 0:00 CANNOT BE A FALSE PASS. A composer that ignored the video
+  // and stamped every note at zero would pass a test that never moved the playhead.
+  const player = row.getByTestId('admin-player')
+  await player.evaluate((v: HTMLVideoElement) => v.play())
+  await expect.poll(() => player.evaluate((v: HTMLVideoElement) => v.currentTime), { timeout: 15_000 }).toBeGreaterThan(1)
+
+  await row.getByTestId('admin-add-note').click()
+  // Opening the composer pauses playback, or the timestamp stops describing what is on screen.
+  expect(await player.evaluate((v: HTMLVideoElement) => v.paused)).toBe(true)
+  const at = (await row.getByTestId('admin-draft-time').textContent())!
+  expect(at).not.toBe('0:00')
+
+  await row.getByTestId('admin-note-body').fill('the hook needs a beat less air before the first cut')
+  await row.getByTestId('admin-save-note').click()
+  await expect(row.getByTestId('admin-note-saved')).toContainText('Saved at')
+  await expect(row.getByTestId('admin-note-error')).toHaveCount(0)
+
+  /**
+   * ⚠️ READ OUT OF THE DATABASE, NOT OFF THE PANEL THAT JUST WROTE IT. A composer that showed
+   * "Saved" while the row never landed is the failure this assertion exists for — and the note has
+   * to be attributed to the ADMIN, which is the half that proves an admin identity can write at
+   * all rather than merely that some row appeared.
+   */
+  const notes = await request
+    .get(`${SUPABASE_URL}/rest/v1/notes?select=body,t_seconds,reviewer_id&reviewer_id=eq.${USERS.harnessAdmin}`, {
+      headers: { 'Accept-Profile': 'review' },
+    })
+    .then((r) => r.json() as Promise<{ body: string; t_seconds: number }[]>)
+  const mine = notes.find((n) => n.body.startsWith('the hook needs a beat'))
+  expect(mine).toBeTruthy()
+  expect(mine!.t_seconds).toBeGreaterThan(0)
+
+  /**
+   * ⚠️ AND IT SHOWS UP WHERE EVERYBODY ELSE'S NOTES ARE, AFTER A RELOAD. The dashboard reads notes
+   * through a cache that `/api/notes` invalidates, so this crosses from the write to the screen the
+   * admin actually looks at. Reloaded rather than trusting the composer's `router.refresh()` to
+   * repaint — see the handoff; the note is saved either way and the panel says so.
+   */
+  await page.reload()
+  const block = page.getByTestId('video-notes').filter({ has: page.locator('code', { hasText: 'flood-only' }) })
+  await expect(block).toContainText('the hook needs a beat less air')
+  await expect(block).toContainText('Harness Admin')
 })

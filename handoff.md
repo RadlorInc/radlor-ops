@@ -593,6 +593,34 @@ nothing to do with the check. The verdict script refused to certify it, which is
 exists for. The breaks were narrowed to ones that COMPILE and change behaviour: let a reviewer
 through the role gate, and make the role write target the row's existing value.
 
+## The admin can send feedback too, from the tab the cuts are on — 2026-09-10
+
+Rafi: *"i want like admin can also send the feedback on marketing material"*.
+
+⚠️ **THEY ALREADY COULD, AND THAT IS WORTH KNOWING BEFORE READING THE DIFF.** `/review` has taken
+`requireRole('reviewer', 'admin')` since reviewer accounts landed, `reviewerIdentity()` accepts an
+admin, and `/api/notes` stopped asking about assignments on 2026-09-09. What did not exist was a
+door on the page where the cuts and everybody else's notes are — the capability was real and only
+reachable from *My reviews*, which means leaving *Marketing material* to use it.
+
+**The composer lives inside the Watch dialog**, because a note in this tool is a timestamp and the
+dialog is where the player is. Press *Add a note*, the video pauses, the second is captured, and it
+posts to **the same `/api/notes` the reviewers use** — no admin-only note path and no second table,
+so it lands attributed to whoever wrote it and appears in *What the reviewers said* beside theirs.
+A plain comment box on the table row would have been a weaker, different thing wearing the same word.
+
+⚠️ **The ordinary reopen rule still applies to an admin, and the panel says so out loud.** If the
+admin is an approver on that cut and had already given a verdict, writing a note clears it —
+exactly as it would for a reviewer. `/api/notes` reports that in its answer and the dialog repeats
+it, rather than letting a verdict disappear quietly.
+
+⚠️ **NO TEST PROVED AN ADMIN COULD WRITE A NOTE AT ALL** before this. Every spec that saves one
+signs in as a reviewer, so the admin identity was carried by the code and by nothing else. The new
+test in `e2e/admin-notes.spec.ts` covers both halves — the identity and the door — on `flood-only`,
+whose note count no other spec asserts (`cta-cut`'s single open note is named in two banners).
+Break-checked three ways: the timestamp forced to zero, the save call pointed elsewhere while the
+panel still said *Saved*, and the pause removed.
+
 ## ⚠️ `router.refresh()` does not reliably repaint — unresolved, 2026-09-10
 
 `e2e/upload.spec.ts` failed in roughly one full run out of three, always the same way: the newly
