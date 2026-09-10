@@ -51,7 +51,7 @@ export default function Material({ initial }: { initial: MaterialItem[] }) {
   const [subject, setSubject] = useState<'science' | 'maths' | ''>('')
   const [title, setTitle] = useState('')
   const [url, setUrl] = useState('')
-  const [file, setFile] = useState<File | null>(null)
+  const [files, setFiles] = useState<File[]>([])
   const [step, setStep] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   /** Which row is asking "really?". One at a time, so the second press is always deliberate. */
@@ -59,62 +59,105 @@ export default function Material({ initial }: { initial: MaterialItem[] }) {
   const fileInput = useRef<HTMLInputElement>(null)
 
   const busy = step !== null
-  const ready = title.trim() !== '' && subject !== '' && (kind === 'link' ? url.trim() !== '' : file !== null)
+  /** ⚠️ A TITLE IS REQUIRED FOR A LINK AND OPTIONAL FOR FILES. There is nothing to name a link
+   *  after — a URL is not a name — while a file already carries one, and once a selection can be
+   *  twenty files there is no box that could title them all anyway. */
+  const ready =
+    subject !== '' && (kind === 'link' ? title.trim() !== '' && url.trim() !== '' : files.length > 0)
+
+  /** One file, end to end: make the row, send the bytes, have the server read them back. Throws
+   *  with a sentence the caller can show. */
+  async function addOneFile(f: File, useTypedTitle: boolean) {
+    const made = await fetch('/api/admin/material', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      // ⚠️ THE TITLE IS SENT ONLY WHEN IT CAN MEAN SOMETHING — one file, and the admin typed one.
+      // For a selection the server names each item after its own file; see titleFromFilename.
+      body: JSON.stringify({ ...(useTypedTitle ? { title: title.trim() } : {}), subject, kind: 'file', filename: f.name }),
+    })
+    if (!made.ok) throw new Error('could not be saved')
+    const { id, uploadUrl } = (await made.json()) as { id: string; uploadUrl: string }
+
+    // ⚠️ STRAIGHT TO SUPABASE, NEVER THROUGH THIS APP. A serverless request body caps at a few
+    // megabytes; source material is exactly the kind of thing that is forty.
+    const put = await fetch(uploadUrl, {
+      method: 'PUT',
+      body: f,
+      headers: { 'Content-Type': f.type || 'application/octet-stream' },
+    })
+    if (!put.ok) throw new Error('did not upload')
+
+    const done = await fetch('/api/admin/material', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id }),
+    })
+    if (!done.ok) throw new Error('uploaded but could not be read back')
+  }
 
   async function add() {
     if (!ready || busy) return
     setError(null)
     try {
-      setStep(kind === 'link' ? 'Saving…' : 'Making room for it…')
-      const made = await fetch('/api/admin/material', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(
-          kind === 'link'
-            ? { title: title.trim(), subject, kind, url: url.trim() }
-            : { title: title.trim(), subject, kind, filename: file!.name },
-        ),
-      })
-      if (!made.ok) {
-        const b = (await made.json().catch(() => ({}))) as { error?: string }
-        throw new Error(
-          b.error === 'bad_url'
-            ? 'That does not look like a web address. It needs to start with http:// or https://.'
-            : 'Could not save that.',
-        )
-      }
-
-      if (kind === 'file') {
-        const { id, uploadUrl } = (await made.json()) as { id: string; uploadUrl: string }
-        setStep(`Uploading ${file!.name}…`)
-        // ⚠️ STRAIGHT TO SUPABASE, NEVER THROUGH THIS APP. A serverless request body caps at a few
-        // megabytes; source material is exactly the kind of thing that is forty.
-        const put = await fetch(uploadUrl, {
-          method: 'PUT',
-          body: file!,
-          headers: { 'Content-Type': file!.type || 'application/octet-stream' },
-        })
-        if (!put.ok) throw new Error('The file did not upload. Remove the half-made item below and try again.')
-
-        setStep('Checking it comes back…')
-        const done = await fetch('/api/admin/material', {
-          method: 'PATCH',
+      if (kind === 'link') {
+        setStep('Saving…')
+        const made = await fetch('/api/admin/material', {
+          method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ id }),
+          body: JSON.stringify({ title: title.trim(), subject, kind, url: url.trim() }),
         })
-        if (!done.ok) throw new Error('It uploaded but could not be read back. Remove it below and try again.')
+        if (!made.ok) {
+          const b = (await made.json().catch(() => ({}))) as { error?: string }
+          throw new Error(
+            b.error === 'bad_url'
+              ? 'That does not look like a web address. It needs to start with http:// or https://.'
+              : 'Could not save that.',
+          )
+        }
+      } else {
+        /**
+         * ⚠️ ONE FILE'S FAILURE DOES NOT COST THE OTHER NINETEEN. Same shape as the invite route's
+         * per-address try/catch, and for the same reason: a selection somebody dragged in will
+         * eventually contain one file that is locked, or renamed mid-flight, or simply too big for
+         * the network to finish — and losing the whole batch to it is how somebody starts uploading
+         * one at a time for ever. Each is reported by name; the rest go in.
+         *
+         * ponytail: sequential, so the step line can say "3 of 12" honestly and the object store is
+         * not asked for twelve signed URLs at once. If a batch of large files ever feels slow, the
+         * upgrade is a small concurrency window here — nothing else changes.
+         */
+        const failed: string[] = []
+        for (let i = 0; i < files.length; i++) {
+          const f = files[i]
+          setStep(files.length === 1 ? `Uploading ${f.name}…` : `Uploading ${i + 1} of ${files.length} — ${f.name}…`)
+          try {
+            await addOneFile(f, files.length === 1)
+          } catch {
+            failed.push(f.name)
+          }
+        }
+        if (failed.length > 0) {
+          throw new Error(
+            failed.length === files.length
+              ? `Nothing uploaded. Try again: ${failed.join(', ')}`
+              : `${files.length - failed.length} went in. These did not, and are listed below as unfinished: ${failed.join(', ')}`,
+          )
+        }
       }
 
       setTitle('')
       setUrl('')
       setSubject('')
-      setFile(null)
+      setFiles([])
       if (fileInput.current) fileInput.current.value = ''
       setStep(null)
       router.refresh()
     } catch (e) {
       setStep(null)
+      // ⚠️ THE FORM IS NOT CLEARED ON FAILURE. Whatever went in is in the list below; what is left
+      // in the boxes is what the admin may want to retry, and clearing it would hide both.
       setError(e instanceof Error ? e.message : 'Something went wrong.')
+      router.refresh()
     }
   }
 
@@ -154,14 +197,16 @@ export default function Material({ initial }: { initial: MaterialItem[] }) {
 
         <div className="fields">
           <label className="field">
-            <span className="fieldname">What is it?</span>
+            <span className="fieldname">{kind === 'link' ? 'What is it?' : 'Call it something (optional)'}</span>
             <input
               type="text"
               value={title}
               maxLength={200}
-              placeholder="e.g. Competitor hook teardown"
+              placeholder={kind === 'link' ? 'e.g. Competitor hook teardown' : 'Left blank, each file keeps its own name'}
               onChange={(e) => setTitle(e.target.value)}
-              disabled={busy}
+              /* ⚠️ DISABLED FOR A SELECTION, NOT HIDDEN. One box cannot name five files, and a box
+                 that silently applied to only the first would be worse than one that says no. */
+              disabled={busy || files.length > 1}
               data-testid="material-title"
             />
           </label>
@@ -209,15 +254,22 @@ export default function Material({ initial }: { initial: MaterialItem[] }) {
           </label>
         ) : (
           <label className="field" style={{ marginTop: 10 }}>
-            <span className="fieldname">The file</span>
-            {/* No `accept`: any format at all, which is the point of the tab. */}
+            <span className="fieldname">The files</span>
+            {/* No `accept`: any format at all, which is the point of the tab. `multiple`, because a
+                subject's material arrives as a folder, not as one thing at a time. */}
             <input
               ref={fileInput}
               type="file"
-              onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+              multiple
+              onChange={(e) => setFiles(Array.from(e.target.files ?? []))}
               disabled={busy}
               data-testid="material-file"
             />
+            {files.length > 1 && (
+              <span className="muted small" data-testid="material-file-count">
+                {files.length} files — each is added under its own name.
+              </span>
+            )}
           </label>
         )}
 

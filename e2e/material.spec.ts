@@ -23,6 +23,22 @@ const PDF = { name: 'brand rules.pdf', mimeType: 'application/pdf', buffer: Buff
 const group = (page: import('@playwright/test').Page, subject: 'science' | 'maths') =>
   page.locator(`[data-testid="subject-group"][data-subject="${subject}"]`)
 
+/**
+ * ⚠️ THE FILE INPUT EMPTYING IS THE ONLY UNAMBIGUOUS "EVERY STEP LANDED", and this helper exists
+ * because the obvious alternative is a trap. `expect(material-error).toHaveCount(0)` right after
+ * the click passes INSTANTLY — before the upload has even started — so the assertions after it read
+ * a database that has not been written yet. That is how `ready: false` came back for a file that
+ * uploads perfectly well: the test was simply early. The form is cleared on the success path and
+ * nowhere else, so this waits for the thing that cannot be true until all three calls returned.
+ */
+async function uploadFinished(page: import('@playwright/test').Page) {
+  await expect
+    .poll(() => page.getByTestId('material-file').evaluate((el: HTMLInputElement) => el.files?.length ?? 0), {
+      timeout: 30_000,
+    })
+    .toBe(0)
+}
+
 async function rows(request: import('@playwright/test').APIRequestContext, q = '') {
   const res = await request.get(`${SUPABASE_URL}/rest/v1/material?select=*${q}`, {
     headers: { 'Accept-Profile': 'review' },
@@ -87,6 +103,19 @@ test('a link is saved as a link, and a junk address is refused before anything i
   await page.getByTestId('material-add').click()
   await expect(page.getByTestId('material-error')).toContainText('http://')
   expect((await rows(request)).length).toBe(before)
+
+  /**
+   * ⚠️ A LINK STILL HAS TO BE NAMED, and this is asserted through the route because the form's own
+   * button is disabled without a title — a UI-only check cannot tell "refused" from "never sent".
+   * A file may arrive unnamed and take its filename; a URL is not a name, and without this the
+   * guard could be deleted with every other test still green. break-check said exactly that.
+   */
+  const unnamed = await page.request.post('/api/admin/material', {
+    data: { kind: 'link', subject: 'science', url: 'https://example.com/unnamed' },
+  })
+  expect(unnamed.status()).toBe(400)
+  expect(((await unnamed.json()) as { error: string }).error).toBe('no_title')
+  expect((await rows(request, '&url=eq.https://example.com/unnamed')).length).toBe(0)
 
   await page.getByTestId('material-url').fill('https://example.com/hook-teardown')
   await page.getByTestId('material-add').click()
@@ -198,4 +227,104 @@ test('nothing can be added until a subject is chosen', async ({ page }) => {
 
   await page.getByTestId('material-subject').selectOption('science')
   await expect(page.getByTestId('material-add')).toBeEnabled()
+})
+
+/**
+ * ⚠️ THREE FILES, THREE FORMATS, ONE PRESS. Rafi, 2026-09-11: each subject should take multiple
+ * files in one go. Three rather than two, because two is the smallest number that can pass while a
+ * loop still only handles a pair; and three DIFFERENT extensions, because the point of this tab is
+ * that it refuses to care what a file is.
+ *
+ * ⚠️ AND NO TITLE IS TYPED, WHICH IS THE HALF THAT ONLY MATTERS FOR A SELECTION. One box cannot
+ * name three files, so each has to arrive under its own — a build that applied the typed title to
+ * all of them, or called them "(1)" and "(2)", fails here and nowhere else.
+ */
+const BATCH = [
+  { name: 'hook one.pdf', mimeType: 'application/pdf', buffer: Buffer.from('one') },
+  { name: 'hook_two.png', mimeType: 'image/png', buffer: Buffer.from('two') },
+  { name: 'hook-three.txt', mimeType: 'text/plain', buffer: Buffer.from('three') },
+]
+
+test('a whole selection goes up in one press, each under its own name and subject', async ({ page, request }) => {
+  await signIn(page, 'admin')
+  await page.goto('/admin?tab=source')
+
+  /**
+   * ⚠️ A TITLE IS TYPED FIRST, AND THEN THE FILES ARE CHOSEN. Without it, "the typed title is not
+   * applied to all three" is not observable: with the box empty, applying it changes nothing, and
+   * break-check said so — the check passed on a build that titled every file `Not this name`.
+   * Typing before selecting is also the order a person would stumble into it.
+   */
+  await page.getByTestId('material-title').fill('Not this name')
+  await page.getByTestId('material-subject').selectOption('science')
+  await page.getByTestId('material-kind').selectOption('file')
+  await page.getByTestId('material-file').setInputFiles(BATCH)
+
+  // The form says how many, and refuses to pretend one title could cover them.
+  await expect(page.getByTestId('material-file-count')).toContainText('3 files')
+  await expect(page.getByTestId('material-title')).toBeDisabled()
+
+  await page.getByTestId('material-add').click()
+  await uploadFinished(page)
+  await expect(page.getByTestId('material-error')).toHaveCount(0)
+  await expect(page.getByTestId('material-file-count')).toHaveCount(0)
+
+  /**
+   * ⚠️ EVERY ONE OF THEM `ready`, READ OUT OF THE DATABASE. Each file is three calls — row, bytes,
+   * read-back — so a loop that made three rows and uploaded only the first would leave two of them
+   * unfinished, which `ready` is the only thing that distinguishes.
+   */
+  for (const [filename, title] of [
+    ['hook one.pdf', 'hook one'],
+    ['hook_two.png', 'hook two'],
+    ['hook-three.txt', 'hook three'],
+  ]) {
+    const [row] = await rows(request, `&filename=eq.${encodeURIComponent(filename)}`)
+    /* ⚠️ NO CUSTOM MESSAGE HERE. `expect(row, 'no row for x').toBeTruthy()` reads better and cost
+       this check its standing: the message REPLACES Playwright's, so break-verdict.mjs — which
+       recognises a failure by that format — classified a perfectly good red as "not an assertion"
+       and refused to certify it. Asserting the filename back gives the standard shape AND names the
+       file in the diff. */
+    expect(row?.filename).toBe(filename)
+    // The separators people actually type, turned back into spaces — and the extension dropped.
+    expect(row.title).toBe(title)
+    expect(row.subject).toBe('science')
+    expect(row.ready).toBe(true)
+  }
+
+  // ⚠️ AND THE TYPED TITLE WENT NOWHERE. This is the assertion the break above is caught by.
+  expect((await rows(request, '&title=eq.Not%20this%20name')).length).toBe(0)
+
+  // ⚠️ AND ALL THREE UNDER THE SCIENCE HEADING, none under maths. The subject is chosen once for
+  // the whole selection, which is the thing "multiple files per subject" actually means.
+  await page.reload()
+  for (const title of ['hook one', 'hook two', 'hook three']) {
+    await expect(group(page, 'science')).toContainText(title)
+    await expect(group(page, 'maths')).not.toContainText(title)
+  }
+})
+
+/** One file still takes the name the admin typed — the selection case must not have cost the
+ *  single case its title. Covered above by 'Brand rules'; this is the other half: one file, no
+ *  title, so the filename is used. */
+test('one file with no title typed keeps its own name', async ({ page, request }) => {
+  await signIn(page, 'admin')
+  await page.goto('/admin?tab=source')
+
+  await page.getByTestId('material-subject').selectOption('maths')
+  await page.getByTestId('material-kind').selectOption('file')
+  await page.getByTestId('material-file').setInputFiles({
+    name: 'ratio_worksheet_v2.pdf',
+    mimeType: 'application/pdf',
+    buffer: Buffer.from('worksheet'),
+  })
+  // The box is usable for one file — it is only a selection that disables it.
+  await expect(page.getByTestId('material-title')).toBeEnabled()
+  await page.getByTestId('material-add').click()
+  await uploadFinished(page)
+  await expect(page.getByTestId('material-error')).toHaveCount(0)
+
+  const [row] = await rows(request, '&filename=eq.ratio_worksheet_v2.pdf')
+  expect(row.title).toBe('ratio worksheet v2')
+  expect(row.ready).toBe(true)
 })

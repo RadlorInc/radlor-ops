@@ -507,6 +507,48 @@ grant plus a control on the row.
 matching negative one. Two items under one heading would be satisfied by a build that ignores the
 column and prints the same list twice.
 
+### 1c. A whole selection at once — 2026-09-11
+
+Rafi: each subject should take multiple files in one go. The file input is `multiple`, and the
+subject is chosen once for the batch — which is what "multiple files per subject" means.
+
+⚠️ **THE TITLE MOVED FROM THE FORM TO THE FILE.** One box cannot name five files, and naming them
+`Deck (1)`, `Deck (2)` would describe the upload rather than the thing. So `titleFromFilename()` on
+the **server** drops the extension and turns `._-` back into spaces — `Q3_hook_teardown.mp4` becomes
+`Q3 hook teardown`. It lives server-side because most items are now never titled by hand, so it
+stopped being a convenience and became the library's naming rule, and a rule with one definition
+cannot drift. One file still takes a typed title if there is one; the box is **disabled** for a
+selection rather than hidden, because a box that silently applied to only the first file would be
+worse than one that says no. **A LINK still has to be named** — a URL is not a name.
+
+⚠️ **ONE FILE'S FAILURE DOES NOT COST THE OTHERS.** Per-file try/catch, the same shape as the invite
+route's per-address one: a dragged-in selection will eventually contain something locked or too big,
+and losing the batch to it is how somebody starts uploading one at a time for ever. The failures are
+named, the rest go in, and the half-made rows show as *Upload did not finish*. ⚠️ The form is **not
+cleared on failure** — what is in the boxes is what you would retry.
+
+`ponytail:` uploads are sequential so the step line can say "3 of 12" honestly and the object store
+is not asked for twelve signed URLs at once. A concurrency window is the upgrade if it ever drags.
+
+⚠️ **THREE OF THE FOUR BREAK-CHECKS DID NOT BIND ON THE FIRST TRY, AND EACH FAILED DIFFERENTLY:**
+
+- *the typed title applied to every file* — **passed on the broken build**, because the test typed
+  no title, so applying it changed nothing. The spec now types one BEFORE choosing the files and
+  asserts no row carries it. **A negative property needs the thing it denies to exist.**
+- *a link no longer needs a name* — **passed**, because every link test typed a title. Added a route
+  call with none.
+- *only the first file uploads* — went genuinely red and was **refused as "not an assertion"**.
+  `expect(row, \`no row for ${f}\`).toBeTruthy()` REPLACES Playwright's message, and
+  `break-verdict.mjs` recognises a real failure by that format. Asserting `row?.filename` instead
+  gives the standard shape and still names the file. ⚠️ **A custom `expect` message can cost a check
+  its standing with the tool that certifies it** — worth knowing before writing a friendly one.
+
+⚠️ **AND THE TEST FOR IT WAS EARLY BEFORE IT WAS RIGHT.** `expect(material-error).toHaveCount(0)`
+straight after the click passes INSTANTLY — before the upload has started — so the database read
+after it saw `ready: false` on a file that uploads perfectly well, and it looked like a product bug.
+`uploadFinished()` waits for the file input to empty, which happens on the success path and nowhere
+else. **The absence of an error is never a completion signal.**
+
 ### 2. People: change a role, and — for Rafi alone — remove somebody
 
 `20260910110000` adds `profiles.is_owner` and grants `update (role)`.

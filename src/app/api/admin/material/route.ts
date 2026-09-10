@@ -37,6 +37,22 @@ function extensionOf(filename: string): string {
   return m ? m[1].toLowerCase() : ''
 }
 
+/**
+ * The name an item shows under when nobody typed one: the filename without its extension, with the
+ * separators people actually use turned back into spaces. `Q3_hook_teardown.mp4` → `Q3 hook teardown`.
+ *
+ * ⚠️ IT LIVES ON THE SERVER, THOUGH THE CLIENT COULD HAVE DONE IT. Uploading a whole selection at
+ * once means most items are never titled by hand, so this stopped being a convenience and became
+ * the naming rule for the library — and a rule with one definition cannot drift between the form
+ * and anything else that posts here later. A name that reduces to nothing (`.gitignore`) keeps the
+ * filename whole rather than becoming an item called "".
+ */
+function titleFromFilename(filename: string): string {
+  const ext = extensionOf(filename)
+  const stem = ext ? filename.slice(0, -(ext.length + 1)) : filename
+  return (stem.replace(/[._-]+/g, ' ').replace(/\s+/g, ' ').trim() || filename.trim()).slice(0, 200)
+}
+
 /** ⚠️ `http`/`https` ONLY. A `javascript:` or `data:` URL saved here would be rendered as an
  *  anchor on the admin's own page, which is a stored redirect into whatever the author wanted —
  *  and the author is whoever the admin pasted from. Parsed rather than pattern-matched. */
@@ -80,27 +96,37 @@ export async function POST(req: Request) {
   const body = (await req.json().catch(() => null)) as
     | { title?: unknown; subject?: unknown; kind?: unknown; url?: unknown; filename?: unknown }
     | null
-  const title = typeof body?.title === 'string' ? body.title.trim().slice(0, 200) : ''
+  const typed = typeof body?.title === 'string' ? body.title.trim().slice(0, 200) : ''
   const kind = body?.kind === 'link' || body?.kind === 'file' ? body.kind : null
   // ⚠️ WHITELISTED HERE, NOT FORWARDED. The CHECK constraint would catch a bad value, but a route
   // that passes through whatever it is handed relies on the database to be its input validation.
   const subject: Subject | null = body?.subject === 'science' || body?.subject === 'maths' ? body.subject : null
-  if (!title) return NextResponse.json({ error: 'no_title' }, { status: 400 })
   if (!kind) return NextResponse.json({ error: 'no_kind' }, { status: 400 })
   if (!subject) return NextResponse.json({ error: 'no_subject' }, { status: 400 })
 
   if (kind === 'link') {
+    // ⚠️ A LINK STILL HAS TO BE NAMED BY A PERSON. There is nothing to fall back to — a URL is not
+    // a name, and a library of raw addresses is a library nobody reads.
+    if (!typed) return NextResponse.json({ error: 'no_title' }, { status: 400 })
     const url = typeof body?.url === 'string' ? normalUrl(body.url) : null
     if (!url) return NextResponse.json({ error: 'bad_url' }, { status: 400 })
     // Ready on arrival: there is nothing to upload and nothing to read back.
     const { id } = await insertMaterial({
-      title, subject, kind, url, storage_path: null, filename: null, ready: true, added_by: gate.profile.user_id,
+      title: typed, subject, kind, url, storage_path: null, filename: null, ready: true, added_by: gate.profile.user_id,
     })
     return NextResponse.json({ id })
   }
 
   const filename = typeof body?.filename === 'string' ? body.filename.trim().slice(0, 260) : ''
   if (!filename) return NextResponse.json({ error: 'no_file' }, { status: 400 })
+  /**
+   * ⚠️ A FILE MAY ARRIVE WITH NO TITLE, AND THAT IS WHAT MAKES UPLOADING A WHOLE SELECTION WORK.
+   * One file still takes the name the admin typed, if they typed one; twenty cannot, because there
+   * is one box and twenty files. Rather than inventing "Deck (1)", "Deck (2)" — names that describe
+   * the upload rather than the thing — each file keeps its own.
+   */
+  const title = typed || titleFromFilename(filename)
+  if (!title) return NextResponse.json({ error: 'no_title' }, { status: 400 })
   const ext = extensionOf(filename)
   /**
    * ⚠️ A RANDOM SUFFIX RATHER THAN A UNIQUE SLUG. Two videos may not share a title, because a
