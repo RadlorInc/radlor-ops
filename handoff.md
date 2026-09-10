@@ -486,6 +486,21 @@ brand deck to an outside reviewer.
 
 `20260910110000` adds `profiles.is_owner` and grants `update (role)`.
 
+✔ **ALL THREE MIGRATIONS APPLIED to `radlor-site` on 2026-09-10, through the MCP connector, BEFORE
+the push.** Read back rather than assumed:
+
+| | `material` select / insert / delete | `material` update `ready` / `storage_path` | `profiles` update `role` / `is_owner` / `name` |
+|---|---|---|---|
+| `service_role` | t / t / t | **t** / f | **t** / **f** / **f** |
+| `authenticated` | f / f / f | f / f | f / f / f |
+| `anon` | f / f / f | f / f | f / f / f |
+
+Bucket `review-material` is **private**; `review.material` has RLS **on with 0 policies**.
+`scripts/check-grants.mjs` ran live straight after: **23 of 23**.
+
+✔ **The owner is set: `Rafi` (`kuwari84@gmail.com`), the first account created — exactly one row
+has `is_owner`.** The other two admins do not, and see no Remove control.
+
 ⚠️ **`is_owner` HAS NO GRANT, AND THE ABSENCE IS THE FEATURE.** Nothing in the web tier can write
 it, so ownership is not something this application can hand to anybody including itself. **The repo
 does not say who the owner is** — no email, no uuid, no backfill — because this repo is public and
@@ -602,7 +617,15 @@ update review.issues set area = 'measurement'
  where id = '…' and area = 'measurrement';
 ```
 
-⚠️ The Supabase MCP's `execute_sql` is **read-only**; a data fix goes through PostgREST with the
+⚠️⚠️ **THAT "read-only" CLAIM IS FALSE AND WAS FALSE WHEN IT WAS WRITTEN — corrected 2026-09-10.**
+An `update … returning` through `execute_sql` ran and returned the changed row. The sentence below
+is kept because the METHOD it recommends is still the right one for a data fix (PostgREST, with the
+grants the app actually holds, so the fix cannot do more than the app could). But do not repeat the
+reason: a tool's capabilities are what it answers, not what a handoff says about it — the same rule
+this file applies to repo visibility and to `$schema`. ⚠️ And it cuts the other way: `execute_sql`
+can write, so it can write things no route could. It is not a safe place to be casual.
+
+⚠️ The Supabase MCP's `execute_sql` was believed **read-only**; a data fix goes through PostgREST with the
 service key, which does hold `update` on `review.issues`. Two were done this way on 2026-09-03:
 Rafi's row's `area` spelling, and moving it to `all_chapters` with `chapter` null.
 
@@ -761,12 +784,10 @@ through PostgREST as `service_role`, because PostgREST cannot call `has_table_pr
 RPC and an RPC added so a checker can pass is a new thing to trust. It asserts the **falses** too:
 a checker that only confirmed the privileges we want would pass on a database where the web tier
 can delete every tester's issue. It writes one throwaway video and deletes it, clearing any
-leftover first. **Run it after any migration.** Last run 2026-09-09, after `20260909150000` was
-applied: **16 of 16**. ⚠️ It grew to **23** on 2026-09-10 with the source-material table and the
-profile columns, and one existing row FLIPPED from `refused` to `allowed` (`profiles: change
-role`) — read the comment beside it before believing the change was accidental. Not yet run
-against the live project: `20260910100000` / `20260910100100` / `20260910110000` are **not
-applied**.
+leftover first. **Run it after any migration.** ⚠️ One existing row FLIPPED from `refused` to
+`allowed` on 2026-09-10 (`profiles: change role`) — read the comment beside it before believing the
+change was accidental. Last run 2026-09-10, after all three of that day's migrations were applied:
+**23 of 23**.
 
 Re-run them after any change to a grant, a policy, a role, the exposed schemas, or a key.
 `scripts/break-check.sh <spec> "<break>"` runs one spec against a deliberately broken tree and
