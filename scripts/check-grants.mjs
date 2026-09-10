@@ -168,7 +168,7 @@ try {
   /* ── Source material (20260910100000) ─────────────────────────────────────────────────────── */
   const material = await rest('material', {
     method: 'POST', headers: { Prefer: 'return=representation' },
-    body: JSON.stringify({ title: 'grant check', kind: 'link', url: 'https://example.com/grant-check', ready: true }),
+    body: JSON.stringify({ title: 'grant check', subject: 'science', kind: 'link', url: 'https://example.com/grant-check', ready: true }),
   })
   judge('material: insert a row', 'allowed', material)
   const materialId = JSON.parse(material.body || '[]')[0]?.id

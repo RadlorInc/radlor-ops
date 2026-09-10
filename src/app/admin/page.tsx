@@ -211,6 +211,7 @@ export default async function Admin({
           initial={material.map((m) => ({
             id: m.id,
             title: m.title,
+            subject: m.subject,
             kind: m.kind,
             url: m.url,
             filename: m.filename,

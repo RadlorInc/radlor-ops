@@ -482,6 +482,31 @@ brand deck to an outside reviewer.
 - **Admins only.** Whether reviewers should see the library is an open question, not an oversight —
   it is one line in `RoleNav` plus a role gate if the answer turns out to be yes.
 
+### 1b. Divided in two: science and maths — later the same day
+
+`20260910140000` adds `material.subject`, `not null` with **no default** and a CHECK for the two
+values. ✔ **Applied to `radlor-site` on 2026-09-10 before the push, and read back**: not null, no
+default, `CHECK (subject = ANY ('science','maths'))`, `service_role` may INSERT it and may **not**
+UPDATE it, zero rows. `scripts/check-grants.mjs` green after. The missing default is the point: a default would let a route that forgot the column
+succeed quietly and file everything under one subject — a wrong answer indistinguishable from a
+right one, found weeks later by somebody wondering why maths is empty. With no default the same bug
+is `23502`, on the first attempt. Safe as a straight `not null` because the table held **zero rows**,
+which was checked before it was written.
+
+**Sections, not a filter.** Both headings are always on screen and an empty one says
+*"Nothing in maths yet"* in words. A filter would hide one, so "is there anything in maths" would
+cost a click and an empty shelf would look like an unselected shelf. The form's subject picker
+**starts unchosen** for the same reason the column has no default.
+
+⚠️ **An item's subject is fixed once created** — there is no `grant update (subject)`. The honest
+reason is that it was not asked for, not that it would be unsafe. Cost: a mis-filed link is re-added
+in seconds, a mis-filed FILE has to be uploaded again. If that starts happening the fix is that
+grant plus a control on the row.
+
+⚠️ **`e2e/material.spec.ts` seeds one item in EACH subject**, and every positive assertion has a
+matching negative one. Two items under one heading would be satisfied by a build that ignores the
+column and prints the same list twice.
+
 ### 2. People: change a role, and — for Rafi alone — remove somebody
 
 `20260910110000` adds `profiles.is_owner` and grants `update (role)`.
@@ -567,6 +592,25 @@ gate.deny` does not compile, so `next build` failed and every spec was red for a
 nothing to do with the check. The verdict script refused to certify it, which is exactly what it
 exists for. The breaks were narrowed to ones that COMPILE and change behaviour: let a reviewer
 through the role gate, and make the role write target the row's existing value.
+
+## ⚠️ `router.refresh()` does not reliably repaint — unresolved, 2026-09-10
+
+`e2e/upload.spec.ts` failed in roughly one full run out of three, always the same way: the newly
+uploaded cut was missing from the dashboard while the seven seeded ones rendered. **It is not the
+cache and not the routes.** The trace of a failing run shows POST, PUT and PATCH all answering 200,
+the row present in the database as `awaiting_review`, and both `revalidateTag` calls made.
+
+What separates it from the cache checks that pass every time: **those re-read with `page.goto`,
+and this one leaned on `router.refresh()`** — which the upload form calls on success. The spec now
+reloads before reading the screen, and says so: it claims *"the cut is on the dashboard"*, not
+*"the dashboard repaints without a reload"*.
+
+⚠️ **The second property is real, unproven, and user-visible if it fails**: an admin uploads a cut,
+the list does not repaint, and the obvious next move is to upload it again — which collides on the
+slug. Nobody has reported it, and the same flow was driven by hand in production on 2026-09-08.
+**If an admin ever says an upload "did not work", ask whether it appeared after a reload before
+believing anything else.** The same `router.refresh()` pattern is used by People, Todos, Material
+and DeleteVideo, so it is not one screen's problem.
 
 ## The screens, and what changed on 2026-09-03
 

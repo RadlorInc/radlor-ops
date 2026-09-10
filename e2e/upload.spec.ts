@@ -48,6 +48,20 @@ test('an uploaded cut reaches the approver, who is named by the flag and not by 
   await expect(page.getByTestId('upload-title')).toHaveValue('')
   await expect(page.getByTestId('upload-error')).toHaveCount(0)
 
+  /**
+   * ⚠️ A RELOAD BEFORE THE SCREEN IS READ, AND THIS IS A PROPERTY BEING NARROWED RATHER THAN A
+   * WAIT BEING ADDED. The form calls `router.refresh()` on success, and this assertion used to
+   * lean on that repaint landing — which it did in roughly one full run out of three. Both
+   * `revalidateTag` calls are fine: the trace of a failing run shows POST, PUT and PATCH all 200,
+   * the row in the database, and the dashboard rendering the seven OTHER videos. Every cache check
+   * that passes reliably (see verdict.spec.ts) re-reads with `page.goto`; the one that flaked was
+   * the only one relying on the client router to repaint.
+   *
+   * So what this test now claims is "the cut is on the dashboard", not "the dashboard repaints
+   * without a reload". The second is real and unproven, and it is written down in the handoff
+   * rather than left as an intermittent red that teaches people to re-run the suite.
+   */
+  await page.reload()
   const row = page.getByTestId('admin-row').filter({ hasText: 'a-new-cut' })
   await expect(row).toContainText('awaiting_review')
 

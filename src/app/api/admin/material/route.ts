@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { requireRoleApi } from '@/lib/session'
-import { deleteMaterial, insertMaterial, markMaterialReady, materialById } from '@/lib/db'
+import { deleteMaterial, insertMaterial, markMaterialReady, materialById, type Subject } from '@/lib/db'
 import { MATERIAL_BUCKET, deleteObject, objectIsReadable, signedObjectUrl, signedUploadUrl } from '@/lib/storage'
 
 /**
@@ -78,19 +78,23 @@ export async function POST(req: Request) {
   if ('deny' in gate) return gate.deny
 
   const body = (await req.json().catch(() => null)) as
-    | { title?: unknown; kind?: unknown; url?: unknown; filename?: unknown }
+    | { title?: unknown; subject?: unknown; kind?: unknown; url?: unknown; filename?: unknown }
     | null
   const title = typeof body?.title === 'string' ? body.title.trim().slice(0, 200) : ''
   const kind = body?.kind === 'link' || body?.kind === 'file' ? body.kind : null
+  // ⚠️ WHITELISTED HERE, NOT FORWARDED. The CHECK constraint would catch a bad value, but a route
+  // that passes through whatever it is handed relies on the database to be its input validation.
+  const subject: Subject | null = body?.subject === 'science' || body?.subject === 'maths' ? body.subject : null
   if (!title) return NextResponse.json({ error: 'no_title' }, { status: 400 })
   if (!kind) return NextResponse.json({ error: 'no_kind' }, { status: 400 })
+  if (!subject) return NextResponse.json({ error: 'no_subject' }, { status: 400 })
 
   if (kind === 'link') {
     const url = typeof body?.url === 'string' ? normalUrl(body.url) : null
     if (!url) return NextResponse.json({ error: 'bad_url' }, { status: 400 })
     // Ready on arrival: there is nothing to upload and nothing to read back.
     const { id } = await insertMaterial({
-      title, kind, url, storage_path: null, filename: null, ready: true, added_by: gate.profile.user_id,
+      title, subject, kind, url, storage_path: null, filename: null, ready: true, added_by: gate.profile.user_id,
     })
     return NextResponse.json({ id })
   }
@@ -107,7 +111,7 @@ export async function POST(req: Request) {
   const storage_path = `${slugify(title) || 'file'}-${crypto.randomUUID().slice(0, 8)}${ext ? `.${ext}` : ''}`
 
   const { id } = await insertMaterial({
-    title, kind, url: null, storage_path, filename, ready: false, added_by: gate.profile.user_id,
+    title, subject, kind, url: null, storage_path, filename, ready: false, added_by: gate.profile.user_id,
   })
   return NextResponse.json(
     { id, storage_path, uploadUrl: await signedUploadUrl(storage_path, MATERIAL_BUCKET) },

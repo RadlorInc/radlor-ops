@@ -432,9 +432,13 @@ export async function setApprover(userId: string, on: boolean): Promise<void> {
  * dashboard to show somebody the library as it was a minute ago, which for a page whose whole job
  * is "did my upload land" is the one thing it must never do.
  */
+export type Subject = 'science' | 'maths'
+
 export type Material = {
   id: string
   title: string
+  /** Which of the two the item belongs to. Fixed when the row is written — see 20260910140000. */
+  subject: Subject
   kind: 'link' | 'file'
   url: string | null
   storage_path: string | null
@@ -444,7 +448,7 @@ export type Material = {
   created_at: string
 }
 
-const MATERIAL_COLS = 'id,title,kind,url,storage_path,filename,ready,added_by,created_at'
+const MATERIAL_COLS = 'id,title,subject,kind,url,storage_path,filename,ready,added_by,created_at'
 
 /** Newest first: a library is read from the top, and the thing you just added is the thing you
  *  are looking for. */
@@ -465,6 +469,7 @@ export async function materialById(id: string): Promise<Material | null> {
  */
 export async function insertMaterial(m: {
   title: string
+  subject: Subject
   kind: 'link' | 'file'
   url: string | null
   storage_path: string | null

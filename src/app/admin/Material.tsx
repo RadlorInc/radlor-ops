@@ -3,9 +3,17 @@
 import { useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 
+/** In the order Rafi said them. Two, and a third is a migration — the CHECK constraint on
+ *  `material.subject` is what decides what exists, not this array. */
+const SUBJECTS = [
+  { key: 'science', label: 'Science' },
+  { key: 'maths', label: 'Maths' },
+] as const
+
 export type MaterialItem = {
   id: string
   title: string
+  subject: 'science' | 'maths'
   kind: 'link' | 'file'
   url: string | null
   filename: string | null
@@ -22,6 +30,12 @@ export type MaterialItem = {
  * raw input and has none of that — nothing here is reviewed, cleared or assigned, and nothing here
  * is ever shown to a reviewer.
  *
+ * ⚠️ TWO SUBJECTS, AND THEY ARE SECTIONS RATHER THAN A FILTER. Rafi asked for the library to be
+ * divided into science and maths — divided, not filtered. A filter shows one and hides the other,
+ * so "is there anything in maths yet" costs a click, and an empty maths shelf looks identical to a
+ * maths shelf you simply have not selected. Both headings are always on screen and an empty one
+ * says so in words.
+ *
  * ⚠️ NO FORMAT WHITELIST, DELIBERATELY. The upload form for cuts refuses anything a browser cannot
  * play, because a reviewer has to press play on it. Nobody presses play on a font file or a
  * competitor's PDF. The ask was "kuch bhi", and a whitelist would be a guess about what somebody
@@ -30,6 +44,11 @@ export type MaterialItem = {
 export default function Material({ initial }: { initial: MaterialItem[] }) {
   const router = useRouter()
   const [kind, setKind] = useState<'link' | 'file'>('link')
+  /** ⚠️ STARTS UNCHOSEN, WITH NO DEFAULT. Defaulting to Science files everything under it for
+   *  anybody who does not notice the control — a wrong answer that looks exactly like a right one.
+   *  There are two options, so the cost of asking is one click. Same reasoning as the column having
+   *  no default in 20260910140000, one layer down. */
+  const [subject, setSubject] = useState<'science' | 'maths' | ''>('')
   const [title, setTitle] = useState('')
   const [url, setUrl] = useState('')
   const [file, setFile] = useState<File | null>(null)
@@ -40,7 +59,7 @@ export default function Material({ initial }: { initial: MaterialItem[] }) {
   const fileInput = useRef<HTMLInputElement>(null)
 
   const busy = step !== null
-  const ready = title.trim() !== '' && (kind === 'link' ? url.trim() !== '' : file !== null)
+  const ready = title.trim() !== '' && subject !== '' && (kind === 'link' ? url.trim() !== '' : file !== null)
 
   async function add() {
     if (!ready || busy) return
@@ -52,8 +71,8 @@ export default function Material({ initial }: { initial: MaterialItem[] }) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(
           kind === 'link'
-            ? { title: title.trim(), kind, url: url.trim() }
-            : { title: title.trim(), kind, filename: file!.name },
+            ? { title: title.trim(), subject, kind, url: url.trim() }
+            : { title: title.trim(), subject, kind, filename: file!.name },
         ),
       })
       if (!made.ok) {
@@ -88,6 +107,7 @@ export default function Material({ initial }: { initial: MaterialItem[] }) {
 
       setTitle('')
       setUrl('')
+      setSubject('')
       setFile(null)
       if (fileInput.current) fileInput.current.value = ''
       setStep(null)
@@ -147,6 +167,20 @@ export default function Material({ initial }: { initial: MaterialItem[] }) {
           </label>
 
           <label className="field">
+            <span className="fieldname">Which subject?</span>
+            <select
+              value={subject}
+              onChange={(e) => setSubject(e.target.value as 'science' | 'maths' | '')}
+              disabled={busy}
+              data-testid="material-subject"
+            >
+              <option value="">Choose one</option>
+              <option value="science">Science</option>
+              <option value="maths">Maths</option>
+            </select>
+          </label>
+
+          <label className="field">
             <span className="fieldname">A link, or a file?</span>
             <select
               value={kind}
@@ -202,68 +236,78 @@ export default function Material({ initial }: { initial: MaterialItem[] }) {
         )}
       </div>
 
-      <h3 style={{ margin: '0 0 4px' }}>Everything in here</h3>
-      {initial.length === 0 ? (
-        <p className="muted small" data-testid="material-empty">
-          Nothing yet. The first link or file goes above.
-        </p>
-      ) : (
-        <ol className="todos" data-testid="material-list">
-          {initial.map((m) => (
-            <li key={m.id} data-testid="material-item" data-kind={m.kind} data-ready={m.ready ? 'yes' : 'no'}>
-              <span className="chip">{m.kind === 'link' ? 'Link' : 'File'}</span>
-              <span>{m.title}</span>
+      {SUBJECTS.map(({ key, label }) => {
+        const items = initial.filter((m) => m.subject === key)
+        return (
+          <section key={key} style={{ marginTop: 20 }} data-testid="subject-group" data-subject={key}>
+            <h3 style={{ margin: '0 0 4px' }}>{label}</h3>
+            {items.length === 0 ? (
+              /* ⚠️ SAID IN WORDS, NOT LEFT BLANK. An empty section and a section that failed to
+                 render look the same, and the reason both headings are always on screen is so that
+                 "nothing in maths yet" is something you read rather than infer. */
+              <p className="muted small" data-testid="material-empty">
+                Nothing in {label.toLowerCase()} yet.
+              </p>
+            ) : (
+              <ol className="todos" data-testid="material-list">
+                {items.map((m) => (
+                <li key={m.id} data-testid="material-item" data-kind={m.kind} data-ready={m.ready ? 'yes' : 'no'}>
+                  <span className="chip">{m.kind === 'link' ? 'Link' : 'File'}</span>
+                  <span>{m.title}</span>
 
-              {/* ⚠️ AN UNFINISHED UPLOAD SAYS SO INSTEAD OF OFFERING ITSELF. The row is written
-                  before the bytes are sent, so this is the state a died-half-way upload leaves —
-                  visible and removable, rather than an item that 404s on the first click. */}
-              {m.kind === 'file' && !m.ready ? (
-                <span className="chip waiting" data-testid="material-unfinished">
-                  Upload did not finish
-                </span>
-              ) : m.kind === 'link' ? (
-                /* ⚠️ `noreferrer`. The destination is somewhere an admin pasted from; it does not
-                   get to learn which page of this tool the click came from. */
-                <a className="linky" href={m.url!} target="_blank" rel="noreferrer" data-testid="material-open">
-                  Open
-                </a>
-              ) : (
-                /* A plain link to a route that mints the signed URL at the moment of the click, so
-                   nothing signed is ever rendered into this page. */
-                <a
-                  className="linky"
-                  href={`/api/admin/material?id=${encodeURIComponent(m.id)}`}
-                  target="_blank"
-                  rel="noreferrer"
-                  data-testid="material-open"
-                >
-                  Open
-                </a>
-              )}
+                  {/* ⚠️ AN UNFINISHED UPLOAD SAYS SO INSTEAD OF OFFERING ITSELF. The row is written
+                      before the bytes are sent, so this is the state a died-half-way upload leaves —
+                      visible and removable, rather than an item that 404s on the first click. */}
+                  {m.kind === 'file' && !m.ready ? (
+                    <span className="chip waiting" data-testid="material-unfinished">
+                      Upload did not finish
+                    </span>
+                  ) : m.kind === 'link' ? (
+                    /* ⚠️ `noreferrer`. The destination is somewhere an admin pasted from; it does not
+                       get to learn which page of this tool the click came from. */
+                    <a className="linky" href={m.url!} target="_blank" rel="noreferrer" data-testid="material-open">
+                      Open
+                    </a>
+                  ) : (
+                    /* A plain link to a route that mints the signed URL at the moment of the click, so
+                       nothing signed is ever rendered into this page. */
+                    <a
+                      className="linky"
+                      href={`/api/admin/material?id=${encodeURIComponent(m.id)}`}
+                      target="_blank"
+                      rel="noreferrer"
+                      data-testid="material-open"
+                    >
+                      Open
+                    </a>
+                  )}
 
-              <span className="muted small" style={{ marginLeft: 'auto', paddingLeft: 10 }}>
-                {m.filename ? `${m.filename} · ` : ''}
-                {m.addedBy}
-              </span>
+                  <span className="muted small" style={{ marginLeft: 'auto', paddingLeft: 10 }}>
+                    {m.filename ? `${m.filename} · ` : ''}
+                    {m.addedBy}
+                  </span>
 
-              {confirming === m.id ? (
-                <>
-                  <button className="linky" onClick={() => remove(m.id)} disabled={busy} data-testid="material-remove-really">
-                    Yes, remove
-                  </button>
-                  <button className="linky" onClick={() => setConfirming(null)} disabled={busy} data-testid="material-remove-cancel">
-                    Keep it
-                  </button>
-                </>
-              ) : (
-                <button className="linky" onClick={() => setConfirming(m.id)} disabled={busy} data-testid="material-remove">
-                  Remove
-                </button>
-              )}
-            </li>
-          ))}
-        </ol>
-      )}
+                  {confirming === m.id ? (
+                    <>
+                      <button className="linky" onClick={() => remove(m.id)} disabled={busy} data-testid="material-remove-really">
+                        Yes, remove
+                      </button>
+                      <button className="linky" onClick={() => setConfirming(null)} disabled={busy} data-testid="material-remove-cancel">
+                        Keep it
+                      </button>
+                    </>
+                  ) : (
+                    <button className="linky" onClick={() => setConfirming(m.id)} disabled={busy} data-testid="material-remove">
+                      Remove
+                    </button>
+                  )}
+                </li>
+                ))}
+              </ol>
+            )}
+          </section>
+        )
+      })}
     </section>
   )
 }

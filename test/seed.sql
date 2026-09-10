@@ -145,10 +145,12 @@ insert into review.profiles (user_id, role, name, is_owner) values
 -- three steps a person drives. What is seeded is the state that CANNOT be produced by a working
 -- upload — a row whose file never arrived — because that is the one the interface has to be honest
 -- about rather than offer as if it were there.
-insert into review.material (id, title, kind, url, storage_path, filename, ready, added_by) values
-  ('22222222-2222-4222-8222-222222222222', 'Competitor hook teardown', 'link',
+-- ⚠️ ONE IN EACH SUBJECT, WHICH IS WHAT MAKES THE SPLIT TESTABLE. Two rows under the same heading
+-- would be satisfied by a build that ignores `subject` entirely and prints one list twice.
+insert into review.material (id, title, subject, kind, url, storage_path, filename, ready, added_by) values
+  ('22222222-2222-4222-8222-222222222222', 'Competitor hook teardown', 'maths', 'link',
    'https://example.com/teardown', null, null, true, '55555555-5555-4555-8555-555555555555'),
-  ('33333333-3333-4333-8333-333333333333', 'Brand deck', 'file',
+  ('33333333-3333-4333-8333-333333333333', 'Brand deck', 'science', 'file',
    null, 'brand-deck-deadbeef.pdf', 'brand deck.pdf', false, '55555555-5555-4555-8555-555555555555');
 
 -- ⚠️ THE ADMIN, ASSIGNED TO ONE VIDEO — the fixture for "roles gate the surface, assignments decide
