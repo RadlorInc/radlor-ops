@@ -121,7 +121,8 @@ insert into auth.users (id, email) values
   -- assertion about the owner being able to would pass just as well on a build where EVERY admin
   -- can, which is precisely the build Rafi asked not to have. This account is an admin and is not
   -- the owner, so it is the one that has to be refused.
-  ('44444444-4444-4444-8444-444444444444', 'deputy@harness.test');
+  ('44444444-4444-4444-8444-444444444444', 'deputy@harness.test'),
+  ('12121212-1212-4212-8212-121212121212', 'teacher@harness.test');
 
 insert into review.profiles (user_id, role, name, is_owner) values
   -- ⚠️ THE OWNER FLAG IS SEEDED, NOT SET THROUGH THE APP, BECAUSE THE APP CANNOT SET IT. There is
@@ -136,7 +137,12 @@ insert into review.profiles (user_id, role, name, is_owner) values
   -- strict mode, in a spec that has nothing to do with this account. A fixture's name has to be
   -- unique against every other fixture's name, not just descriptive.
   ('44444444-4444-4444-8444-444444444444', 'admin',  'Deputy Admin',   false),
-  ('66666666-6666-4666-8666-666666666666', 'tester', 'Harness Tester', false);
+  ('66666666-6666-4666-8666-666666666666', 'tester', 'Harness Tester', false),
+  -- ⚠️ A TEACHER, AND THE ONLY ACCOUNT WHOSE WHOLE SURFACE IS SOURCE MATERIAL. Named "Teacher", not
+  -- "Tester": Playwright's hasText is a case-insensitive substring, and a fixture whose name
+  -- contained another fixture's would make a filter match two rows — which has already happened once
+  -- in this seed (see Deputy Admin).
+  ('12121212-1212-4212-8212-121212121212', 'teacher', 'Harness Teacher', false);
 
 -- ⚠️ SOURCE MATERIAL: A LINK AND AN UNFINISHED UPLOAD, AND NO FINISHED FILE ON PURPOSE.
 -- A seeded "ready" file row would claim bytes the fake object store has never been given, so the

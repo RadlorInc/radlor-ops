@@ -4,8 +4,18 @@ import { deleteMaterial, insertMaterial, markMaterialReady, materialById, type S
 import { MATERIAL_BUCKET, deleteObject, objectIsReadable, signedObjectUrl, signedUploadUrl } from '@/lib/storage'
 
 /**
- * SOURCE MATERIAL — the stuff a cut gets made from. Four verbs, admin only, on one path, the same
- * shape as /api/admin/video next door.
+ * SOURCE MATERIAL — the stuff a cut gets made from. Four verbs on one path, for TEACHERS AND ADMINS.
+ *
+ * ⚠️ IT LIVED AT `/api/admin/material` UNTIL 2026-09-11, AND MOVED BECAUSE THE PATH BECAME A LIE.
+ * The `teacher` role exists to reach this and nothing else, so a teacher's browser posting to a
+ * path under `/api/admin/` would have been a name a later reader has to distrust — and in this repo
+ * the next person to read a route's path is often working out who can call it. Same argument as the
+ * second bucket not being called `review-videos`.
+ *
+ * ⚠️ A TEACHER HAS EVERY POWER HERE AN ADMIN HAS, INCLUDING REMOVE. That was the ask — "whoever has
+ * the teacher role has source material access" — and inventing an own-items-only rule would have
+ * been a guess about something nobody said. It means a teacher can remove an admin's upload. If that
+ * should change, it is a check on `added_by` in DELETE below, and nowhere else.
  *
  *   GET    ?id=  → 302 to a freshly signed URL for one file
  *   POST         → a link (saved outright) or a file row + a one-shot upload URL
@@ -73,7 +83,7 @@ function normalUrl(raw: string): string | null {
  * the same property the player has, reached a cheaper way.
  */
 export async function GET(req: Request) {
-  const gate = await requireRoleApi('admin')
+  const gate = await requireRoleApi('teacher', 'admin')
   if ('deny' in gate) return gate.deny
 
   const id = new URL(req.url).searchParams.get('id') ?? ''
@@ -90,7 +100,7 @@ export async function GET(req: Request) {
 }
 
 export async function POST(req: Request) {
-  const gate = await requireRoleApi('admin')
+  const gate = await requireRoleApi('teacher', 'admin')
   if ('deny' in gate) return gate.deny
 
   const body = (await req.json().catch(() => null)) as
@@ -156,7 +166,7 @@ export async function POST(req: Request) {
  * item in the library that dies on the first click.
  */
 export async function PATCH(req: Request) {
-  const gate = await requireRoleApi('admin')
+  const gate = await requireRoleApi('teacher', 'admin')
   if ('deny' in gate) return gate.deny
 
   const body = (await req.json().catch(() => null)) as { id?: unknown } | null
@@ -180,7 +190,7 @@ export async function PATCH(req: Request) {
  * REPORTED rather than swallowed, because the bytes are still being paid for and still exist.
  */
 export async function DELETE(req: Request) {
-  const gate = await requireRoleApi('admin')
+  const gate = await requireRoleApi('teacher', 'admin')
   if ('deny' in gate) return gate.deny
 
   const body = (await req.json().catch(() => null)) as { id?: unknown } | null

@@ -27,7 +27,7 @@ export async function signIn(page: Page, who: keyof typeof ACCOUNTS, opts: { fre
     // admin, and sending it to /review because its name is not exactly "admin" would leave the
     // cached path on a different page from the fresh one, which is the shape of the bug this
     // navigation was added to fix in the first place.
-    await page.goto(who === 'tester' ? '/tester' : who.startsWith('admin') ? '/admin' : '/review')
+    await page.goto(who === 'tester' ? '/tester' : who === 'teacher' ? '/source' : who.startsWith('admin') ? '/admin' : '/review')
     return
   }
   /**

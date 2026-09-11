@@ -14,6 +14,8 @@ Three people, three screens, one Next.js app on Vercel:
   quietly taken on. The tab, `/api/admin/subscription`, the renewal helpers and eight e2e tests went
   with it. `review.subscriptions` still exists with its row — see *Open findings*.
 - **tester** — `/tester`: files what they found wrong in the app, and reads their own issues back.
+- **teacher** — `/source`: the Source material library and **nothing else** — no cuts, reviews,
+  to-dos or people. Added 2026-09-11.
 - **reviewer** — `/review`: watches **every published cut**, leaves timestamped notes on any of
   them, and — on the cuts they are the one **approver** of — says **Approved** or **Needs changes**.
 
@@ -548,6 +550,52 @@ straight after the click passes INSTANTLY — before the upload has started — 
 after it saw `ready: false` on a file that uploads perfectly well, and it looked like a product bug.
 `uploadFinished()` waits for the file input to empty, which happens on the success path and nowhere
 else. **The absence of an error is never a completion signal.**
+
+### 1d. A `teacher` role, and the library moved out of /admin — 2026-09-11
+
+Rafi: *whoever has the teacher role has access to source material.* `20260911100000` widens the
+role CHECK to include `teacher`. ✔ **Applied to `radlor-site` before the push**, constraint name
+confirmed in production first and the new definition read back; existing people untouched (2 admin,
+1 reviewer, 8 tester, 0 teacher). ⚠️ **No teacher account exists yet** — make one from the People
+tab's paste box, *Teacher — uses the source material library, and nothing else*.
+
+⚠️ **A ROLE, NOT A FLAG — the opposite choice from `can_approve`, deliberately.** An approver is a
+reviewer with one extra power on a surface they already have, so it is a column on top of a role. A
+teacher has a *different surface*, and what decides your surface in this schema is `role`.
+
+⚠️ **THE LIBRARY IS `/source` NOW, NOT `/admin?tab=source`.** `/admin` holds every cut, every
+verdict, the to-dos and People; a tab-level check could not keep a teacher from any of it once they
+were through the page's gate. So the library moved out and gates on `requireRole('teacher','admin')`,
+and the admin nav points at it the way *Chapter testing* already points at `/tester`. The route moved
+with it: **`/api/admin/material` → `/api/material`**, because a teacher's browser posting under
+`/api/admin/` is a path a later reader has to distrust. `Material.tsx` moved to `src/app/source/`.
+
+⚠️ **A TEACHER HAS EVERY POWER AN ADMIN HAS THERE, INCLUDING REMOVE** — so a teacher can remove an
+admin's upload. That is what "access to source material" said; an own-items-only rule would have been
+invented. If it should change, it is a check on `added_by` in DELETE and nowhere else.
+
+⚠️⚠️ **ADDING A ROLE IS WHERE NEGATIVE CHECKS COME TO COLLECT, AND THIS ONE FOUND THREE.**
+
+- The approver rules said **"not a tester"**, in the People route AND the links route. A teacher
+  passes that: they would have been offered *Make approver*, named on every new cut, and 404'd on
+  `/review` — so nothing would ever clear. Rewritten as a **positive** list (`reviewer` or `admin`),
+  so the next role is refused until somebody decides otherwise. Same for clearing the flag on demotion.
+- **The login page had its own copy of the routing**, a ternary ending `: '/tester'`, so any role it
+  did not name went to a page that refuses it. It now uses `HOME`, which is `Record<Role, string>` —
+  **a new role without a home is a type error** rather than a person sent to a 404.
+- `signIn.ts` in the suite had the same shape (`… : '/review'`).
+
+⚠️⚠️ **THE ONE HAZARD THE OFFLINE SUITE CANNOT SEE.** A teacher can read only their **own** profile
+row (`profiles_read_own`), so the obvious "who added this" lookup — `listProfiles()`, as the user —
+returns one row to a teacher and labels every admin upload *"somebody since removed"*: not merely
+unhelpful, **false, about a person**. PGlite has no policies, so there that lookup returns every row
+and a name assertion passes on the broken build. `namesById()` reads with the service key, uncached
+(a teacher added and uploading in the same minute would be missing from the 60s-cached list). **It is
+handled by construction; no test covers it**, and `e2e/teacher.spec.ts` says so at the top.
+
+Break-checked six ways: the page and the route each stop admitting teachers, a teacher's home pointed
+at a page that refuses them, the login page's old ternary restored, and both approver checks put back
+to "not a tester".
 
 ### 2. People: change a role, and — for Rafi alone — remove somebody
 

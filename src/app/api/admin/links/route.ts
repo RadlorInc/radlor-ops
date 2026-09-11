@@ -1,11 +1,11 @@
 import { NextResponse } from 'next/server'
-import { createUser, insertProfile, newInviteLink, setApprover, userEmail } from '@/lib/db'
+import { createUser, insertProfile, newInviteLink, setApprover, userEmail, type Role } from '@/lib/db'
 import { requireRoleApi } from '@/lib/session'
 import { hashToken, mintToken } from '@/lib/inviteToken'
 
 export const dynamic = 'force-dynamic'
 
-const ROLES = new Set(['admin', 'tester', 'reviewer'])
+const ROLES = new Set(['admin', 'tester', 'reviewer', 'teacher'])
 /** Three weeks to open your link. It was a week, and a week turned out to be the wrong end of the
  *  trade: the first tester round had three people still unopened on day four, because a link sent
  *  to somebody who is not expecting it competes with everything else in their inbox and loses for
@@ -65,10 +65,13 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'invalid' }, { status: 400 })
   }
   // Approvers can be several (Rafi, 2026-09-09: "we can create multiple"), so a pasted list is
-  // fine — every address lands flagged. A TESTER cannot be one: they cannot open the page a
-  // decision lives on.
+  // fine — every address lands flagged. Only somebody who can open /review can be one.
+  // ⚠️ A POSITIVE LIST, NOT "NOT A TESTER". That negative form was true of every role that existed
+  // and silently true of `teacher` the day it was added — a teacher would have been flagged, asked
+  // for verdicts, and 404'd on the page to give them. Naming who may is refused-by-default for the
+  // next role too.
   const canApprove = body?.can_approve === true
-  if (canApprove && role === 'tester') {
+  if (canApprove && role !== 'reviewer' && role !== 'admin') {
     return NextResponse.json({ error: 'approver_role' }, { status: 400 })
   }
 
@@ -96,7 +99,7 @@ export async function POST(req: Request) {
       continue
     }
     try {
-      await insertProfile({ user_id: id, role: role as 'admin' | 'tester' | 'reviewer', name: nameFrom(email) })
+      await insertProfile({ user_id: id, role: role as Role, name: nameFrom(email) })
       // After the row exists, through the same helper the People button uses.
       if (canApprove) await setApprover(id, true)
       const token = mintToken()

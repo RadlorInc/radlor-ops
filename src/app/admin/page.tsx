@@ -1,7 +1,7 @@
 import RoleNav from '../RoleNav'
 import Summary from './Summary'
 import { badgesFrom } from '@/lib/navBadges'
-import { allAssignments, allNotes, allReviewers, allVideos, inviteLinkStates, listMaterial, workCountsByPerson } from '@/lib/db'
+import { allAssignments, allNotes, allReviewers, allVideos, inviteLinkStates, workCountsByPerson } from '@/lib/db'
 import { clearance, progressLabel } from '@/lib/clearance'
 import { listIssues, listTodos, listProfiles } from '@/lib/adminDb'
 import { requireRole } from '@/lib/session'
@@ -11,7 +11,6 @@ import Watch from './Watch'
 import Upload from './Upload'
 import DeleteVideo from './DeleteVideo'
 import ReviewerNotes from './ReviewerNotes'
-import Material from './Material'
 
 export const dynamic = 'force-dynamic'
 
@@ -19,11 +18,9 @@ const TABS = [
   { key: 'summary', label: 'Dashboard' },
   { key: 'todo', label: 'To-do' },
   { key: 'videos', label: 'Marketing material' },
-  /* ⚠️ A DIFFERENT THING FROM THE TAB ABOVE, AND THE LABELS HAVE TO KEEP SAYING SO. *Marketing
-     material* is finished cuts, with approvers and a clearing rule. *Source material* is what a cut
-     gets made FROM, and nobody reviews it. Two tabs whose labels both end in "material" is the one
-     risk this pair carries; "Marketing" and "Source" are the whole of the distinction. */
-  { key: 'source', label: 'Source material' },
+  /* ⚠️ SOURCE MATERIAL IS NOT A TAB HERE ANY MORE — it is `/source`, since 2026-09-11, because a
+     teacher has to reach it and must not reach anything else on this page. The admin's nav still
+     shows it, pointing out of /admin the same way *Chapter testing* and *My reviews* already do. */
   { key: 'people', label: 'People' },
 ] as const
 type TabKey = (typeof TABS)[number]['key']
@@ -81,7 +78,7 @@ export default async function Admin({
 
   // ⚠️ The two admin tables are read AS THE USER (RLS decides); videos and notes still go through
   // the service key, because reviewers have no account for a policy to be written against.
-  const [videos, notes, assignments, reviewers, todos, issues, people, links, material, work] = await Promise.all([
+  const [videos, notes, assignments, reviewers, todos, issues, people, links, work] = await Promise.all([
     allVideos(),
     allNotes(),
     allAssignments(),
@@ -90,8 +87,7 @@ export default async function Admin({
     listIssues(),
     listProfiles(),
     inviteLinkStates(),
-    tab === 'source' ? listMaterial() : Promise.resolve([]),
-    // Same reasoning as `material` above: read by one tab, so fetched by one tab.
+    // Read by one tab, so fetched by one tab.
     tab === 'people' ? workCountsByPerson() : Promise.resolve({ notes: new Map(), verdicts: new Map() }),
   ])
 
@@ -206,24 +202,7 @@ export default async function Admin({
           viewerIsOwner={people.find((p) => p.user_id === me.user_id)?.is_owner === true}
         />
       )}
-      {tab === 'source' && (
-        <Material
-          initial={material.map((m) => ({
-            id: m.id,
-            title: m.title,
-            subject: m.subject,
-            kind: m.kind,
-            url: m.url,
-            filename: m.filename,
-            ready: m.ready,
-            /* Resolved here, where the profile list already is. A row whose author has since been
-               removed says so rather than rendering a bare uuid — `added_by` is `on delete set
-               null`, because the library outlives whoever happened to paste something into it. */
-            addedBy: people.find((p) => p.user_id === m.added_by)?.name ?? 'somebody since removed',
-            created_at: m.created_at,
-          }))}
-        />
-      )}
+
       {tab === 'videos' && (
         <section>
       {/* ⚠️ VISUALLY HIDDEN, NOT DELETED. The tab above already says "Videos", so printing it

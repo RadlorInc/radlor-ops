@@ -68,7 +68,7 @@ export default function Material({ initial }: { initial: MaterialItem[] }) {
   /** One file, end to end: make the row, send the bytes, have the server read them back. Throws
    *  with a sentence the caller can show. */
   async function addOneFile(f: File, useTypedTitle: boolean) {
-    const made = await fetch('/api/admin/material', {
+    const made = await fetch('/api/material', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       // ⚠️ THE TITLE IS SENT ONLY WHEN IT CAN MEAN SOMETHING — one file, and the admin typed one.
@@ -87,7 +87,7 @@ export default function Material({ initial }: { initial: MaterialItem[] }) {
     })
     if (!put.ok) throw new Error('did not upload')
 
-    const done = await fetch('/api/admin/material', {
+    const done = await fetch('/api/material', {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ id }),
@@ -101,7 +101,7 @@ export default function Material({ initial }: { initial: MaterialItem[] }) {
     try {
       if (kind === 'link') {
         setStep('Saving…')
-        const made = await fetch('/api/admin/material', {
+        const made = await fetch('/api/material', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ title: title.trim(), subject, kind, url: url.trim() }),
@@ -165,7 +165,7 @@ export default function Material({ initial }: { initial: MaterialItem[] }) {
     setError(null)
     setStep('Removing…')
     try {
-      const res = await fetch('/api/admin/material', {
+      const res = await fetch('/api/material', {
         method: 'DELETE',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ id }),
@@ -325,7 +325,7 @@ export default function Material({ initial }: { initial: MaterialItem[] }) {
                        nothing signed is ever rendered into this page. */
                     <a
                       className="linky"
-                      href={`/api/admin/material?id=${encodeURIComponent(m.id)}`}
+                      href={`/api/material?id=${encodeURIComponent(m.id)}`}
                       target="_blank"
                       rel="noreferrer"
                       data-testid="material-open"

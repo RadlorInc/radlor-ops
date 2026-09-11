@@ -221,6 +221,8 @@ const ACCOUNTS = {
   // An admin who is NOT the owner. See test/seed.sql: without this account, "only the owner may
   // remove somebody" cannot be told apart from "any admin may".
   'deputy@harness.test': { password: 'harness-deputy-pw', id: '44444444-4444-4444-8444-444444444444' },
+  // A teacher: opens Source material and nothing else. See e2e/teacher.spec.ts.
+  'teacher@harness.test': { password: 'harness-teacher-pw', id: '12121212-1212-4212-8212-121212121212' },
   'tester@harness.test': { password: 'harness-tester-pw', id: '66666666-6666-4666-8666-666666666666' },
   // The reviewer accounts. Dana holds assignments; Flood is the second reviewer on the split
   // videos, and is also the one the rate-limit spec floods through the token door.

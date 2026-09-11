@@ -276,6 +276,7 @@ export default function People({
               <option value="tester">Tester — tries the app and files problems</option>
               <option value="reviewer">Reviewer — watches videos and leaves notes</option>
               <option value="approver">Reviewer who approves or rejects</option>
+              <option value="teacher">Teacher — uses the source material library, and nothing else</option>
               <option value="admin">Admin — sees everything</option>
             </select>
           </label>
@@ -377,6 +378,7 @@ export default function People({
             >
               <option value="admin">Admin</option>
               <option value="reviewer">Reviewer</option>
+              <option value="teacher">Teacher</option>
               <option value="tester">Tester</option>
             </select>
             <span>{p.name}</span>
@@ -392,7 +394,9 @@ export default function People({
             )}
             {/* Reviewers and admins only: a tester cannot open the page a decision lives on. One
                 button per row, reading as the action it performs from this state. */}
-            {p.role !== 'tester' && (
+            {/* ⚠️ REVIEWERS AND ADMINS, NAMED — NOT "ANYBODY BUT A TESTER". That negative form
+                offered this button to a teacher, who has no page to give a verdict on. */}
+            {(p.role === 'reviewer' || p.role === 'admin') && (
               <button
                 className="linky"
                 onClick={() => approve(p.user_id, !p.can_approve)}

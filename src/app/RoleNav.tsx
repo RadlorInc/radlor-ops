@@ -25,13 +25,15 @@ const TABS: Record<Role, Tab[]> = {
        something — open to-dos, cuts not cleared, reviews waiting on you. A library has no such
        number: a count of how many things are in it would sit at 40 for ever and teach the reader
        to stop looking at the row of numbers entirely. */
-    { href: '/admin?tab=source', label: 'Source material' },
+    { href: '/source', label: 'Source material' },
     { href: '/admin?tab=people', label: 'People' },
     { href: '/tester', label: 'Chapter testing', badge: 'issues' },
     { href: '/review', label: 'My reviews', badge: 'review' },
   ],
   tester: [{ href: '/tester', label: 'Chapter testing' }],
   reviewer: [{ href: '/review', label: 'My reviews' }],
+  // One destination, so no strip — the same as a tester and a reviewer.
+  teacher: [{ href: '/source', label: 'Source material' }],
 }
 
 export default function RoleNav({

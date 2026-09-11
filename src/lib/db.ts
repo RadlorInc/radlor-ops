@@ -31,6 +31,9 @@ const KEY = process.env.SUPABASE_SERVICE_ROLE_KEY
 export const SCHEMA = 'review'
 
 export type Reviewer = { id: string; name: string; email: string; revoked_at: string | null }
+/** The roles, from the one place that defines them. Imported as a type only, so this server-only
+ *  module does not pull session code in with it. */
+export type Role = import('./session').Role
 export type Video = {
   id: string
   slug: string
@@ -196,6 +199,26 @@ async function allAssignmentsUncached(): Promise<Assignment[]> {
  * account, no `reviewers` row). That is what made `review.reviewers` vestigial rather than merely
  * token-free.
  */
+/**
+ * EVERY PERSON'S NAME, BY ID, READ WITH THE SERVICE KEY AND NOT CACHED.
+ *
+ * ⚠️ WITH THE SERVICE KEY BECAUSE A TEACHER CANNOT READ ANYBODY ELSE'S PROFILE. `profiles` has two
+ * policies — read your own row, or read all of them if you are an admin — so the obvious lookup for
+ * "who added this", `listProfiles()`, returns ONE row to a teacher: their own. Every item the admin
+ * uploaded would then render as "somebody since removed", which is not merely unhelpful but false,
+ * and false about a person. ⚠️ AND THE OFFLINE SUITE CANNOT SEE THIS AT ANY EFFORT: PGlite is one
+ * superuser with no policies, so the as-the-user read returns every row there and a test asserting
+ * the names would pass on exactly the broken build. It is handled by construction, not by a check.
+ *
+ * ⚠️ NOT CACHED, UNLIKE `allReviewers` BELOW. That one is invalidated only by the People routes; a
+ * teacher added through the paste box and uploading in the same minute would be missing from it and
+ * rendered as removed. A few names, read once per page, is the correct price.
+ */
+export async function namesById(): Promise<Map<string, string>> {
+  const rows = await rest<{ user_id: string; name: string }[]>('profile names', 'profiles?select=user_id,name')
+  return new Map(rows.map((r) => [r.user_id, r.name]))
+}
+
 async function allReviewersUncached(): Promise<Reviewer[]> {
   const rows = await rest<{ user_id: string; name: string }[]>(
     'admin reviewer list',
@@ -534,7 +557,7 @@ export async function workCountsByPerson(): Promise<{ notes: Map<string, number>
  * guards that replace it live in `/api/admin/people`, not here: not your own row, not the owner's,
  * and never the change that leaves zero admins. This function is the write, not the policy.
  */
-export function setRole(userId: string, role: 'admin' | 'tester' | 'reviewer'): Promise<null> {
+export function setRole(userId: string, role: Role): Promise<null> {
   return rest<null>('role update', `profiles?user_id=eq.${encodeURIComponent(userId)}`, {
     method: 'PATCH',
     headers: { Prefer: 'return=minimal' },
@@ -623,7 +646,7 @@ export async function setUserPassword(userId: string, password: string): Promise
  *  admin's own session cannot hand out roles, only a route running on the server can. */
 export function insertProfile(row: {
   user_id: string
-  role: 'admin' | 'tester' | 'reviewer'
+  role: Role
   name: string
   can_approve?: boolean
 }): Promise<null> {

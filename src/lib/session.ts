@@ -40,8 +40,14 @@ export const RT_COOKIE = 'rvr_rt'
  * holding two values: Rafi is the admin AND the only reviewer, and he appears on `equals-reel`
  * because a `video_reviewers` row says so, not because of anything in his profile.
  */
-export type Role = 'admin' | 'tester' | 'reviewer'
-export const HOME: Record<Role, string> = { admin: '/admin', tester: '/tester', reviewer: '/review' }
+export type Role = 'admin' | 'tester' | 'reviewer' | 'teacher'
+/**
+ * Where each role lands. ⚠️ `Record<Role, …>`, SO A NEW ROLE WITHOUT A HOME IS A TYPE ERROR, not a
+ * person sent somewhere that 404s. The login page used to carry its own ternary copy of this that
+ * defaulted everything unrecognised to /tester — adding `teacher` would have compiled cleanly and
+ * sent every teacher to a page that refuses them.
+ */
+export const HOME: Record<Role, string> = { admin: '/admin', tester: '/tester', reviewer: '/review', teacher: '/source' }
 
 /**
  * Writes the two session cookies. One writer, three callers — the login form, the emailed link

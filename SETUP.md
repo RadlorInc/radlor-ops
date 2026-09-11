@@ -169,6 +169,15 @@ update review.profiles set is_owner = true where user_id = '<the founder>';
 Until it runs nobody can remove anybody, which is the intended way for it to fail. Changing a
 person's ROLE needs no such statement — any admin can, from the People tab.
 
+**Roles, and what each one opens** (since 2026-09-11):
+
+| role | lands on | can open |
+|---|---|---|
+| admin | `/admin` | everything, including `/review`, `/tester` and `/source` |
+| reviewer | `/review` | every published cut; decides the ones they are assigned |
+| tester | `/tester` | their own filed problems |
+| teacher | `/source` | the Source material library, and nothing else |
+
 **Step 3 — make them the approver, if they are.** ⚠️ Since 2026-09-09 this is a button, not SQL:
 *People → Make approver* beside their name flags `profiles.can_approve`; any number of people can
 hold it. Every cut uploaded from then on is sent to all of them and clears only when all have

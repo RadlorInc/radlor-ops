@@ -5,6 +5,8 @@ export const ACCOUNTS = {
   admin: { email: 'admin@harness.test', password: 'harness-admin-pw' },
   /** An admin who does not own the project — the positive control for the owner-only Remove. */
   admin2: { email: 'deputy@harness.test', password: 'harness-deputy-pw' },
+  /** A teacher — the role that reaches Source material and nothing else. */
+  teacher: { email: 'teacher@harness.test', password: 'harness-teacher-pw' },
   tester: { email: 'tester@harness.test', password: 'harness-tester-pw' },
   dana: { email: 'dana@example.com', password: 'harness-dana-pw' },
   flood: { email: 'flood@example.com', password: 'harness-flood-pw' },
@@ -20,6 +22,7 @@ export const USERS = {
   /** Deputy Admin: an admin who is NOT the owner. The only fixture that can tell "not yourself"
    *  apart from "not the owner", because on the harness admin both rules fire at once. */
   deputy: '44444444-4444-4444-8444-444444444444',
+  teacher: '12121212-1212-4212-8212-121212121212',
 }
 export const SUPABASE_URL = 'http://127.0.0.1:54329'
 export const PORT = 3019

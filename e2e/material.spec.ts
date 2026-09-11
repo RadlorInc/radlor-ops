@@ -48,7 +48,7 @@ async function rows(request: import('@playwright/test').APIRequestContext, q = '
 
 test('a PDF goes up, comes back down, and the video tab refuses the same file', async ({ page, request }) => {
   await signIn(page, 'admin')
-  await page.goto('/admin?tab=source')
+  await page.goto('/source')
 
   await page.getByTestId('material-title').fill('Brand rules')
   await page.getByTestId('material-subject').selectOption('maths')
@@ -90,7 +90,7 @@ test('a PDF goes up, comes back down, and the video tab refuses the same file', 
 
 test('a link is saved as a link, and a junk address is refused before anything is written', async ({ page, request }) => {
   await signIn(page, 'admin')
-  await page.goto('/admin?tab=source')
+  await page.goto('/source')
 
   const before = (await rows(request)).length
 
@@ -110,7 +110,7 @@ test('a link is saved as a link, and a junk address is refused before anything i
    * A file may arrive unnamed and take its filename; a URL is not a name, and without this the
    * guard could be deleted with every other test still green. break-check said exactly that.
    */
-  const unnamed = await page.request.post('/api/admin/material', {
+  const unnamed = await page.request.post('/api/material', {
     data: { kind: 'link', subject: 'science', url: 'https://example.com/unnamed' },
   })
   expect(unnamed.status()).toBe(400)
@@ -132,7 +132,7 @@ test('a link is saved as a link, and a junk address is refused before anything i
 
 test('an upload that never finished says so instead of offering itself', async ({ page }) => {
   await signIn(page, 'admin')
-  await page.goto('/admin?tab=source')
+  await page.goto('/source')
 
   // Seeded in that state on purpose: a working upload cannot produce it, and it is the state the
   // interface has to be honest about rather than render a link that 404s on the first click.
@@ -144,7 +144,7 @@ test('an upload that never finished says so instead of offering itself', async (
 
 test('removing an item takes the row and reports on the file', async ({ page, request }) => {
   await signIn(page, 'admin')
-  await page.goto('/admin?tab=source')
+  await page.goto('/source')
 
   await page.getByTestId('material-title').fill('Delete Me')
   await page.getByTestId('material-subject').selectOption('science')
@@ -167,9 +167,9 @@ test('removing an item takes the row and reports on the file', async ({ page, re
  *  tab and a UI-only check cannot tell "refused" from "never rendered". */
 test('a reviewer can neither open the tab nor reach the route behind it', async ({ page }) => {
   await signIn(page, 'dana')
-  expect((await page.goto('/admin?tab=source'))?.status()).toBe(404)
-  expect((await page.request.get('/api/admin/material?id=22222222-2222-4222-8222-222222222222')).status()).toBe(404)
-  expect((await page.request.post('/api/admin/material', { data: { title: 'x', kind: 'link', url: 'https://example.com' } })).status()).toBe(404)
+  expect((await page.goto('/source'))?.status()).toBe(404)
+  expect((await page.request.get('/api/material?id=22222222-2222-4222-8222-222222222222')).status()).toBe(404)
+  expect((await page.request.post('/api/material', { data: { title: 'x', kind: 'link', url: 'https://example.com' } })).status()).toBe(404)
 })
 
 /**
@@ -180,7 +180,7 @@ test('a reviewer can neither open the tab nor reach the route behind it', async 
  */
 test('the library is divided in two, and an item appears under one heading only', async ({ page }) => {
   await signIn(page, 'admin')
-  await page.goto('/admin?tab=source')
+  await page.goto('/source')
 
   // Both headings are on screen at once — this is a division, not a filter.
   await expect(group(page, 'science')).toBeVisible()
@@ -197,7 +197,7 @@ test('the route refuses an item with no subject, or one it does not recognise', 
   const before = (await rows(request)).length
 
   for (const subject of [undefined, '', 'history', 'SCIENCE']) {
-    const res = await page.request.post('/api/admin/material', {
+    const res = await page.request.post('/api/material', {
       data: { title: 'No Subject', kind: 'link', url: 'https://example.com/x', ...(subject === undefined ? {} : { subject }) },
     })
     expect(res.status()).toBe(400)
@@ -208,7 +208,7 @@ test('the route refuses an item with no subject, or one it does not recognise', 
   expect((await rows(request)).length).toBe(before)
 
   // The positive control: the same request, with a subject it does accept.
-  const ok = await page.request.post('/api/admin/material', {
+  const ok = await page.request.post('/api/material', {
     data: { title: 'Has Subject', kind: 'link', url: 'https://example.com/x', subject: 'maths' },
   })
   expect(ok.status()).toBe(200)
@@ -219,7 +219,7 @@ test('the route refuses an item with no subject, or one it does not recognise', 
  *  on an empty form would pass on a build that never checks the subject at all. */
 test('nothing can be added until a subject is chosen', async ({ page }) => {
   await signIn(page, 'admin')
-  await page.goto('/admin?tab=source')
+  await page.goto('/source')
 
   await page.getByTestId('material-title').fill('Needs A Subject')
   await page.getByTestId('material-url').fill('https://example.com/needs-a-subject')
@@ -247,7 +247,7 @@ const BATCH = [
 
 test('a whole selection goes up in one press, each under its own name and subject', async ({ page, request }) => {
   await signIn(page, 'admin')
-  await page.goto('/admin?tab=source')
+  await page.goto('/source')
 
   /**
    * ⚠️ A TITLE IS TYPED FIRST, AND THEN THE FILES ARE CHOSEN. Without it, "the typed title is not
@@ -309,7 +309,7 @@ test('a whole selection goes up in one press, each under its own name and subjec
  *  title, so the filename is used. */
 test('one file with no title typed keeps its own name', async ({ page, request }) => {
   await signIn(page, 'admin')
-  await page.goto('/admin?tab=source')
+  await page.goto('/source')
 
   await page.getByTestId('material-subject').selectOption('maths')
   await page.getByTestId('material-kind').selectOption('file')

@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import { revalidateTag } from 'next/cache'
 import { requireRoleApi } from '@/lib/session'
 import { listProfiles } from '@/lib/adminDb'
-import { TAGS, deleteUser, setApprover, setRole } from '@/lib/db'
+import { TAGS, deleteUser, setApprover, setRole, type Role } from '@/lib/db'
 
 /**
  * THE PEOPLE TAB'S WRITES. `PATCH` changes what somebody is; `DELETE` removes them entirely.
@@ -26,7 +26,9 @@ import { TAGS, deleteUser, setApprover, setRole } from '@/lib/db'
  */
 export const dynamic = 'force-dynamic'
 
-const ROLES = new Set(['admin', 'tester', 'reviewer'])
+const ROLES = new Set(['admin', 'tester', 'reviewer', 'teacher'])
+/** ⚠️ WHO CAN OPEN /review, AND SO WHO CAN BE ASKED FOR A VERDICT. Named positively: see below. */
+const CAN_REVIEW = new Set(['reviewer', 'admin'])
 
 export async function PATCH(req: Request) {
   const gate = await requireRoleApi('admin')
@@ -45,8 +47,10 @@ export async function PATCH(req: Request) {
 
   // ── who approves ────────────────────────────────────────────────────────────────────────────
   if (typeof body?.can_approve === 'boolean') {
-    // A tester has no reviewer surface, so a decision parked on one is a decision nobody can make.
-    if (target.role === 'tester') return NextResponse.json({ error: 'not_a_reviewer' }, { status: 400 })
+    // A decision parked on somebody with no reviewer surface is a decision nobody can make.
+    // ⚠️ A POSITIVE LIST. This read `target.role === 'tester'` until 2026-09-11 — which a teacher
+    // passes. Naming who MAY means the next role added is refused until somebody decides otherwise.
+    if (!CAN_REVIEW.has(target.role)) return NextResponse.json({ error: 'not_a_reviewer' }, { status: 400 })
     await setApprover(userId, body.can_approve)
     revalidateTag(TAGS.reviewers, { expire: 0 })
     return NextResponse.json({ ok: true })
@@ -68,14 +72,14 @@ export async function PATCH(req: Request) {
     // strand that control behind a door its holder cannot open.
     if (target.is_owner) return NextResponse.json({ error: 'owner' }, { status: 400 })
 
-    await setRole(userId, role as 'admin' | 'tester' | 'reviewer')
+    await setRole(userId, role as Role)
     /**
      * ⚠️ AN APPROVER WHO IS NOW A TESTER WOULD BE ASKED FOR VERDICTS THEY CANNOT GIVE. `can_approve`
      * is a property of a person who can open /review; demotion to tester takes that away, so the
      * flag has to come off in the same act. Leaving it would put every new cut in front of somebody
      * whose surface 404s, and nothing would ever clear.
      */
-    if (role === 'tester' && target.can_approve) await setApprover(userId, false)
+    if (!CAN_REVIEW.has(role) && target.can_approve) await setApprover(userId, false)
     revalidateTag(TAGS.reviewers, { expire: 0 })
     return NextResponse.json({ ok: true, changed: true })
   }

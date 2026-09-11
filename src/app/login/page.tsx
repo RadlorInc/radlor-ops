@@ -1,4 +1,4 @@
-import { currentProfile } from '@/lib/session'
+import { HOME, currentProfile } from '@/lib/session'
 import { redirect } from 'next/navigation'
 
 export const dynamic = 'force-dynamic'
@@ -12,7 +12,10 @@ export default async function Login({
   const profile = await currentProfile()
   // ⚠️ Admin lands on /admin, not /review, even though an admin may open both: the surface you are
   // sent to should be the one your role is FOR. Rafi reaches his own review list from there.
-  if (profile) redirect(profile.role === 'admin' ? '/admin' : profile.role === 'reviewer' ? '/review' : '/tester')
+  // ⚠️ `HOME`, NOT A TERNARY OF ITS OWN. The copy that lived here ended `: '/tester'`, so any role it
+  // did not name — `teacher`, the day it was added — was sent to a page that 404s them, and the
+  // type system could not object because nothing here was typed against `Role`.
+  if (profile) redirect(HOME[profile.role])
 
   const q = await searchParams
   const error = q.error
