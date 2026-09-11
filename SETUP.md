@@ -176,7 +176,7 @@ person's ROLE needs no such statement — any admin can, from the People tab.
 | admin | `/admin` | everything, including `/review`, `/tester` and `/source` |
 | reviewer | `/review` | every published cut; decides the ones they are assigned |
 | tester | `/tester` | their own filed problems |
-| teacher | `/source` | the Source material library, and nothing else |
+| teacher | `/source` | reads the Source material library and opens files; cannot add or remove, and sees nothing else |
 
 **Step 3 — make them the approver, if they are.** ⚠️ Since 2026-09-09 this is a button, not SQL:
 *People → Make approver* beside their name flags `profiles.can_approve`; any number of people can

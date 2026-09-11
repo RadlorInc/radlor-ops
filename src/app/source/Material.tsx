@@ -36,12 +36,25 @@ export type MaterialItem = {
  * maths shelf you simply have not selected. Both headings are always on screen and an empty one
  * says so in words.
  *
+ * ⚠️ TWO AUDIENCES, ONE COMPONENT. An admin gets the add form and a Remove on every row; a teacher
+ * gets neither, and never sees an upload that did not finish (that is an admin's loose end, and a
+ * row a teacher can neither open nor remove is a row that looks broken). The page decides who is
+ * who; the route refuses the writes regardless.
+ *
  * ⚠️ NO FORMAT WHITELIST, DELIBERATELY. The upload form for cuts refuses anything a browser cannot
  * play, because a reviewer has to press play on it. Nobody presses play on a font file or a
  * competitor's PDF. The ask was "kuch bhi", and a whitelist would be a guess about what somebody
  * needs next week.
  */
-export default function Material({ initial }: { initial: MaterialItem[] }) {
+export default function Material({
+  initial,
+  canEdit,
+}: {
+  initial: MaterialItem[]
+  /** ⚠️ ADMIN: add and remove. TEACHER: look, and open. The route enforces this per verb; this prop
+   *  only decides what is worth rendering, so a teacher is not shown a form that would 404. */
+  canEdit: boolean
+}) {
   const router = useRouter()
   const [kind, setKind] = useState<'link' | 'file'>('link')
   /** ⚠️ STARTS UNCHOSEN, WITH NO DEFAULT. Defaulting to Science files everything under it for
@@ -188,105 +201,108 @@ export default function Material({ initial }: { initial: MaterialItem[] }) {
     <section>
       <h2 className="sr-only">Source material</h2>
 
-      <div className="card filecard" style={{ marginBottom: 18 }}>
-        <h3 style={{ margin: '0 0 4px' }}>Add something</h3>
-        <p className="muted small" style={{ margin: '0 0 12px' }}>
-          Anything a cut gets made from — a reference video, a link, a PDF, a deck, a font. Nobody is
-          asked to review what goes in here.
-        </p>
+      {/* ⚠️ ADMINS ONLY. A teacher reads the library and does not add to it — Rafi, 2026-09-11. */}
+      {canEdit && (
+        <div className="card filecard" style={{ marginBottom: 18 }}>
+          <h3 style={{ margin: '0 0 4px' }}>Add something</h3>
+          <p className="muted small" style={{ margin: '0 0 12px' }}>
+            Anything a cut gets made from — a reference video, a link, a PDF, a deck, a font. Nobody is
+            asked to review what goes in here.
+          </p>
 
-        <div className="fields">
-          <label className="field">
-            <span className="fieldname">{kind === 'link' ? 'What is it?' : 'Call it something (optional)'}</span>
-            <input
-              type="text"
-              value={title}
-              maxLength={200}
-              placeholder={kind === 'link' ? 'e.g. Competitor hook teardown' : 'Left blank, each file keeps its own name'}
-              onChange={(e) => setTitle(e.target.value)}
-              /* ⚠️ DISABLED FOR A SELECTION, NOT HIDDEN. One box cannot name five files, and a box
-                 that silently applied to only the first would be worse than one that says no. */
-              disabled={busy || files.length > 1}
-              data-testid="material-title"
-            />
-          </label>
+          <div className="fields">
+            <label className="field">
+              <span className="fieldname">{kind === 'link' ? 'What is it?' : 'Call it something (optional)'}</span>
+              <input
+                type="text"
+                value={title}
+                maxLength={200}
+                placeholder={kind === 'link' ? 'e.g. Competitor hook teardown' : 'Left blank, each file keeps its own name'}
+                onChange={(e) => setTitle(e.target.value)}
+                /* ⚠️ DISABLED FOR A SELECTION, NOT HIDDEN. One box cannot name five files, and a box
+                   that silently applied to only the first would be worse than one that says no. */
+                disabled={busy || files.length > 1}
+                data-testid="material-title"
+              />
+            </label>
 
-          <label className="field">
-            <span className="fieldname">Which subject?</span>
-            <select
-              value={subject}
-              onChange={(e) => setSubject(e.target.value as 'science' | 'maths' | '')}
-              disabled={busy}
-              data-testid="material-subject"
-            >
-              <option value="">Choose one</option>
-              <option value="science">Science</option>
-              <option value="maths">Maths</option>
-            </select>
-          </label>
+            <label className="field">
+              <span className="fieldname">Which subject?</span>
+              <select
+                value={subject}
+                onChange={(e) => setSubject(e.target.value as 'science' | 'maths' | '')}
+                disabled={busy}
+                data-testid="material-subject"
+              >
+                <option value="">Choose one</option>
+                <option value="science">Science</option>
+                <option value="maths">Maths</option>
+              </select>
+            </label>
 
-          <label className="field">
-            <span className="fieldname">A link, or a file?</span>
-            <select
-              value={kind}
-              onChange={(e) => setKind(e.target.value as 'link' | 'file')}
-              disabled={busy}
-              data-testid="material-kind"
-            >
-              <option value="link">A link — somewhere on the web</option>
-              <option value="file">A file — upload it</option>
-            </select>
-          </label>
+            <label className="field">
+              <span className="fieldname">A link, or a file?</span>
+              <select
+                value={kind}
+                onChange={(e) => setKind(e.target.value as 'link' | 'file')}
+                disabled={busy}
+                data-testid="material-kind"
+              >
+                <option value="link">A link — somewhere on the web</option>
+                <option value="file">A file — upload it</option>
+              </select>
+            </label>
+          </div>
+
+          {kind === 'link' ? (
+            <label className="field" style={{ marginTop: 10 }}>
+              <span className="fieldname">The address</span>
+              <input
+                type="url"
+                value={url}
+                maxLength={2000}
+                placeholder="https://…"
+                onChange={(e) => setUrl(e.target.value)}
+                disabled={busy}
+                data-testid="material-url"
+              />
+            </label>
+          ) : (
+            <label className="field" style={{ marginTop: 10 }}>
+              <span className="fieldname">The files</span>
+              {/* No `accept`: any format at all, which is the point of the tab. `multiple`, because a
+                  subject's material arrives as a folder, not as one thing at a time. */}
+              <input
+                ref={fileInput}
+                type="file"
+                multiple
+                onChange={(e) => setFiles(Array.from(e.target.files ?? []))}
+                disabled={busy}
+                data-testid="material-file"
+              />
+              {files.length > 1 && (
+                <span className="muted small" data-testid="material-file-count">
+                  {files.length} files — each is added under its own name.
+                </span>
+              )}
+            </label>
+          )}
+
+          <button className="send" style={{ marginTop: 14 }} onClick={add} disabled={busy || !ready} data-testid="material-add">
+            {busy ? 'Working…' : 'Add it'}
+          </button>
+          {step && (
+            <p className="muted small" data-testid="material-step">
+              {step}
+            </p>
+          )}
+          {error && (
+            <p className="small error" data-testid="material-error">
+              {error}
+            </p>
+          )}
         </div>
-
-        {kind === 'link' ? (
-          <label className="field" style={{ marginTop: 10 }}>
-            <span className="fieldname">The address</span>
-            <input
-              type="url"
-              value={url}
-              maxLength={2000}
-              placeholder="https://…"
-              onChange={(e) => setUrl(e.target.value)}
-              disabled={busy}
-              data-testid="material-url"
-            />
-          </label>
-        ) : (
-          <label className="field" style={{ marginTop: 10 }}>
-            <span className="fieldname">The files</span>
-            {/* No `accept`: any format at all, which is the point of the tab. `multiple`, because a
-                subject's material arrives as a folder, not as one thing at a time. */}
-            <input
-              ref={fileInput}
-              type="file"
-              multiple
-              onChange={(e) => setFiles(Array.from(e.target.files ?? []))}
-              disabled={busy}
-              data-testid="material-file"
-            />
-            {files.length > 1 && (
-              <span className="muted small" data-testid="material-file-count">
-                {files.length} files — each is added under its own name.
-              </span>
-            )}
-          </label>
-        )}
-
-        <button className="send" style={{ marginTop: 14 }} onClick={add} disabled={busy || !ready} data-testid="material-add">
-          {busy ? 'Working…' : 'Add it'}
-        </button>
-        {step && (
-          <p className="muted small" data-testid="material-step">
-            {step}
-          </p>
-        )}
-        {error && (
-          <p className="small error" data-testid="material-error">
-            {error}
-          </p>
-        )}
-      </div>
+      )}
 
       {SUBJECTS.map(({ key, label }) => {
         const items = initial.filter((m) => m.subject === key)
@@ -339,20 +355,23 @@ export default function Material({ initial }: { initial: MaterialItem[] }) {
                     {m.addedBy}
                   </span>
 
-                  {confirming === m.id ? (
-                    <>
-                      <button className="linky" onClick={() => remove(m.id)} disabled={busy} data-testid="material-remove-really">
-                        Yes, remove
+                  {/* ⚠️ ADMINS ONLY, like the form above. Not disabled but absent: a teacher has no
+                      remove to be told they cannot use. */}
+                  {canEdit &&
+                    (confirming === m.id ? (
+                      <>
+                        <button className="linky" onClick={() => remove(m.id)} disabled={busy} data-testid="material-remove-really">
+                          Yes, remove
+                        </button>
+                        <button className="linky" onClick={() => setConfirming(null)} disabled={busy} data-testid="material-remove-cancel">
+                          Keep it
+                        </button>
+                      </>
+                    ) : (
+                      <button className="linky" onClick={() => setConfirming(m.id)} disabled={busy} data-testid="material-remove">
+                        Remove
                       </button>
-                      <button className="linky" onClick={() => setConfirming(null)} disabled={busy} data-testid="material-remove-cancel">
-                        Keep it
-                      </button>
-                    </>
-                  ) : (
-                    <button className="linky" onClick={() => setConfirming(m.id)} disabled={busy} data-testid="material-remove">
-                      Remove
-                    </button>
-                  )}
+                    ))}
                 </li>
                 ))}
               </ol>

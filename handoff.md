@@ -14,8 +14,8 @@ Three people, three screens, one Next.js app on Vercel:
   quietly taken on. The tab, `/api/admin/subscription`, the renewal helpers and eight e2e tests went
   with it. `review.subscriptions` still exists with its row — see *Open findings*.
 - **tester** — `/tester`: files what they found wrong in the app, and reads their own issues back.
-- **teacher** — `/source`: the Source material library and **nothing else** — no cuts, reviews,
-  to-dos or people. Added 2026-09-11.
+- **teacher** — `/source`: **reads** the Source material library and opens what is in it — cannot
+  add or remove anything, and sees nothing else (no cuts, reviews, to-dos or people). Added 2026-09-11.
 - **reviewer** — `/review`: watches **every published cut**, leaves timestamped notes on any of
   them, and — on the cuts they are the one **approver** of — says **Approved** or **Needs changes**.
 
@@ -570,9 +570,15 @@ and the admin nav points at it the way *Chapter testing* already points at `/tes
 with it: **`/api/admin/material` → `/api/material`**, because a teacher's browser posting under
 `/api/admin/` is a path a later reader has to distrust. `Material.tsx` moved to `src/app/source/`.
 
-⚠️ **A TEACHER HAS EVERY POWER AN ADMIN HAS THERE, INCLUDING REMOVE** — so a teacher can remove an
-admin's upload. That is what "access to source material" said; an own-items-only rule would have been
-invented. If it should change, it is a check on `added_by` in DELETE and nowhere else.
+⚠️ **A TEACHER READS; ONLY AN ADMIN WRITES.** For one release a teacher had every power an admin had
+on that page, including remove — that was a reading of "access to source material", and Rafi corrected
+it the same day: *the teacher can only look, not add or delete.* So the gate is **per verb**, not per
+path: `GET` (open a file) names `teacher` and `admin`; `POST`, `PATCH` and `DELETE` name only `admin`.
+The page renders no add form and no Remove for a teacher, and **filters out unfinished uploads for
+them on the server** — an unfinished item is an admin's loose end, and a row a teacher can neither
+open nor remove is a row that looks broken. ⚠️ Hiding the form is the page being honest; the route
+refusing the writes is the rule, and `e2e/teacher.spec.ts` asserts it verb by verb, reading the
+targeted row back after the refused DELETE.
 
 ⚠️⚠️ **ADDING A ROLE IS WHERE NEGATIVE CHECKS COME TO COLLECT, AND THIS ONE FOUND THREE.**
 

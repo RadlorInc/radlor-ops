@@ -8,7 +8,7 @@ import Material from './Material'
 export const dynamic = 'force-dynamic'
 
 /**
- * SOURCE MATERIAL — the library a cut gets made FROM, for TEACHERS AND ADMINS.
+ * SOURCE MATERIAL — the library a cut gets made FROM. ADMINS manage it; TEACHERS look at it.
  *
  * ⚠️ ITS OWN PAGE, NOT AN /admin TAB, AND THE REASON IS THE ROLE. It was `/admin?tab=source` until
  * 2026-09-11, when Rafi asked for a `teacher` role whose whole job is this library. `/admin` holds
@@ -45,7 +45,12 @@ export default async function Source() {
       />
       <h1 className="sr-only">Source material</h1>
       <Material
-        initial={material.map((m) => ({
+        canEdit={admin}
+        /* ⚠️ AN UNFINISHED UPLOAD IS FILTERED OUT FOR A TEACHER, ON THE SERVER. It exists so an admin
+           can see and remove a half-made item; a teacher can do neither, so for them it is a title
+           with no Open and no Remove — a row that looks broken. Filtered here rather than hidden
+           in the component, so the row never reaches a browser that has no use for it. */
+        initial={material.filter((m) => admin || m.ready).map((m) => ({
           id: m.id,
           title: m.title,
           subject: m.subject,

@@ -12,10 +12,16 @@ import { MATERIAL_BUCKET, deleteObject, objectIsReadable, signedObjectUrl, signe
  * the next person to read a route's path is often working out who can call it. Same argument as the
  * second bucket not being called `review-videos`.
  *
- * ⚠️ A TEACHER HAS EVERY POWER HERE AN ADMIN HAS, INCLUDING REMOVE. That was the ask — "whoever has
- * the teacher role has source material access" — and inventing an own-items-only rule would have
- * been a guess about something nobody said. It means a teacher can remove an admin's upload. If that
- * should change, it is a check on `added_by` in DELETE below, and nowhere else.
+ * ⚠️ A TEACHER READS; ONLY AN ADMIN WRITES. Rafi, 2026-09-11, the same day the role was added: the
+ * admin manages the library, and a teacher can only look at what is in it — not add, not remove.
+ * So the gate is per VERB, not per path: GET names both roles, POST / PATCH / DELETE name only
+ * `admin`. (For one release this header said a teacher had every power an admin has, including
+ * remove. That was a reading of "access to source material", and it was the wrong one — the
+ * interface hid nothing, and the route agreed with it.)
+ *
+ * ⚠️ HIDING THE FORM IS NOT THE RULE; THIS IS. `Material.tsx` renders no add form and no Remove for
+ * a teacher, which is the page being honest about what they can do. A teacher's browser can still
+ * send a POST by hand, and it gets the same 404 a stranger gets.
  *
  *   GET    ?id=  → 302 to a freshly signed URL for one file
  *   POST         → a link (saved outright) or a file row + a one-shot upload URL
@@ -83,6 +89,8 @@ function normalUrl(raw: string): string | null {
  * the same property the player has, reached a cheaper way.
  */
 export async function GET(req: Request) {
+  // ⚠️ THE ONE VERB A TEACHER HAS. Opening a file is what "can look at the library" means; a teacher
+  // who could see a row and not open it would be looking at a list of titles.
   const gate = await requireRoleApi('teacher', 'admin')
   if ('deny' in gate) return gate.deny
 
@@ -100,7 +108,8 @@ export async function GET(req: Request) {
 }
 
 export async function POST(req: Request) {
-  const gate = await requireRoleApi('teacher', 'admin')
+  // Admin only: a teacher reads the library and does not add to it.
+  const gate = await requireRoleApi('admin')
   if ('deny' in gate) return gate.deny
 
   const body = (await req.json().catch(() => null)) as
@@ -166,7 +175,8 @@ export async function POST(req: Request) {
  * item in the library that dies on the first click.
  */
 export async function PATCH(req: Request) {
-  const gate = await requireRoleApi('teacher', 'admin')
+  // Admin only — this is the last step of an upload, which only an admin can have started.
+  const gate = await requireRoleApi('admin')
   if ('deny' in gate) return gate.deny
 
   const body = (await req.json().catch(() => null)) as { id?: unknown } | null
@@ -190,7 +200,8 @@ export async function PATCH(req: Request) {
  * REPORTED rather than swallowed, because the bytes are still being paid for and still exist.
  */
 export async function DELETE(req: Request) {
-  const gate = await requireRoleApi('teacher', 'admin')
+  // Admin only: a teacher cannot remove anything, including their own nothing.
+  const gate = await requireRoleApi('admin')
   if ('deny' in gate) return gate.deny
 
   const body = (await req.json().catch(() => null)) as { id?: unknown } | null
